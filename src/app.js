@@ -1,11 +1,13 @@
 import { SIZE, DEFAULTS } from './config.js';
-import { key, xy, inside, createState, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams } from './model.js';
+import { key, xy, inside, createState, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl } from './model.js';
 const $ = id => document.getElementById(id);
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createState(), tool = 'wall', hover = null, dragging = null;
 let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0;
 let fire = fireField(state), paused = false, timer = 0, last = 0;
 let messages = [];
+let motion = null, impactAge = 1000, incoming = new Map();
+const MOVE_MS = 160, IMPACT_MS = 220;
 const colors = ['#df9989', '#a6a1e9', '#d5bd79', '#78bcd3'];
 const notify = message => { $('notice').textContent = message; };
 const weaponType = () => tool === 'long' ? 'B' : 'A';
@@ -42,6 +44,7 @@ function draw() {
   ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   ctx.clearRect(0, 0, width, height);
   const size = base * zoom;
+  const controlRadius = previewParams().controlRadius;
   const wallEdit = hover !== null && state.phase === 'build' && ['wall','removeWall'].includes(tool);
   const candidate = wallEdit ? wallPreview(state,hover,tool==='removeWall') : null;
   const field = candidate && !candidate.error ? candidate.field : state.field;
@@ -55,6 +58,18 @@ function draw() {
     if (state.walls.has(id)) {
       ctx.fillStyle = state.playerWalls.has(id) ? '#617e72' : '#455055'; ctx.fillRect(x + .05, y + .05, .9, .9);
       ctx.strokeStyle = state.playerWalls.has(id) ? '#b3d0ac' : '#5a6569'; ctx.lineWidth = .045; ctx.beginPath(); ctx.moveTo(x + .15, y + .8); ctx.lineTo(x + .8, y + .15); ctx.stroke();
+    }
+    if (!inControl(state,id,controlRadius)) {ctx.fillStyle='#07121577';ctx.fillRect(x,y,1,1);}
+    else {
+      ctx.fillStyle='#7fc8e810';ctx.fillRect(x,y,1,1);
+      // 控制范围不等于建造格：只标出当前工具符合地形条件的位置。
+      const eligible = tool==='wall' ? !state.walls.has(id)&&id!==state.camp&&!state.sources.some(a=>key(a.x,a.y)===id) : ['build','long'].includes(tool)&&state.walls.has(id)&&!state.towers.has(id);
+      if(state.phase==='build'&&eligible){ctx.fillStyle='#a9d4cb55';ctx.fillRect(x+.46,y+.46,.08,.08);}
+      ctx.strokeStyle='#86ccea';ctx.lineWidth=.08;ctx.setLineDash([.16,.12]);ctx.beginPath();
+      for(const [dx,dy,a,b,c,d] of [[-1,0,x,y,x,y+1],[1,0,x+1,y,x+1,y+1],[0,-1,x,y,x+1,y],[0,1,x,y+1,x+1,y+1]]) {
+        if(!inside(x+dx,y+dy)||!inControl(state,key(x+dx,y+dy),controlRadius)){ctx.moveTo(a,b);ctx.lineTo(c,d);}
+      }
+      ctx.stroke();ctx.setLineDash([]);
     }
     ctx.strokeStyle = '#324044'; ctx.lineWidth = .025; ctx.strokeRect(x, y, 1, 1);
   }
@@ -85,16 +100,33 @@ function draw() {
   }
   state.sources.forEach((s,i) => {ctx.fillStyle=colors[i%colors.length];ctx.fillRect(s.x+.08,s.y+.08,.84,.84);label(i+1,s.x+.5,s.y+.5,'#23262b',.52);});
   const [cx,cy] = xy(state.camp); ctx.fillStyle='#ffc17c';ctx.beginPath();ctx.moveTo(cx+.5,cy+.06);ctx.lineTo(cx+.9,cy+.7);ctx.lineTo(cx+.5,cy+.95);ctx.lineTo(cx+.1,cy+.7);ctx.closePath();ctx.fill();label('火',cx+.5,cy+.59,'#402c24',.42);
-  for (const enemy of state.enemies) {
-    const [x,y] = xy(enemy.id);ctx.fillStyle=enemy.members>1?'#ffb079':'#f28780';ctx.fillRect(x+.04,y+.06,.92,.83);
-    label(enemy.hp,x+.5,y+.42,'#321d23',.46);ctx.fillStyle='#552b30';ctx.fillRect(x+.08,y+.73,.84,.1);ctx.fillStyle='#fff1c4';ctx.fillRect(x+.08,y+.73,.84*enemy.hp/enemy.max,.1);
-    if(enemy.members>1){ctx.strokeStyle='#ffe6b9';ctx.lineWidth=.07;ctx.strokeRect(x+.04,y+.06,.92,.83);}
-  }
-  for(const event of state.events){
-    const [x,y]=xy(event.id);ctx.strokeStyle=event.type==='merge'?'#ffe0a1':'#ffbbb0';ctx.lineWidth=.075;ctx.strokeRect(x+.01,y+.01,.98,.98);
-    if(event.type==='merge'||event.type==='hit') {
-      const text=event.type==='merge'?`合流 ${event.value}`:`−${event.value}`;
-      ctx.font='600 .43px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.lineWidth=.12;ctx.strokeStyle='#142024';ctx.strokeText(text,x+.5,y-.05);ctx.fillStyle=event.type==='merge'?'#ffe0a1':'#ffb1a3';ctx.fillText(text,x+.5,y-.05);
+  const impact = Math.min(1,impactAge/IMPACT_MS);
+  // 移动阶段仍显示出发时的生命，抵达后才展示结算结果。
+  const drawEnemy = (enemy,x,y,scale=1,alpha=1,barHP=enemy.hp) => {
+    ctx.save();ctx.globalAlpha=alpha;ctx.translate(x+.5,y+.5);ctx.scale(scale,scale);ctx.translate(-.5,-.5);
+    ctx.fillStyle=enemy.members>1?'#ffb079':'#f28780';ctx.fillRect(.04,.06,.92,.83);
+    label(enemy.hp,.5,.42,'#321d23',.46);ctx.fillStyle='#552b30';ctx.fillRect(.08,.73,.84,.1);ctx.fillStyle='#fff1c4';ctx.fillRect(.08,.73,.84*Math.max(0,Math.min(1,barHP/enemy.max)),.1);
+    if(enemy.members>1){ctx.strokeStyle='#ffe6b9';ctx.lineWidth=.07;ctx.strokeRect(.04,.06,.92,.83);}
+    ctx.restore();
+  };
+  if(motion){
+    const t=Math.min(1,motion.elapsed/MOVE_MS), eased=t*t*(3-2*t);
+    for(const enemy of motion.actors){const [x,y]=xy(enemy.id),[tx,ty]=xy(enemy.to);drawEnemy(enemy,x+(tx-x)*eased,y+(ty-y)*eased);}
+  } else {
+    for(const enemy of state.enemies){
+      const [x,y]=xy(enemy.id), before=incoming.get(enemy.id)?.hp ?? enemy.hp;
+      const merged=state.events.some(e=>e.type==='merge'&&e.id===enemy.id);
+      drawEnemy(enemy,x,y,merged?1+.16*Math.sin(impact*Math.PI):1,1,before+(enemy.hp-before)*impact);
+    }
+    if(impact<1)for(const event of state.events){
+      const [x,y]=xy(event.id);
+      if(event.type==='kill'){const old=incoming.get(event.id);if(old)drawEnemy({...old,hp:0},x,y,1-.7*impact,1-impact,0);}
+      if(event.type==='leak'){ctx.fillStyle=`rgba(255,100,80,${.6*(1-impact)})`;ctx.fillRect(x-.25,y-.25,1.5,1.5);}
+      ctx.strokeStyle=event.type==='merge'?'#ffe0a1':'#ffbbb0';ctx.lineWidth=.075;ctx.strokeRect(x+.01,y+.01,.98,.98);
+      if(event.type==='merge'||event.type==='hit') {
+        const text=event.type==='merge'?`合流 ${event.value}`:`−${event.value}`;
+        ctx.font='600 .43px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.lineWidth=.12;ctx.strokeStyle='#142024';ctx.strokeText(text,x+.5,y-.05-impact*.3);ctx.fillStyle=event.type==='merge'?'#ffe0a1':'#ffb1a3';ctx.fillText(text,x+.5,y-.05-impact*.3);
+      }
     }
   }
   ctx.restore();
@@ -104,21 +136,21 @@ function draw() {
   $('zoom').textContent = `${Math.round(zoom * 100)}%`;
   if (hover !== null) {
     const [x,y] = xy(hover), enemy = state.enemies.find(e=>e.id===hover);
-    $('cellInfo').textContent = `格子 (${x}, ${y}) · 火力 ${fire.get(hover)||0} · ${state.walls.has(hover)?'不可通行':'可通行'}${state.towers.has(hover)?` · 武器 ${state.towers.get(hover)}`:''}${enemy?` · 敌群 ${enemy.hp}/${enemy.max}（${Math.round(enemy.hp/enemy.max*100)}%） · ${enemy.members} 批`:''}`;
+    $('cellInfo').textContent = `格子 (${x}, ${y}) · ${inControl(state,hover,controlRadius)?'控制范围内':'控制范围外'} · 火力 ${fire.get(hover)||0} · ${state.walls.has(hover)?'不可通行':'可通行'}${state.towers.has(hover)?` · 武器 ${state.towers.get(hover)}`:''}${enemy?` · 敌群 ${enemy.hp}/${enemy.max}（${Math.round(enemy.hp/enemy.max*100)}%） · ${enemy.members} 批`:''}`;
     if(candidate) $('cellInfo').textContent += candidate.error ? ` · ${candidate.error}` : ' · 新路线预览（点击后生效）';
   } else $('cellInfo').textContent = '单击建造 · 拖动平移 · 滚轮缩放 · 悬停看生命';
 }
 function update() {
   fire = fireField({...state,params:previewParams()});
-  $('wallCount').textContent = state.params.wallLimit - state.playerWalls.size;
+  $('wallCount').textContent = `${state.params.wallCost} 资金`;
   const w=selectedWeapon();
-  $('toolInfo').textContent = ['build','long'].includes(tool) ? `${weaponType()} · ${w.cost} 预算 · ${w.shape==='square'?'方形':'菱形'}范围 ${w.range} · 火力 ${w.power}。仅架设在墙上。` : tool==='wall' ? '每次消耗 1 块墙。悬停预览新路线，不能完全封路。' : tool==='removeWall' ? '只回收自建墙。墙上有炮台时，先拆炮再拆墙。' : '拆除炮台全额退款，保留下方墙体。';
+  $('toolInfo').textContent = ['build','long'].includes(tool) ? `${weaponType()} · ${w.cost} 资金 · ${w.shape==='square'?'方形':'菱形'}范围 ${w.range} · 火力 ${w.power}。仅架设在墙上。` : tool==='wall' ? `每格墙 ${state.params.wallCost} 资金。仅限控制范围内空地；悬停预览路线。` : tool==='removeWall' ? `自建墙拆除返还 ${state.params.wallCost} 资金；先拆炮再拆墙。` : '拆除炮台全额退款，保留下方墙体。';
   $('budget').textContent = funds(state); $('tick').textContent = state.tick;
   $('campHP').textContent = `${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
   $('spawned').textContent = `${state.spawned} / ${state.sources.reduce((n,s)=>n+s.count,0)}`;
   const active = state.phase === 'battle', build = state.phase === 'build';
   $('phase').textContent = build ? '准备布防' : active ? (paused ? '防守暂停' : '防守进行中') : state.phase === 'won' ? '守住了' : '篝火熄灭';
-  $('start').disabled = !build; $('pause').disabled = !active; $('step').disabled = !active || !paused;
+  $('start').disabled = !build; $('pause').disabled = !active; $('step').disabled = !active || !paused || !!motion?.singleStep;
   $('pause').textContent = paused ? '继续' : '暂停';
   for (const id of ['build','long','wall','removeWall','erase','apply','addSource','applyParams','cancelParams','defaults']) $(id).disabled = !build;
   document.querySelectorAll('#sources input, #sources button, #params input, #params select').forEach(el=>el.disabled=!build);
@@ -155,7 +187,7 @@ function paramsEditor(params) {
     }
     $('params').append(row);
   }
-  fields('全局',params,'',[['budget','预算',0,10000],['wallLimit','墙块',0,300],['campHP','篝火耐久',1,10000]]);
+  fields('全局',params,'',[['budget','资金',0,10000],['wallCost','墙价',1,1000],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000]]);
   for(const type of ['A','B'])fields(`武器 ${type}`,params.weapons[type],type+'.',[['shape','范围形状'],['range','半径',1,8],['power','火力',1,99],['cost','价格',1,1000]]);
 }
 function readParams() {
@@ -174,8 +206,8 @@ function refreshParams(){
 }
 function reset(keep=true){
   state=createState(state.sources,keep?state.towers:new Map(),keep?state.playerWalls:new Set(),state.params);
-  paused=false;timer=0;messages=[];$('log').replaceChildren();paramsEditor(state.params);refreshParams();
-  notify(keep?'已恢复篝火与敌人，保留墙和炮台，可继续调整。':'已清空自建墙和炮台，预算与墙块全部返还。');
+  paused=false;timer=0;motion=null;impactAge=1000;incoming.clear();messages=[];$('log').replaceChildren();paramsEditor(state.params);refreshParams();
+  notify(keep?'已恢复篝火与敌人，保留墙和炮台，可继续调整。':'已清空自建墙和炮台，资金全部返还。');
 }
 for(const id of ['wall','removeWall','build','long','erase'])$(id).onclick=()=>{
   tool=id;for(const button of ['wall','removeWall','build','long','erase'])$(button).classList.toggle('selected',button===id);update();
@@ -184,7 +216,7 @@ $('retry').onclick=()=>reset();$('clear').onclick=()=>reset(false);
 $('applyParams').onclick=()=>{
   if(state.phase!=='build')return;
   const params=readParams(),error=validateParams(params,state);$('paramStatus').textContent=error;if(error)return;
-  state=createState(state.sources,state.towers,state.playerWalls,params);paused=false;timer=0;messages=[];$('log').replaceChildren();
+  state=createState(state.sources,state.towers,state.playerWalls,params);paused=false;timer=0;motion=null;impactAge=1000;incoming.clear();messages=[];$('log').replaceChildren();
   paramsEditor(state.params);refreshParams();notify('参数已应用，本轮已重置，墙和炮台保留。');
 };
 $('cancelParams').onclick=()=>{paramsEditor(state.params);refreshParams();};
@@ -193,7 +225,7 @@ $('apply').onclick=()=>{
   if(state.phase!=='build')return;
   if(paramsDirty()){notify('请先应用或取消实验参数预览。');return;}
   const sources=readSources(),error=validateSources(sources,state);$('configError').textContent=error;if(error)return;
-  state=createState(sources,state.towers,state.playerWalls,state.params);messages=[];$('log').replaceChildren();sourceEditor(sources);notify('来袭配置已应用，路线已更新。');update();
+  state=createState(sources,state.towers,state.playerWalls,state.params);motion=null;impactAge=1000;incoming.clear();messages=[];$('log').replaceChildren();sourceEditor(sources);notify('来袭配置已应用，路线已更新。');update();
 };
 $('addSource').onclick=()=>{const sources=readSources();if(sources.length>=12){$('configError').textContent='最多 12 个源头。';return;}sources.push({x:1,y:1,hp:12,count:4,first:1,interval:6});sourceEditor(sources);};
 $('fit').onclick=()=>resize(true);$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;
@@ -220,10 +252,10 @@ canvas.addEventListener('pointerup',e=>{
   if(state.phase!=='build'){notify('战斗中不能修改布局；可暂停观察或返回布防。');return;}
   if(paramsDirty()){notify('请先应用或取消实验参数预览，再修改布局。');return;}
   if(tool==='wall'||tool==='removeWall'){
-    const error=changeWall(state,id,tool==='removeWall');notify(error||(tool==='wall'?'墙已建造，路线已更新。':'自建墙已回收，返还 1 块墙。'));
+    const error=changeWall(state,id,tool==='removeWall');notify(error||(tool==='wall'?'墙已建造，路线已更新。':`自建墙已拆除，返还 ${state.params.wallCost} 资金。`));
   } else if(tool==='erase'){
     const type=state.towers.get(id);
-    if(type){state.towers.delete(id);notify(`炮台已拆除，返还 ${state.params.weapons[type].cost} 预算，墙体保留。`);}else notify('这里没有炮台。');
+    if(type){state.towers.delete(id);notify(`炮台已拆除，返还 ${state.params.weapons[type].cost} 资金，墙体保留。`);}else notify('这里没有炮台。');
   } else {
     const type=weaponType(),error=placementError(state,id,type);
     if(error)notify(error);else{state.towers.set(id,type);notify(`武器 ${type} 已架设，覆盖格火力 +${state.params.weapons[type].power}。`);}
@@ -239,6 +271,7 @@ paramsEditor(state.params);sourceEditor(state.sources);resize(true);refreshParam
 // 只记录当前波次的近期反馈，不建设存档或回放系统。
 function advance() {
   stepBattle(state);
+  motion=null;impactAge=0;timer=0;
   for (const event of state.events) {
     const [x,y] = xy(event.id);
     const text = event.type === 'merge' ? `(${x},${y}) ${event.members} 批合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.value} 批敌人` : `(${x},${y}) 火力削减 ${event.value}`;
@@ -257,12 +290,27 @@ $('start').onclick=()=>{
   state.phase='battle';paused=false;timer=0;last=performance.now();$('settings').open=false;notify('敌人正在接近。可以暂停、逐步观察或加速。');update();
 };
 $('pause').onclick=()=>{if(state.phase!=='battle')return;paused=!paused;timer=0;update();};
-$('step').onclick=()=>{if(state.phase==='battle'&&paused)advance();};
-// 一个简单累计计时器驱动所有敌人，不随绘制次数扣血。
+// 简单的逐格滑动：动画结束才提交一步战斗，无独立动画框架。
+function beginMotion(singleStep=false){
+  if(motion||state.phase!=='battle')return;
+  motion={elapsed:0,singleStep,actors:state.enemies.map(e=>({...e,to:state.field.next.get(e.id)??e.id}))};
+  incoming=new Map();
+  const add=(id,e)=>{const old=incoming.get(id);if(old){old.hp+=e.hp;old.max+=e.max;old.members+=e.members;}else incoming.set(id,{...e,id});};
+  for(const e of motion.actors)add(e.to,e);
+  for(const source of state.sources){const age=state.tick+1-source.first;if(age>=0&&age%source.interval===0&&age/source.interval<source.count)add(key(source.x,source.y),{hp:source.hp,max:source.hp,members:1});}
+  update();
+}
+$('step').onclick=()=>{if(state.phase!=='battle'||!paused)return;if(motion){motion.singleStep=true;update();}else beginMotion(true);};
+// 移动占一个节拍的后 160ms；加速同步缩短动画，暂停冻结自动移动。
 function frame(now){
-  const elapsed=Math.min(now-last,250);last=now;
-  if(state.phase==='battle'&&!paused){timer+=elapsed*Number($('speed').value);while(timer>=DEFAULTS.stepMs&&state.phase==='battle'){timer-=DEFAULTS.stepMs;advance();}}
+  const elapsed=Math.min(now-last,100);last=now;
+  const dt=elapsed*Number($('speed').value);
+  if(impactAge<IMPACT_MS){impactAge=Math.min(IMPACT_MS,impactAge+dt);draw();}
+  if(state.phase==='battle'&&(!paused||motion?.singleStep)){
+    if(motion){motion.elapsed+=dt;if(motion.elapsed>=MOVE_MS)advance();else draw();}
+    else{timer+=dt;if(timer>=DEFAULTS.stepMs-MOVE_MS)beginMotion();}
+  }
   requestAnimationFrame(frame);
 }
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.phase==='battle'){paused=true;timer=0;update();}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.phase==='battle'){paused=true;if(motion)motion.singleStep=false;timer=0;update();}});
 requestAnimationFrame(frame);

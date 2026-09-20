@@ -1,7 +1,7 @@
 // 首轮实验参数；只用于快速试玩，不代表平衡结论。
 export const SIZE = 30;
 export const DEFAULTS = {
-  budget: 100, wallLimit: 20, campHP: 30, stepMs: 450,
+  budget: 100, wallCost: 2, controlRadius: 9, campHP: 30, stepMs: 450,
   weapons: {
     A: { shape: 'square', range: 1, power: 2, cost: 10 },
     B: { shape: 'square', range: 3, power: 1, cost: 20 },

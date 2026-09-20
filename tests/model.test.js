@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULTS } from '../src/config.js';
-import { key, createState, coverage, pathFrom, funds, placementError, validateSources, stepBattle, changeWall, wallPreview, validateParams, fireField } from '../src/model.js';
+import { key, createState as makeState, coverage, pathFrom, funds, placementError, validateSources, stepBattle, changeWall, wallPreview, validateParams, fireField, inControl } from '../src/model.js';
+
+// 原有战斗用例使用大控制范围，另用独立用例检查默认控制权限。
+const createState=(sources,towers,walls,params={...DEFAULTS,controlRadius:30})=>makeState(sources,towers,walls,params);
 
 test('所有可达格严格接近篝火，预览到达目标，默认三路实际合并',()=>{
   const s=createState();
@@ -36,13 +39,13 @@ test('非法配置被拒绝，重试复制布局并恢复预算与状态',()=>{
 });
 
 
-test('墙上建塔、配额回收和拆墙顺序',()=>{
+test('墙上建塔、共享资金退款和拆墙顺序',()=>{
   const s=createState(); const id=key(14,10);
   assert.match(placementError(s,id),/墙上/);assert.equal(changeWall(s,id),'');assert.equal(placementError(s,id),'');
-  s.towers.set(id,'B');assert.equal(funds(s),80);assert.match(changeWall(s,id,true),/先拆除/);
+  s.towers.set(id,'B');assert.equal(funds(s),78);assert.match(changeWall(s,id,true),/先拆除/);
   s.towers.delete(id);assert.equal(changeWall(s,id,true),'');assert.equal(s.playerWalls.size,0);
   assert.match(changeWall(s,key(2,14),true),/固定墙/);
-  s.params.wallLimit=0;assert.match(changeWall(s,id),/用完/);
+  s.params.budget=1;assert.match(changeWall(s,id),/资金不足/);
 });
 test('不允许封死篝火，拒绝后实际地图与路径不变；预览与放置一致',()=>{
   const s=createState();for(const [x,y] of [[14,25],[16,25],[15,24]])assert.equal(changeWall(s,key(x,y)),'');
@@ -52,13 +55,32 @@ test('不允许封死篝火，拒绝后实际地图与路径不变；预览与�
   const id=key(15,10),preview=wallPreview(s,id);assert.equal(preview.error,'');assert.equal(s.walls.has(id),false);
   assert.equal(changeWall(s,id),'');assert.deepEqual(s.field.next,preview.field.next);
 });
-test('两类火力与形状切换，参数拒绝非法、超预算和超墙块布局',()=>{
+test('两类火力与形状切换，参数拒绝非法、超预算和控制范围缩水',()=>{
   const s=createState();s.towers.set(key(14,14),'A');s.towers.set(key(16,14),'B');
   assert.equal(coverage(key(15,15),1,'square').length,9);assert.equal(coverage(key(15,15),2,'square').length,25);
   const p=structuredClone(s.params);p.weapons.A.cost=90;assert.match(validateParams(p,s),/超出预算/);assert.equal(s.params.weapons.A.cost,10);
   p.budget=200;assert.equal(validateParams(p,s),'');p.weapons.A.range=NaN;assert.match(validateParams(p,s),/武器 A/);
-  const q=structuredClone(s.params);changeWall(s,key(14,10));q.wallLimit=0;assert.match(validateParams(q,s),/配额/);
-  const retry=createState(s.sources,s.towers,s.playerWalls,s.params);assert.equal(retry.playerWalls.size,1);assert.equal(retry.towers.get(key(16,14)),'B');assert.equal(funds(retry),70);
+  const q=structuredClone(s.params);changeWall(s,key(14,10));q.controlRadius=1;assert.match(validateParams(q,s),/控制范围/);
+  const retry=createState(s.sources,s.towers,s.playerWalls,s.params);assert.equal(retry.playerWalls.size,1);assert.equal(retry.towers.get(key(16,14)),'B');assert.equal(funds(retry),68);
   assert.equal(fireField(s).get(key(15,14)),3);
   const r=structuredClone(s.params);r.weapons.A.shape='diamond';assert.equal(fireField({...s,params:r}).get(key(15,15)),1);assert.equal(fireField(s).get(key(15,15)),3);
+});
+
+
+test('控制范围与建造格分开，范围外不能造墙或架炮但仍可通行和受火力',()=>{
+  const s=makeState();
+  assert.equal(inControl(s,key(15,16)),true);assert.equal(inControl(s,key(15,15)),false);
+  assert.equal(inControl(s,key(24,25)),true);assert.equal(inControl(s,key(24,24)),false);
+  assert.match(changeWall(s,key(15,15)),/控制范围/);assert.match(placementError(s,key(16,14)),/控制范围/);
+  assert.match(placementError(s,key(15,17)),/墙上/);assert.match(changeWall(s,s.camp),/篝火/);
+  assert.equal(changeWall(s,key(15,16)),'');s.towers.set(key(15,16),'B');
+  assert.equal(funds(s),78);assert.ok(fireField(s).get(key(15,15))>0);
+  assert.ok(s.field.distance.has(key(15,15)));assert.equal(inControl(s,key(15,15)),false);
+});
+test('墙价参与参数预算校验，取消和重试不制造资金',()=>{
+  const s=makeState();assert.equal(changeWall(s,key(14,20)),'');assert.equal(funds(s),98);
+  s.towers.set(key(14,20),'A');assert.equal(funds(s),88);
+  const p=structuredClone(s.params);p.wallCost=100;assert.match(validateParams(p,s),/超出预算/);assert.equal(funds(s),88);
+  const retry=makeState(s.sources,s.towers,s.playerWalls,s.params);assert.equal(funds(retry),88);
+  retry.towers.delete(key(14,20));assert.equal(funds(retry),98);assert.equal(changeWall(retry,key(14,20),true),'');assert.equal(funds(retry),100);
 });

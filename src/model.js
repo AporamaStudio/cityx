@@ -58,10 +58,16 @@ export function fireField(state) {
   }
   return fire;
 }
-export const funds = state => state.params.budget - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
+export const funds = state => state.params.budget - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
+// 控制权只限制建造权限；不限制通行、寻路或武器向外开火。
+export function inControl(state, id, radius = state.params.controlRadius) {
+  const [x,y] = xy(id), [cx,cy] = xy(state.camp);
+  return Number.isInteger(id) && id >= 0 && id < SIZE * SIZE && (x-cx)**2 + (y-cy)**2 <= radius**2;
+}
 export function placementError(state, id, type = 'A') {
   if (state.phase !== 'build') return '战斗时不能修改布局，请先返回布防。';
   if (!Number.isInteger(id) || id < 0 || id >= SIZE * SIZE) return '请选择地图内的格子。';
+  if (!inControl(state,id)) return '超出控制范围，不能架设炮台。';
   if (!state.walls.has(id)) return '炮台只能架设在墙上，请先建墙或选择固定墙。';
   if (state.towers.has(id)) return '该格已有武器，可用拆除工具撤销。';
   if (!state.params.weapons[type]) return '未知武器。';
@@ -76,9 +82,10 @@ export function wallPreview(state, id, remove = false) {
   else if (!Number.isInteger(id) || id < 0 || id >= SIZE * SIZE) error = '请选择地图内的格子。';
   else if (remove && state.towers.has(id)) error = '请先拆除墙上的炮台。';
   else if (remove && !state.playerWalls.has(id)) error = '固定墙不能拆除。';
+  else if (!remove && !inControl(state,id)) error = '超出控制范围，不能建墙。';
   else if (!remove && state.walls.has(id)) error = '这里已经有墙。';
   else if (!remove && (id === state.camp || state.sources.some(s=>key(s.x,s.y)===id))) error = '不能覆盖篝火或敌人源头。';
-  else if (!remove && state.playerWalls.size >= state.params.wallLimit) error = '墙块已用完，可拆除自己的空墙回收。';
+  else if (!remove && funds(state) < state.params.wallCost) error = '资金不足，墙与炮台共用资金。';
   if (error) return { error, field: state.field };
   const walls = new Set(state.walls);
   if (remove) walls.delete(id); else walls.add(id);
@@ -94,16 +101,16 @@ export function changeWall(state, id, remove = false) {
   return '';
 }
 
-// 参数先验证、再一次性应用；不静默删除超预算炮台或超配额墙块。
+// 参数先验证、再一次性应用；不静默删除超预算设施或落在新控制范围外的布局。
 export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
-  if (!integer(params.budget,0,10000) || !integer(params.wallLimit,0,300) || !integer(params.campHP,1,10000)) return '预算 0–10000、墙块 0–300、篝火耐久 1–10000，均为整数。';
+  if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
   for (const type of ['A','B']) {
     const w=params.weapons[type];
     if (!w || !['square','diamond'].includes(w.shape) || !integer(w.range,1,8) || !integer(w.power,1,99) || !integer(w.cost,1,1000)) return `武器 ${type}：范围 1–8、火力 1–99、价格 1–1000，均为整数。`;
   }
-  if (checkLayout && state.playerWalls.size > params.wallLimit) return '新墙块配额不足，请先回收多余的墙，或提高配额。';
-  if (checkLayout && funds({...state,params}) < 0) return '按新价格计算，现有布局超出预算。请提高预算，或取消预览后拆除武器。';
+  if (checkLayout && [...state.playerWalls,...state.towers.keys()].some(id=>!inControl(state,id,params.controlRadius))) return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
+  if (checkLayout && funds({...state,params}) < 0) return '按新价格计算，现有布局超出预算（墙与炮台合计）。请提高资金，或取消预览后拆除设施。';
   return '';
 }
 // 配置失败时保留原地图和布局，避免静默丢失试玩结果。
