@@ -33,36 +33,79 @@ export function pathFrom(id, field) {
   return path;
 }
 
-export function coverage(id, range = DEFAULTS.range) {
+export function coverage(id, range = 1, shape = 'diamond') {
   const [x, y] = xy(id), cells = [];
   for (let dy = -range; dy <= range; dy++) for (let dx = -range; dx <= range; dx++) {
-    if (Math.abs(dx) + Math.abs(dy) <= range && inside(x + dx, y + dy)) cells.push(key(x + dx, y + dy));
+    if ((shape === 'square' || Math.abs(dx) + Math.abs(dy) <= range) && inside(x + dx, y + dy)) cells.push(key(x + dx, y + dy));
   }
   return cells;
 }
 
-export function createState(sources = structuredClone(DEFAULTS.sources), towers = new Set()) {
-  const walls = makeWalls(), camp = key(...DEFAULTS.camp), field = routeField(camp, walls);
-  return { walls, camp, field, sources, towers: new Set(towers), phase: 'build', tick: 0,
-    hp: DEFAULTS.campHP, enemies: [], events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
+// 新一轮保留已应用参数、玩家墙和炮台；集合复制避免重试修改旧布局。
+export function createState(sources = DEFAULTS.sources, towers = new Map(), playerWalls = new Set(), params = DEFAULTS) {
+  const fixedWalls = makeWalls(), walls = new Set([...fixedWalls, ...playerWalls]);
+  const camp = key(...DEFAULTS.camp), field = routeField(camp, walls);
+  return { fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources),
+    params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
+    hp: params.campHP, enemies: [], events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
 }
 
 export function fireField(state) {
   const fire = new Map();
-  for (const tower of state.towers) for (const id of coverage(tower)) fire.set(id, (fire.get(id) || 0) + DEFAULTS.power);
+  for (const [tower, type] of state.towers) {
+    const weapon = state.params.weapons[type];
+    for (const id of coverage(tower, weapon.range, weapon.shape)) fire.set(id, (fire.get(id) || 0) + weapon.power);
+  }
   return fire;
 }
-export const funds = state => DEFAULTS.budget - state.towers.size * DEFAULTS.cost;
-export function placementError(state, id) {
+export const funds = state => state.params.budget - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
+export function placementError(state, id, type = 'A') {
   if (state.phase !== 'build') return '战斗时不能修改布局，请先返回布防。';
-  if (id < 0 || id >= SIZE * SIZE) return '请选择地图内的格子。';
-  if (state.walls.has(id)) return '建筑障碍上不能建造。';
-  if (id === state.camp || state.sources.some(s => key(s.x, s.y) === id)) return '篝火和敌人源头上不能建造。';
+  if (!Number.isInteger(id) || id < 0 || id >= SIZE * SIZE) return '请选择地图内的格子。';
+  if (!state.walls.has(id)) return '炮台只能架设在墙上，请先建墙或选择固定墙。';
   if (state.towers.has(id)) return '该格已有武器，可用拆除工具撤销。';
-  if (funds(state) < DEFAULTS.cost) return '预算不足，可拆除其他武器重新分配。';
+  if (!state.params.weapons[type]) return '未知武器。';
+  if (funds(state) < state.params.weapons[type].cost) return '预算不足，可拆除其他武器重新分配。';
   return '';
 }
 
+// 建墙和拆墙都先计算候选路线；校验成功后才允许替换实际地图。
+export function wallPreview(state, id, remove = false) {
+  let error = '';
+  if (state.phase !== 'build') error = '战斗期间不能修改墙。';
+  else if (!Number.isInteger(id) || id < 0 || id >= SIZE * SIZE) error = '请选择地图内的格子。';
+  else if (remove && state.towers.has(id)) error = '请先拆除墙上的炮台。';
+  else if (remove && !state.playerWalls.has(id)) error = '固定墙不能拆除。';
+  else if (!remove && state.walls.has(id)) error = '这里已经有墙。';
+  else if (!remove && (id === state.camp || state.sources.some(s=>key(s.x,s.y)===id))) error = '不能覆盖篝火或敌人源头。';
+  else if (!remove && state.playerWalls.size >= state.params.wallLimit) error = '墙块已用完，可拆除自己的空墙回收。';
+  if (error) return { error, field: state.field };
+  const walls = new Set(state.walls);
+  if (remove) walls.delete(id); else walls.add(id);
+  const field = routeField(state.camp, walls);
+  if (state.sources.some(s=>!field.distance.has(key(s.x,s.y)))) error = '不能封死路线：每个源头都必须能到达篝火。';
+  return { error, field, walls };
+}
+export function changeWall(state, id, remove = false) {
+  const preview = wallPreview(state,id,remove);
+  if (preview.error) return preview.error;
+  state.walls = preview.walls; state.field = preview.field;
+  if (remove) state.playerWalls.delete(id); else state.playerWalls.add(id);
+  return '';
+}
+
+// 参数先验证、再一次性应用；不静默删除超预算炮台或超配额墙块。
+export function validateParams(params, state, checkLayout = true) {
+  const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
+  if (!integer(params.budget,0,10000) || !integer(params.wallLimit,0,300) || !integer(params.campHP,1,10000)) return '预算 0–10000、墙块 0–300、篝火耐久 1–10000，均为整数。';
+  for (const type of ['A','B']) {
+    const w=params.weapons[type];
+    if (!w || !['square','diamond'].includes(w.shape) || !integer(w.range,1,8) || !integer(w.power,1,99) || !integer(w.cost,1,1000)) return `武器 ${type}：范围 1–8、火力 1–99、价格 1–1000，均为整数。`;
+  }
+  if (checkLayout && state.playerWalls.size > params.wallLimit) return '新墙块配额不足，请先回收多余的墙，或提高配额。';
+  if (checkLayout && funds({...state,params}) < 0) return '按新价格计算，现有布局超出预算。请提高预算，或取消预览后拆除武器。';
+  return '';
+}
 // 配置失败时保留原地图和布局，避免静默丢失试玩结果。
 export function validateSources(sources, state) {
   if (!sources.length || sources.length > 12) return '源头数量应为 1–12。';
