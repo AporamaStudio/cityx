@@ -92,7 +92,7 @@ export function stepBattle(state) {
       state.spawned++;
     }
   }
-  const groups = new Map();
+  const groups = new Map(), merged = new Set();
   for (const enemy of state.enemies) {
     if (!groups.has(enemy.id)) groups.set(enemy.id, { ...enemy, sources: [...enemy.sources] });
     else {
@@ -100,9 +100,10 @@ export function stepBattle(state) {
       group.hp += enemy.hp; group.max += enemy.max; group.members += enemy.members;
       group.sources = [...new Set([...group.sources, ...enemy.sources])];
       state.merges++;
-      state.events.push({ type: 'merge', id: enemy.id, value: group.hp });
+      merged.add(enemy.id);
     }
   }
+  for (const id of merged) { const group = groups.get(id); state.events.push({ type: 'merge', id, value: group.hp, members: group.members }); }
   const fire = fireField(state); state.enemies = [];
   for (const enemy of groups.values()) {
     const damage = Math.min(enemy.hp, fire.get(enemy.id) || 0);

@@ -76,9 +76,22 @@ function draw() {
     label(enemy.hp,x+.5,y+.42,'#321d23',.46);ctx.fillStyle='#552b30';ctx.fillRect(x+.08,y+.73,.84,.1);ctx.fillStyle='#fff1c4';ctx.fillRect(x+.08,y+.73,.84*enemy.hp/enemy.max,.1);
     if(enemy.members>1){ctx.strokeStyle='#ffe6b9';ctx.lineWidth=.07;ctx.strokeRect(x+.04,y+.06,.92,.83);}
   }
-  for(const event of state.events){const [x,y]=xy(event.id);ctx.strokeStyle=event.type==='merge'?'#ffe0a1':'#ffbbb0';ctx.lineWidth=.075;ctx.strokeRect(x+.01,y+.01,.98,.98);}
+  for(const event of state.events){
+    const [x,y]=xy(event.id);ctx.strokeStyle=event.type==='merge'?'#ffe0a1':'#ffbbb0';ctx.lineWidth=.075;ctx.strokeRect(x+.01,y+.01,.98,.98);
+    if(event.type==='merge'||event.type==='hit') {
+      const text=event.type==='merge'?`合流 ${event.value}`:`−${event.value}`;
+      ctx.font='600 .43px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.lineWidth=.12;ctx.strokeStyle='#142024';ctx.strokeText(text,x+.5,y-.05);ctx.fillStyle=event.type==='merge'?'#ffe0a1':'#ffb1a3';ctx.fillText(text,x+.5,y-.05);
+    }
+  }
   ctx.restore();
+  // 坐标标记帮助修改源头；屏幕字号不随棋盘缩小。
+  ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillStyle='#81999c';
+  for(let i=0;i<SIZE;i+=5){ctx.fillText(i,panX+(i+.5)*size,panY-8);ctx.fillText(i,panX-14,panY+(i+.65)*size);}
   $('zoom').textContent = `${Math.round(zoom * 100)}%`;
+  if (hover !== null) {
+    const [x,y] = xy(hover), enemy = state.enemies.find(e=>e.id===hover);
+    $('cellInfo').textContent = `格子 (${x}, ${y}) · 火力 ${fire.get(hover)||0} · ${state.walls.has(hover)?'不可通行':'可通行'}${state.towers.has(hover)?' · 武器 A':''}${enemy?` · 敌群 ${enemy.hp}/${enemy.max}（${Math.round(enemy.hp/enemy.max*100)}%） · ${enemy.members} 批`:''}`;
+  } else $('cellInfo').textContent = '单击建造 · 拖动平移 · 滚轮缩放 · 悬停看生命';
 }
 function update() {
   fire = fireField(state);
@@ -99,7 +112,7 @@ function sourceEditor(sources) {
   sources.forEach((s,i)=>{
     const card=document.createElement('div');card.className='source';
     const head=document.createElement('div');head.className='source-head';head.textContent=`源头 ${i+1}`;
-    const remove=document.createElement('button');remove.textContent='删除';remove.onclick=()=>{card.remove();};head.append(remove);card.append(head);
+    const remove=document.createElement('button');remove.textContent='删除';remove.onclick=()=>{card.remove();sourceEditor(readSources());};head.append(remove);card.append(head);
     const fields=document.createElement('div');fields.className='fields';
     for(const [name,label,max] of [['x','X',29],['y','Y',29],['hp','生命',999],['count','批数',30],['first','首拍',200],['interval','间隔',100]]){
       const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('input');input.type='number';input.name=name;input.value=s[name];input.min=['x','y'].includes(name)?0:1;input.max=max;input.step=1;input.setAttribute('aria-label',`源头${i+1} ${label}`);wrap.append(input);fields.append(wrap);
@@ -112,21 +125,37 @@ function reset(keep=true){state=createState(structuredClone(state.sources),keep?
 $('build').onclick=()=>{tool='build';$('build').classList.add('selected');$('erase').classList.remove('selected');draw();};
 $('erase').onclick=()=>{tool='erase';$('erase').classList.add('selected');$('build').classList.remove('selected');draw();};
 $('retry').onclick=()=>reset();$('clear').onclick=()=>reset(false);
-$('apply').onclick=()=>{if(state.phase!=='build')return;const sources=readSources(),error=validateSources(sources,state);$('configError').textContent=error;if(error)return;state=createState(sources,state.towers);sourceEditor(sources);notify('来袭配置已应用，路线已更新。');update();};
+$('apply').onclick=()=>{if(state.phase!=='build')return;const sources=readSources(),error=validateSources(sources,state);$('configError').textContent=error;if(error)return;state=createState(sources,state.towers);messages=[];$('log').replaceChildren();sourceEditor(sources);notify('来袭配置已应用，路线已更新。');update();};
 $('addSource').onclick=()=>{const sources=readSources();if(sources.length>=12){$('configError').textContent='最多 12 个源头。';return;}sources.push({x:1,y:1,hp:12,count:4,first:1,interval:6});sourceEditor(sources);};
 $('fit').onclick=()=>resize(true);$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();changeZoom(e.deltaY<0?1.12:1/1.12,e.clientX-r.left,e.clientY-r.top);},{passive:false});
+// 单击放置、拖动平移；在松开时才建造，避免拖地图误花预算。
 canvas.addEventListener('pointerdown',e=>{
-  if(e.button===1||e.button===2||e.altKey){dragging={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);return;}
+  dragging={x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,moved:false,panOnly:e.button!==0||e.altKey};
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove',e=>{
+  if(dragging){
+    if(Math.hypot(e.clientX-dragging.startX,e.clientY-dragging.startY)>4)dragging.moved=true;
+    if(dragging.moved||dragging.panOnly){panX+=e.clientX-dragging.x;panY+=e.clientY-dragging.y;}
+    dragging.x=e.clientX;dragging.y=e.clientY;
+  }
+  hover=cellAt(e);draw();
+});
+canvas.addEventListener('pointerup',e=>{
+  const shouldPlace=dragging&&!dragging.moved&&!dragging.panOnly;dragging=null;
+  if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);
+  if(!shouldPlace)return;
   const id=cellAt(e);if(id===null)return;
   if(state.phase!=='build'){notify('战斗中不能修改布局；可暂停观察或返回布防。');return;}
   if(tool==='erase'){if(state.towers.delete(id))notify('武器已拆除，返还 10 预算。');else notify('这里没有武器。');}
   else{const error=placementError(state,id);if(error)notify(error);else{state.towers.add(id);notify('武器已部署，覆盖格火力 +2。');}}
   update();
 });
-canvas.addEventListener('pointermove',e=>{if(dragging){panX+=e.clientX-dragging.x;panY+=e.clientY-dragging.y;dragging={x:e.clientX,y:e.clientY};}hover=cellAt(e);if(hover!==null){const [x,y]=xy(hover);$('cellInfo').textContent=`格子 (${x}, ${y}) · 火力 ${fire.get(hover)||0} · ${state.walls.has(hover)?'不可通行':'可通行'}${state.towers.has(hover)?' · 武器 A':''}`;}draw();});
-canvas.addEventListener('pointerup',()=>{dragging=null;});canvas.addEventListener('pointercancel',()=>{dragging=null;});canvas.addEventListener('pointerleave',()=>{hover=null;draw();});
+canvas.addEventListener('pointercancel',()=>{dragging=null;});
+canvas.addEventListener('lostpointercapture',()=>{dragging=null;});
+canvas.addEventListener('pointerleave',()=>{hover=null;draw();});
 new ResizeObserver(()=>resize()).observe(viewport);
 sourceEditor(state.sources);resize(true);update();
 
@@ -135,7 +164,7 @@ function advance() {
   stepBattle(state);
   for (const event of state.events) {
     const [x,y] = xy(event.id);
-    const text = event.type === 'merge' ? `(${x},${y}) 合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.value} 批敌人` : `(${x},${y}) 火力削减 ${event.value}`;
+    const text = event.type === 'merge' ? `(${x},${y}) ${event.members} 批合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.value} 批敌人` : `(${x},${y}) 火力削减 ${event.value}`;
     messages.unshift(`第 ${state.tick} 拍 · ${text}`);
   }
   messages = messages.slice(0,8); $('log').replaceChildren(...messages.map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
