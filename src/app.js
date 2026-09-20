@@ -1,10 +1,11 @@
 import { SIZE, DEFAULTS } from './config.js';
-import { key, xy, inside, createState, pathFrom, coverage, fireField, funds, placementError, validateSources } from './model.js';
+import { key, xy, inside, createState, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle } from './model.js';
 const $ = id => document.getElementById(id);
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createState(), tool = 'build', hover = null, dragging = null;
 let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0;
 let fire = fireField(state), paused = false, timer = 0, last = 0;
+let messages = [];
 const colors = ['#df9989', '#a6a1e9', '#d5bd79', '#78bcd3'];
 const notify = message => { $('notice').textContent = message; };
 
@@ -84,6 +85,13 @@ function update() {
   $('budget').textContent = funds(state); $('tick').textContent = state.tick;
   $('campHP').textContent = `${Math.max(0,state.hp)} / ${DEFAULTS.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/DEFAULTS.campHP*100}%`;
   $('spawned').textContent = `${state.spawned} / ${state.sources.reduce((n,s)=>n+s.count,0)}`;
+  const active = state.phase === 'battle', build = state.phase === 'build';
+  $('phase').textContent = build ? '准备布防' : active ? (paused ? '防守暂停' : '防守进行中') : state.phase === 'won' ? '守住了' : '篝火熄灭';
+  $('start').disabled = !build; $('pause').disabled = !active; $('step').disabled = !active || !paused;
+  $('pause').textContent = paused ? '继续' : '暂停';
+  for (const id of ['build','erase','apply','addSource']) $(id).disabled = !build;
+  document.querySelectorAll('#sources input, #sources button').forEach(el=>el.disabled=!build);
+  $('result').textContent = build ? '修改位置后再试。敌人不攻击武器与障碍。' : `${state.phase === 'won' ? '防守成功' : state.phase === 'lost' ? '防守失败' : '防守中'} · 削减 ${state.damage} · 漏过 ${state.leaked} · 合并 ${state.merges} 次`;
   draw();
 }
 function sourceEditor(sources) {
@@ -100,7 +108,7 @@ function sourceEditor(sources) {
   });
 }
 function readSources(){return [...document.querySelectorAll('.source')].map(card=>Object.fromEntries([...card.querySelectorAll('input')].map(input=>[input.name,input.value.trim()===''?NaN:Number(input.value)])));}
-function reset(keep=true){state=createState(structuredClone(state.sources),keep?state.towers:new Set());paused=false;timer=0;notify(keep?'已恢复篝火与敌人，保留布局，可继续调整。':'已清空布局，预算全部返还。');update();}
+function reset(keep=true){state=createState(structuredClone(state.sources),keep?state.towers:new Set());paused=false;timer=0;messages=[];$('log').replaceChildren();notify(keep?'已恢复篝火与敌人，保留布局，可继续调整。':'已清空布局，预算全部返还。');update();}
 $('build').onclick=()=>{tool='build';$('build').classList.add('selected');$('erase').classList.remove('selected');draw();};
 $('erase').onclick=()=>{tool='erase';$('erase').classList.add('selected');$('build').classList.remove('selected');draw();};
 $('retry').onclick=()=>reset();$('clear').onclick=()=>reset(false);
@@ -121,3 +129,33 @@ canvas.addEventListener('pointermove',e=>{if(dragging){panX+=e.clientX-dragging.
 canvas.addEventListener('pointerup',()=>{dragging=null;});canvas.addEventListener('pointercancel',()=>{dragging=null;});canvas.addEventListener('pointerleave',()=>{hover=null;draw();});
 new ResizeObserver(()=>resize()).observe(viewport);
 sourceEditor(state.sources);resize(true);update();
+
+// 只记录当前波次的近期反馈，不建设存档或回放系统。
+function advance() {
+  stepBattle(state);
+  for (const event of state.events) {
+    const [x,y] = xy(event.id);
+    const text = event.type === 'merge' ? `(${x},${y}) 合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.value} 批敌人` : `(${x},${y}) 火力削减 ${event.value}`;
+    messages.unshift(`第 ${state.tick} 拍 · ${text}`);
+  }
+  messages = messages.slice(0,8); $('log').replaceChildren(...messages.map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
+  if (state.phase === 'won') notify('守住了！可以保留布局，调整后再比较一次。');
+  if (state.phase === 'lost') notify('篝火熄灭。看看合流之前是否还有更好的覆盖位置。');
+  update();
+}
+$('start').onclick=()=>{
+  if(state.phase!=='build')return;
+  if(JSON.stringify(readSources())!==JSON.stringify(state.sources)){ $('configError').textContent='来袭配置有未应用修改，请先应用配置。';$('settings').open=true;notify('请先应用来袭配置，确保预览与实际波次一致。');return; }
+  const error=validateSources(state.sources,state);if(error){notify(error);return;}
+  state.phase='battle';paused=false;timer=0;last=performance.now();$('settings').open=false;notify('敌人正在接近。可以暂停、逐步观察或加速。');update();
+};
+$('pause').onclick=()=>{if(state.phase!=='battle')return;paused=!paused;timer=0;update();};
+$('step').onclick=()=>{if(state.phase==='battle'&&paused)advance();};
+// 一个简单累计计时器驱动所有敌人，不随绘制次数扣血。
+function frame(now){
+  const elapsed=Math.min(now-last,250);last=now;
+  if(state.phase==='battle'&&!paused){timer+=elapsed*Number($('speed').value);while(timer>=DEFAULTS.stepMs&&state.phase==='battle'){timer-=DEFAULTS.stepMs;advance();}}
+  requestAnimationFrame(frame);
+}
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.phase==='battle'){paused=true;timer=0;update();}});
+requestAnimationFrame(frame);

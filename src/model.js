@@ -79,3 +79,42 @@ export function validateSources(sources, state) {
   }
   return '';
 }
+
+// 单步只处理一次入格；先移动所有敌人，再统一合并，避免遍历顺序影响结果。
+export function stepBattle(state) {
+  if (state.phase !== 'battle') return;
+  state.tick++; state.events = [];
+  for (const enemy of state.enemies) enemy.id = state.field.next.get(enemy.id) ?? enemy.id;
+  for (const [index, source] of state.sources.entries()) {
+    const age = state.tick - source.first;
+    if (age >= 0 && age % source.interval === 0 && age / source.interval < source.count) {
+      state.enemies.push({ id: key(source.x, source.y), hp: source.hp, max: source.hp, members: 1, sources: [index] });
+      state.spawned++;
+    }
+  }
+  const groups = new Map();
+  for (const enemy of state.enemies) {
+    if (!groups.has(enemy.id)) groups.set(enemy.id, { ...enemy, sources: [...enemy.sources] });
+    else {
+      const group = groups.get(enemy.id);
+      group.hp += enemy.hp; group.max += enemy.max; group.members += enemy.members;
+      group.sources = [...new Set([...group.sources, ...enemy.sources])];
+      state.merges++;
+      state.events.push({ type: 'merge', id: enemy.id, value: group.hp });
+    }
+  }
+  const fire = fireField(state); state.enemies = [];
+  for (const enemy of groups.values()) {
+    const damage = Math.min(enemy.hp, fire.get(enemy.id) || 0);
+    enemy.hp -= damage; state.damage += damage;
+    if (damage) state.events.push({ type: 'hit', id: enemy.id, value: damage });
+    if (enemy.hp <= 0) {
+      state.removed += enemy.members; state.events.push({ type: 'kill', id: enemy.id, value: enemy.members });
+    } else if (enemy.id === state.camp) {
+      state.hp = Math.max(0, state.hp - enemy.hp); state.leaked += enemy.hp;
+      state.events.push({ type: 'leak', id: enemy.id, value: enemy.hp });
+    } else state.enemies.push(enemy);
+  }
+  if (state.hp <= 0) state.phase = 'lost';
+  else if (state.spawned === state.sources.reduce((sum, s) => sum + s.count, 0) && !state.enemies.length) state.phase = 'won';
+}
