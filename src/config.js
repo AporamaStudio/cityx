@@ -2,7 +2,7 @@
 export const SIZE = 30;
 export const DEFAULTS = {
   budget: 100, wallCost: 2, controlRadius: 9, campHP: 30, stepMs: 450,
-  outpostCost: 20, outpostHP: 24, outpostRadius: 6, repairCost: 5,
+  outpostCost: 25, outpostHP: 10, outpostRadius: 6, repairCost: 1, campRepairCost: 1,
   weapons: {
     A: { shape: 'square', range: 1, power: 2, cost: 10 },
     B: { shape: 'square', range: 3, power: 1, cost: 20 },

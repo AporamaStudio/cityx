@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS } from './config.js?v=7';
+import { SIZE, DEFAULTS } from './config.js?v=9.1';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -45,7 +45,7 @@ export function coverage(id, range = 1, shape = 'diamond') {
 export function createState(sources = DEFAULTS.sources, towers = new Map(), playerWalls = new Set(), params = DEFAULTS, outposts = new Map()) {
   const fixedWalls = makeWalls(), walls = new Set([...fixedWalls, ...playerWalls]);
   const camp = key(...DEFAULTS.camp), field = routeField(camp, walls);
-  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p,hp:params.outpostHP,max:params.outpostHP}])), repairSpent:0, day:1, lostControl:new Set(),
+  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p,hp:params.outpostHP,max:params.outpostHP}])), repairSpent:0, earned:0, day:1, lostControl:new Set(),
     fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
     hp: params.campHP, enemies: [], events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
@@ -60,7 +60,7 @@ export function fireField(state) {
   }
   return fire;
 }
-export const funds = state => state.params.budget - state.outposts.size*state.params.outpostCost - state.repairSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
+export const funds = state => state.params.budget + state.earned - state.outposts.size*state.params.outpostCost - state.repairSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
 // 控制范围为所有存活控制站的并集；重叠覆盖不会随单站失守而失去。
 export function inStationRange(id, center, radius) {
   const [x,y]=xy(id),[cx,cy]=xy(center),dx=Math.abs(x-cx),dy=Math.abs(y-cy),cut=Math.min(2,radius);
@@ -85,13 +85,20 @@ export function sourceTarget(state,source) {
   return targets.reduce((best,id)=>(fieldFor(state,id).distance.get(start)??Infinity)<(fieldFor(state,best).distance.get(start)??Infinity)?id:best,state.camp);
 }
 export const enemyKey=(enemy)=>`${enemy.id}:${enemy.target}`;
+// 按实际缺失 HP 报价；一次修满，前哨废墟允许在失控区原址恢复。
+export function repairQuote(state,id) {
+  const camp=id===state.camp, target=camp?{hp:state.hp,max:state.params.campHP}:state.outposts.get(id);
+  const missing=target?Math.max(0,target.max-target.hp):0;
+  return {missing,cost:missing*(camp?state.params.campRepairCost:state.params.repairCost)};
+}
 export function outpostError(state,id,repair=false) {
-  if(state.phase!=='build')return '防守中不能建设或修复前哨。';
+  if(state.phase!=='build')return '防守中不能建设或修复。';
   const old=state.outposts.get(id);
   if(repair){
-    if(state.day!==2)return '次日才能修复受损前哨。';
-    if(!old||old.hp>=old.max)return '请选择受损前哨或废墟。';
-    return funds(state)<state.params.repairCost?'资金不足，无法修复前哨。':'';
+    if(state.day!==2)return '次日才能修复火光或前哨。';
+    const quote=repairQuote(state,id);
+    if(!quote.missing)return '请选择受损火光、前哨或废墟。';
+    return funds(state)<quote.cost?`资金不足，修复需要 ${quote.cost} 钱（${quote.missing} HP）。`:'';
   }
   if(!inControl(state,id))return '前哨必须建在已有控制范围内。';
   if(state.walls.has(id)||old||id===state.camp||state.sources.some(s=>key(s.x,s.y)===id))return '前哨需要未占用的空地。';
@@ -100,8 +107,11 @@ export function outpostError(state,id,repair=false) {
 }
 export function buildOutpost(state,id,repair=false) {
   const error=outpostError(state,id,repair);if(error)return error;
-  if(repair){state.outposts.get(id).hp=state.outposts.get(id).max;state.repairSpent+=state.params.repairCost;}
-  else state.outposts.set(id,{hp:state.params.outpostHP,max:state.params.outpostHP});
+  if(repair){
+    state.repairSpent+=repairQuote(state,id).cost;
+    if(id===state.camp)state.hp=state.params.campHP;
+    else state.outposts.get(id).hp=state.outposts.get(id).max;
+  } else state.outposts.set(id,{hp:state.params.outpostHP,max:state.params.outpostHP});
   rebuildFields(state);return '';
 }
 export function removeOutpost(state,id) {
@@ -117,13 +127,13 @@ export function enterMorning(state) {
   state.day=2;state.phase='build';return true;
 }
 export function placementError(state, id, type = 'A') {
-  if (state.phase !== 'build') return '战斗时不能修改布局，请先返回布防。';
+  if (!['build','battle'].includes(state.phase)) return '本晚已结束，请进入次日或重试。';
   if (!Number.isInteger(id) || id < 0 || id >= SIZE * SIZE) return '请选择地图内的格子。';
   if (!inControl(state,id)) return '超出控制范围，不能架设炮台。';
   if (!state.walls.has(id)) return '炮台只能架设在墙上，请先建墙或选择固定墙。';
-  if (state.towers.has(id)) return '该格已有武器，可用拆除工具撤销。';
+  if (state.towers.has(id)) return state.phase==='battle'?'该格已有武器，防守中不能拆除。':'该格已有武器，可用拆除工具撤销。';
   if (!state.params.weapons[type]) return '未知武器。';
-  if (funds(state) < state.params.weapons[type].cost) return '预算不足，可拆除其他武器重新分配。';
+  if (funds(state) < state.params.weapons[type].cost) return '预算不足，无法架设炮台。';
   return '';
 }
 
@@ -158,7 +168,7 @@ export function changeWall(state, id, remove = false) {
 export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
-  if(!integer(params.outpostCost,1,1000)||!integer(params.outpostHP,1,10000)||!integer(params.outpostRadius,1,30)||!integer(params.repairCost,1,params.outpostCost))return '前哨价格 1–1000、耐久 1–10000、半径 1–30；修复价格不能超过建造价格。';
+  if(!integer(params.outpostCost,1,1000)||!integer(params.outpostHP,1,10000)||!integer(params.outpostRadius,1,30)||!integer(params.repairCost,1,1000)||!integer(params.campRepairCost,1,1000))return '前哨价格 1–1000、耐久 1–10000、半径 1–30；前哨及火光每 HP 修复单价 1–1000。';
   for (const type of ['A','B']) {
     const w=params.weapons[type];
     if (!w || !['square','diamond'].includes(w.shape) || !integer(w.range,1,8) || !integer(w.power,1,99) || !integer(w.cost,1,1000)) return `武器 ${type}：范围 1–8、火力 1–99、价格 1–1000，均为整数。`;
@@ -216,6 +226,8 @@ export function stepBattle(state) {
     enemy.hp -= damage; state.damage += damage;
     if (damage) state.events.push({ type: 'hit', id: enemy.id,target:enemy.target, value: damage });
     if (enemy.hp <= 0) {
+      // 每个原始块奖励 1 钱；合并群完全消灭才一次结算，碰撞目标不算击杀。
+      state.earned += enemy.members;
       state.removed += enemy.members; state.events.push({ type: 'kill', id: enemy.id,target:enemy.target, value: enemy.members });
     } else if (enemy.target===state.camp&&enemy.id === state.camp) {
       state.hp = Math.max(0, state.hp - enemy.hp); state.leaked += enemy.hp;

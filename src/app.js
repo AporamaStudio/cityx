@@ -1,11 +1,12 @@
-import { SIZE, DEFAULTS } from './config.js?v=7';
-import { key, xy, inside, createState, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=7';
+import { SIZE, DEFAULTS } from './config.js?v=9.1';
+import { key, xy, inside, createState, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=9.1';
 const $ = id => document.getElementById(id);
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createState(), tool = 'wall', hover = null, dragging = null;
 let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0;
 let fire = fireField(state), paused = false, timer = 0, last = 0;
-let messages = [];
+let messages = [], preparation = null;
+const canBuildWeapon = () => ['build','battle'].includes(state.phase);
 let motion = null, impactAge = 1000, incoming = new Map();
 const MOVE_MS = 160, IMPACT_MS = 220;
 const colors = ['#df9989', '#a6a1e9', '#d5bd79', '#78bcd3'];
@@ -51,11 +52,11 @@ function draw() {
   const postHover=hover!==null&&state.phase==='build'&&['outpost','repair'].includes(tool);
   const postError=postHover?(paramsDirty()?'请先应用或取消参数预览。':outpostError(state,hover,tool==='repair')):'';
   const postGhost=postHover&&!postError;
-  const previewState=postGhost?{...state,outposts:new Map([...state.outposts,[hover,{hp:state.params.outpostHP,max:state.params.outpostHP}]])}:state;
+  const previewState=postGhost&&hover!==state.camp?{...state,outposts:new Map([...state.outposts,[hover,{hp:state.params.outpostHP,max:state.params.outpostHP}]])}:state;
   const routeState=postGhost?{...previewState}:candidate&&!candidate.error?{...state,field:candidate.field,fields:candidate.fields}:state;
   if(postGhost)rebuildFields(routeState);
   const sourcePath=source=>pathFrom(key(source.x,source.y),fieldFor(routeState,sourceTarget(routeState,source)));
-  const weaponHover=hover!==null&&state.phase==='build'&&['build','long'].includes(tool);
+  const weaponHover=hover!==null&&canBuildWeapon()&&['build','long'].includes(tool);
   const weapon=selectedWeapon();
   const previewError=weaponHover ? (paramsDirty()?'请先应用或取消实验参数预览。':placementError(state,hover,weaponType())) : '';
   const ghost=weaponHover&&!previewError;
@@ -64,7 +65,7 @@ function draw() {
   $('placementInfo').textContent=weaponHover ? (previewError||`建造预览 · 每格火力 +${weapon.power} · 花费 ${weapon.cost} · 建造后剩余 ${funds(state)-weapon.cost}`) : '';
 
 
-  if(postHover)$('placementInfo').textContent=postError||`${tool==='repair'?'修复':'建设'}预览 · ${Array.from({length:SIZE*SIZE},(_,id)=>id).filter(id=>inControl(previewState,id)&&!inControl(state,id)).length} 格恢复或新增控制 · 花费 ${tool==='repair'?state.params.repairCost:state.params.outpostCost}`;
+  if(postHover)$('placementInfo').textContent=postError||`${tool==='repair'?'修复':'建设'}预览 · ${Array.from({length:SIZE*SIZE},(_,id)=>id).filter(id=>inControl(previewState,id)&&!inControl(state,id)).length} 格恢复或新增控制 · 花费 ${tool==='repair'?repairQuote(state,hover).cost:state.params.outpostCost}${tool==='repair'?` · 恢复 ${repairQuote(state,hover).missing} HP`:''}`;
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
   for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
@@ -83,7 +84,7 @@ function draw() {
       ctx.fillStyle='#7fc8e810';ctx.fillRect(x,y,1,1);
       // 控制范围不等于建造格：只标出当前工具符合地形条件的位置。
       const eligible = tool==='wall' ? !state.walls.has(id)&&!state.outposts.has(id)&&id!==state.camp&&!state.sources.some(a=>key(a.x,a.y)===id) : ['build','long'].includes(tool)&&state.walls.has(id)&&!state.towers.has(id);
-      if(state.phase==='build'&&eligible){ctx.fillStyle='#a9d4cb55';ctx.fillRect(x+.46,y+.46,.08,.08);}
+      if((state.phase==='build'||(state.phase==='battle'&&['build','long'].includes(tool)))&&eligible){ctx.fillStyle='#a9d4cb55';ctx.fillRect(x+.46,y+.46,.08,.08);}
       ctx.strokeStyle='#86ccea';ctx.lineWidth=.08;ctx.setLineDash([.16,.12]);ctx.beginPath();
       for(const [dx,dy,a,b,c,d] of [[-1,0,x,y,x,y+1],[1,0,x+1,y,x+1,y+1],[0,-1,x,y,x+1,y],[0,1,x,y+1,x+1,y+1]]) {
         if(!inside(x+dx,y+dy)||!inControl(controlState,key(x+dx,y+dy),controlRadius)){ctx.moveTo(a,b);ctx.lineTo(c,d);}
@@ -102,7 +103,7 @@ function draw() {
     }
     ctx.globalAlpha = 1;
   });
-  if (hover !== null && state.phase === 'build') {
+  if (hover !== null && (state.phase === 'build' || weaponHover)) {
     const isWeapon = ['build','long'].includes(tool), weapon = selectedWeapon();
     const error = isWeapon ? previewError : postHover?postError:candidate?.error;
     for (const id of isWeapon ? coverage(hover,weapon.range,weapon.shape) : [hover]) {
@@ -202,7 +203,7 @@ function update() {
   const w=selectedWeapon();
   $('toolInfo').textContent = ['build','long'].includes(tool) ? `${weaponType()==='A'?'近防炮':'远防炮'} · ${w.cost} 资金 · ${w.shape==='square'?'方形':'菱形'}范围 ${w.range} · 火力 ${w.power}。仅架设在墙上。` : tool==='wall' ? `每格墙 ${state.params.wallCost} 资金。仅限控制范围内空地；悬停预览路线。` : `点击拆除并全额退款：有炮台先拆炮，再点拆自建墙。固定墙不可拆；防守中不可拆除。`;
   if(tool==='outpost')$('toolInfo').textContent=`前哨 ${state.params.outpostCost} 资金 · HP ${state.params.outpostHP} · 范围 ${state.params.outpostRadius}。建于已有控制区空地；无攻击能力，会成为目标。`;
-  if(tool==='repair')$('toolInfo').textContent=`次日修复受损前哨或废墟，花费 ${state.params.repairCost}，恢复满血及控制。失控区域允许原址修复。`;
+  if(tool==='repair')$('toolInfo').textContent=`次日点击受损火光、前哨或废墟，一次修满。前哨每 HP ${state.params.repairCost} 钱，火光每 HP ${state.params.campRepairCost} 钱；悬停查看总价。失控前哨可原址修复。`;
   $('budget').textContent = funds(state); $('tick').textContent = state.tick;
   $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
   $('spawned').textContent = `${state.spawned} / ${state.sources.reduce((n,s)=>n+s.count,0)}`;
@@ -212,16 +213,19 @@ function update() {
   $('start').textContent = active ? (paused ? '继续防守' : '暂停') : state.day===2?'单晚实验已完成':build?'开始防守':state.phase==='won'?'进入次日 · 修复':'防守结束';
   for (const id of ['build','long','wall','outpost','repair','erase','apply','addSource','applyParams','cancelParams','defaults']) $(id).disabled = !build;
   // 通用建造交互：不足价即禁用，退款或应用参数后立即恢复。
-  for(const [id,cost] of [['wall',state.params.wallCost],['build',state.params.weapons.A.cost],['long',state.params.weapons.B.cost],['outpost',state.params.outpostCost],['repair',state.params.repairCost]]){
+  for(const [id,cost] of [['wall',state.params.wallCost],['build',state.params.weapons.A.cost],['long',state.params.weapons.B.cost],['outpost',state.params.outpostCost]]){
     const short=funds(state)<cost;
-    $(id).disabled=!build||short;
-    $(id).title=!build?'防守中不能建设':short?`资金不足：需要 ${cost}，现有 ${funds(state)}`:`花费 ${cost} 资金`;
+    const allowed=build||(active&&['build','long'].includes(id));
+    $(id).disabled=!allowed||short;
+    $(id).title=!allowed?'防守中不能建设':short?`资金不足：需要 ${cost}，现有 ${funds(state)}`:`花费 ${cost} 资金`;
   }
-  $('repair').disabled=!build||state.day!==2||funds(state)<state.params.repairCost||![...state.outposts.values()].some(p=>p.hp<p.max);
+  const repairPrices=[state.camp,...state.outposts.keys()].map(id=>repairQuote(state,id)).filter(q=>q.missing>0);
+  $('repair').disabled=!build||state.day!==2||!repairPrices.some(q=>q.cost<=funds(state));
+  $('repair').title=state.day!==2?'次日才能修复':!repairPrices.length?'没有受损设施':`修满最低需要 ${Math.min(...repairPrices.map(q=>q.cost))} 钱`;
   for(const id of ['apply','addSource','applyParams','cancelParams','defaults'])$(id).disabled=!build||state.day===2;
   document.querySelectorAll('#sources input, #sources select, #sources button, #params input, #params select').forEach(el=>el.disabled=!build||state.day===2);
-  $('result').textContent = build ? '修改位置后再试。敌人不攻击武器与障碍。' : `${state.phase === 'won' ? '防守成功' : state.phase === 'lost' ? '防守失败' : '防守中'} · 削减 ${state.damage} · 漏过 ${state.leaked} · 合并 ${state.merges} 次`;
-  if(state.day===2)$('result').textContent=`次日恢复实验 · 上一晚失控 ${state.lostControl.size} 格（不含仍有重叠覆盖的地块）。尚无经济设施，不发放收入。可修复或重试第一晚。`;
+  $('result').textContent = build ? '修改位置后再试。敌人不攻击武器与障碍。' : `${state.phase === 'won' ? '防守成功' : state.phase === 'lost' ? '防守失败' : '防守中'} · 削减 ${state.damage} · 漏过 ${state.leaked} · 合并 ${state.merges} 次 · 击杀收入 ${state.earned}`;
+  if(state.day===2)$('result').textContent=`次日恢复实验 · 上一晚失控 ${state.lostControl.size} 格（不含仍有重叠覆盖的地块）。击杀收入 ${state.earned} 已入账；尚无经营收入。可修复或重试第一晚。`;
   draw();
 }
 function sourceEditor(sources) {
@@ -257,8 +261,8 @@ function paramsEditor(params) {
     }
     $('params').append(row);
   }
-  fields('全局',params,'',[['budget','资金',0,10000],['wallCost','墙价',1,1000],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000]]);
-  fields('前哨',params,'',[['outpostCost','造价',1,1000],['outpostHP','耐久',1,10000],['outpostRadius','半径',1,30],['repairCost','修复费',1,1000]]);
+  fields('全局',params,'',[['budget','资金',0,10000],['wallCost','墙价',1,1000],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campRepairCost','火光修复单价/HP',1,1000]]);
+  fields('前哨',params,'',[['outpostCost','造价',1,1000],['outpostHP','耐久',1,10000],['outpostRadius','半径',1,30],['repairCost','修复单价/HP',1,1000]]);
   for(const type of ['A','B'])fields(`武器 ${type}`,params.weapons[type],type+'.',[['shape','范围形状'],['range','半径',1,8],['power','火力',1,99],['cost','价格',1,1000]]);
 }
 function readParams() {
@@ -276,9 +280,12 @@ function refreshParams(){
   update();
 }
 function reset(keep=true){
-  state=createState(keep?state.sources:state.sources.map(s=>({...s,target:-2})),keep?state.towers:new Map(),keep?state.playerWalls:new Set(),state.params,keep?state.outposts:new Map());
+  // 重试恢复开战前快照，收入和夜间补炮一起撤销，避免刷钱或负预算。
+  const baseState=keep&&preparation?preparation:state;
+  state=createState(keep?baseState.sources:state.sources.map(s=>({...s,target:-2})),keep?baseState.towers:new Map(),keep?baseState.playerWalls:new Set(),baseState.params,keep?baseState.outposts:new Map());
+  preparation=null;document.querySelectorAll('.coin-drop').forEach(el=>el.remove());
   paused=false;timer=0;motion=null;impactAge=1000;incoming.clear();messages=[];$('log').replaceChildren();sourceEditor(state.sources);paramsEditor(state.params);refreshParams();
-  notify(keep?'已重试第一晚：恢复火光、前哨与敌人，保留建设布局。':'已清空墙、炮台和前哨，资金全部返还，目标恢复自动。');
+  notify(keep?'已恢复战前布局与资金；撤销本晚收入及战斗中的建设。':'已清空墙、炮台和前哨，资金全部返还，目标恢复自动。');
 }
 for(const id of ['wall','build','long','outpost','repair','erase'])$(id).onclick=()=>{
   tool=id;for(const button of ['wall','build','long','outpost','repair','erase'])$(button).classList.toggle('selected',button===id);update();
@@ -320,10 +327,10 @@ canvas.addEventListener('pointerup',e=>{
   if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);
   if(!shouldPlace)return;
   const id=cellAt(e);if(id===null)return;
-  if(state.phase!=='build'){notify('战斗中不能修改布局；可暂停观察或返回布防。');return;}
+  if(state.phase!=='build'&&!(state.phase==='battle'&&['build','long'].includes(tool))){notify('防守中只能在已有墙上补炮，不能造墙、修复或拆除。');return;}
   if(paramsDirty()){notify('请先应用或取消实验参数预览，再修改布局。');return;}
   if(['outpost','repair'].includes(tool)){
-    const error=buildOutpost(state,id,tool==='repair');notify(error||(tool==='repair'?'前哨已修复，控制范围恢复。':'前哨已建立；默认自动目标会选择出生时最近的控制站。'));
+    const error=buildOutpost(state,id,tool==='repair');notify(error||(tool==='repair'?'设施已修满，按缺失 HP 扣费。':'前哨已建立；默认自动目标会选择出生时最近的控制站。'));
     if(!error)sourceEditor(readSources());
   } else if(tool==='wall'){
     const error=changeWall(state,id);notify(error||'墙已建造，路线已更新。');
@@ -345,13 +352,26 @@ canvas.addEventListener('pointerleave',()=>{hover=null;draw();});
 new ResizeObserver(()=>resize()).observe(viewport);
 paramsEditor(state.params);sourceEditor(state.sources);resize(true);refreshParams();
 
+// 金币立即入账；弹出并飞向资金栏只是反馈，不要求点击，也不阻挡暂停和补炮。
+function showCoins(id, amount) {
+  const [x,y]=xy(id), rect=canvas.getBoundingClientRect(), target=$('budget').getBoundingClientRect();
+  const sx=rect.left+panX+(x+.5)*base*zoom, sy=rect.top+panY+(y+.5)*base*zoom;
+  const coin=document.createElement('span');coin.className='coin-drop';coin.textContent=`● +${amount}`;coin.setAttribute('aria-hidden','true');
+  coin.style.left=`${sx}px`;coin.style.top=`${sy}px`;document.body.append(coin);
+  const dx=target.left+target.width/2-sx, dy=target.top+target.height/2-sy;
+  const animation=coin.animate([{transform:'translate(-50%,-50%) scale(.6)',opacity:0},{transform:'translate(-50%,calc(-50% - 24px)) scale(1.15)',opacity:1,offset:.3},{transform:`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) scale(.7)`,opacity:0}],{duration:900,easing:'ease-in-out'});
+  animation.onfinish=()=>coin.remove();
+  $('budget').animate([{color:'#fff4a3',transform:'scale(1.15)'},{color:'#b8e4c8',transform:'scale(1)'}],{duration:500});
+}
+
 // 只记录当前波次的近期反馈，不建设存档或回放系统。
 function advance() {
   stepBattle(state);
   motion=null;impactAge=0;timer=0;
   for (const event of state.events) {
     const [x,y] = xy(event.id);
-    const text = event.type==='postLost'?`前哨 (${x},${y}) 失守，独占区域失控`:event.type==='postHit'?`前哨 (${x},${y}) 受到 ${event.value} 点伤害`:event.type === 'merge' ? `(${x},${y}) ${event.members} 批合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.value} 批敌人` : `(${x},${y}) 火力削减 ${event.value}`;
+    const text = event.type==='postLost'?`前哨 (${x},${y}) 失守，独占区域失控`:event.type==='postHit'?`前哨 (${x},${y}) 受到 ${event.value} 点伤害`:event.type === 'merge' ? `(${x},${y}) ${event.members} 批合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.value} 批敌人，+${event.value} 资金` : `(${x},${y}) 火力削减 ${event.value}`;
+    if(event.type==='kill')showCoins(event.id,event.value);
     messages.unshift(`第 ${state.tick} 拍 · ${text}`);
   }
   messages = messages.slice(0,8); $('log').replaceChildren(...messages.map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
@@ -367,7 +387,8 @@ $('start').onclick=()=>{
   if(paramsDirty()){ $('experiments').open=true;notify('实验参数有未应用修改，请先应用或取消预览。');return; }
   if(JSON.stringify(readSources())!==JSON.stringify(state.sources)){ $('configError').textContent='来袭配置有未应用修改，请先应用配置。';$('settings').open=true;notify('请先应用来袭配置，确保预览与实际波次一致。');return; }
   const error=validateSources(state.sources,state);if(error){notify(error);return;}
-  state.phase='battle';paused=false;timer=0;last=performance.now();$('settings').open=false;notify('敌人正在接近。可以暂停、逐步观察或加速。');update();
+  preparation=createState(state.sources,state.towers,state.playerWalls,state.params,state.outposts);
+  state.phase='battle';paused=false;timer=0;last=performance.now();$('settings').open=false;notify('敌人正在接近。击杀自动获得资金；可暂停补炮，不能造墙或拆除。');update();
 };
 // 简单的逐格滑动：动画结束才提交一步战斗，无独立动画框架。
 function beginMotion(singleStep=false){
