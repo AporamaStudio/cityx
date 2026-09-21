@@ -86,3 +86,50 @@ test('墙价参与参数预算校验，取消和重试不制造资金',()=>{
   const retry=makeState(s.sources,s.towers,s.playerWalls,s.params);assert.equal(funds(retry),88);
   retry.towers.delete(key(14,20));assert.equal(funds(retry),98);assert.equal(changeWall(retry,key(14,20),true),'');assert.equal(funds(retry),100);
 });
+
+// 前哨用例检查控制并集、目标身份、失守溢出和次日恢复，不做数值平衡推演。
+const {buildOutpost,removeOutpost,outpostError,sourceTarget,fieldFor,enterMorning,incomeEligible}=await import('../src/model.js');
+test('前哨扩张并集、重叠保护和失控原址修复',()=>{
+  const a=key(15,16),b=key(19,16),s=makeState([{x:15,y:15,hp:30,count:1,first:1,interval:1,target:a}]);
+  assert.equal(buildOutpost(s,a),'');assert.equal(buildOutpost(s,b),'');assert.equal(funds(s),60);
+  const exclusive=key(10,12),overlap=key(17,12);assert.ok(inControl(s,exclusive));assert.ok(inControl(s,overlap));
+  s.phase='battle';stepBattle(s);stepBattle(s);
+  assert.equal(s.outposts.get(a).hp,0);assert.equal(s.outposts.get(b).hp,24);
+  assert.equal(inControl(s,exclusive),false);assert.equal(incomeEligible(s,exclusive),false);
+  assert.equal(incomeEligible(s,overlap),true);assert.equal(s.lostControl.has(overlap),false);
+  assert.equal(s.enemies[0].hp,6);assert.equal(s.enemies[0].target,s.camp);
+  assert.match(buildOutpost(s,a,true),/防守/);
+  while(s.phase==='battle')stepBattle(s);assert.equal(s.phase,'won');assert.equal(s.hp,24);
+  assert.equal(enterMorning(s),true);assert.equal(s.day,2);assert.equal(buildOutpost(s,a,true),'');
+  assert.equal(funds(s),55);assert.equal(inControl(s,exclusive),true);assert.equal(incomeEligible(s,exclusive),false);
+  assert.match(buildOutpost(s,a,true),/受损/);assert.equal(funds(s),55);
+});
+test('不同目标同格不合并，分别扣血后走向不同目标',()=>{
+  const s=makeState([{x:15,y:3,hp:1,count:1,first:100,interval:1}]),a=key(15,16);buildOutpost(s,a);
+  s.phase='battle';s.towers.set(key(14,17),'A');
+  s.enemies=[{id:key(15,16),target:s.camp,hp:10,max:10,members:1,sources:[0]}, {id:key(15,18),target:a,hp:10,max:10,members:1,sources:[1]}];
+  stepBattle(s);assert.equal(s.enemies.length,2);assert.ok(s.enemies.every(e=>e.id===key(15,17)&&e.hp===8));assert.equal(s.merges,0);
+  stepBattle(s);assert.equal(s.outposts.get(a).hp,18);assert.equal(s.enemies.length,1);assert.equal(s.enemies[0].target,s.camp);
+});
+test('同目标仍合并，攻击点入格火力先结算，前哨不会吞掉溢出敌群',()=>{
+  const s=makeState([{x:15,y:3,hp:1,count:1,first:100,interval:1}]),a=key(15,16);buildOutpost(s,a);s.outposts.get(a).hp=3;
+  s.phase='battle';s.towers.set(key(14,16),'A');
+  s.enemies=[{id:key(15,15),target:a,hp:5,max:5,members:1,sources:[0]},{id:key(16,16),target:a,hp:5,max:5,members:1,sources:[1]}];
+  stepBattle(s);assert.equal(s.merges,1);assert.equal(s.damage,2);assert.equal(s.enemies[0].hp,5);assert.equal(s.enemies[0].max,10);assert.equal(s.enemies[0].target,s.camp);
+});
+test('源头可指定目标，自动选最近；失守后回退火光且不允许隔绝前哨',()=>{
+  const s=makeState(),a=key(15,16);buildOutpost(s,a);
+  assert.equal(sourceTarget(s,{...s.sources[0],target:-2}),a);assert.equal(sourceTarget(s,{...s.sources[0],target:-1}),s.camp);
+  assert.equal(sourceTarget(s,{...s.sources[0],target:a}),a);assert.match(validateSources([{...s.sources[0],target:999}],s),/不存在/);
+  for(const [x,y] of [[14,16],[16,16],[15,17]])assert.equal(changeWall(s,key(x,y)),'');
+  assert.match(changeWall(s,key(15,15)),/封死|控制范围/);
+  s.outposts.get(a).hp=0;assert.equal(sourceTarget(s,{...s.sources[0],target:a}),s.camp);
+  assert.ok(fieldFor(s,s.camp).distance.has(a));
+});
+test('前哨资金、占用、撤销依赖及重试复制',()=>{
+  const s=makeState(),a=key(15,16);s.params.budget=19;assert.match(buildOutpost(s,a),/资金不足/);s.params.budget=100;
+  buildOutpost(s,a);assert.match(changeWall(s,a),/前哨/);assert.match(outpostError(s,a),/占用/);
+  assert.equal(changeWall(s,key(15,12)),'');assert.match(removeOutpost(s,a),/依赖/);changeWall(s,key(15,12),true);
+  const copy=makeState(s.sources,s.towers,s.playerWalls,s.params,s.outposts);copy.outposts.get(a).hp=0;assert.equal(s.outposts.get(a).hp,24);
+  assert.equal(removeOutpost(s,a),'');assert.equal(funds(s),100);
+});

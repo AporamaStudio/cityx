@@ -12,3 +12,5 @@ main{grid-template-columns:220px minmax(0,1fr) 300px;gap:14px}
 @media(max-width:540px){.build-sidebar .toolgrid{grid-template-columns:1fr 1fr}}
 
 #placementInfo{color:#e5ef9b}#placementInfo:empty{display:none}.toolgrid button:disabled{border-color:#405358;background:#243337;color:#94a9ab}
+
+#sources select{width:100%;margin-top:3px;padding:5px}.source .fields label:last-child{grid-column:1/-1}

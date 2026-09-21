@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS } from './config.js';
+import { SIZE, DEFAULTS } from './config.js?v=7';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -42,12 +42,14 @@ export function coverage(id, range = 1, shape = 'diamond') {
 }
 
 // 新一轮保留已应用参数、玩家墙和炮台；集合复制避免重试修改旧布局。
-export function createState(sources = DEFAULTS.sources, towers = new Map(), playerWalls = new Set(), params = DEFAULTS) {
+export function createState(sources = DEFAULTS.sources, towers = new Map(), playerWalls = new Set(), params = DEFAULTS, outposts = new Map()) {
   const fixedWalls = makeWalls(), walls = new Set([...fixedWalls, ...playerWalls]);
   const camp = key(...DEFAULTS.camp), field = routeField(camp, walls);
-  return { fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources),
+  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p,hp:params.outpostHP,max:params.outpostHP}])), repairSpent:0, day:1, lostControl:new Set(),
+    fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
     hp: params.campHP, enemies: [], events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
+  rebuildFields(state);return state;
 }
 
 export function fireField(state) {
@@ -58,13 +60,61 @@ export function fireField(state) {
   }
   return fire;
 }
-export const funds = state => state.params.budget - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
-// 控制权只限制建造权限；不限制通行、寻路或武器向外开火。
-export function inControl(state, id, radius = state.params.controlRadius) {
-  const [x,y] = xy(id), [cx,cy] = xy(state.camp);
-  // 正方形四角沿两条边各收进 2 格；小半径时缩减削角，保留中心。
-  const dx=Math.abs(x-cx), dy=Math.abs(y-cy), cut=Math.min(2,radius);
-  return Number.isInteger(id) && id >= 0 && id < SIZE * SIZE && Math.max(dx,dy)<=radius && dx+dy<=2*radius-cut;
+export const funds = state => state.params.budget - state.outposts.size*state.params.outpostCost - state.repairSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
+// 控制范围为所有存活控制站的并集；重叠覆盖不会随单站失守而失去。
+export function inStationRange(id, center, radius) {
+  const [x,y]=xy(id),[cx,cy]=xy(center),dx=Math.abs(x-cx),dy=Math.abs(y-cy),cut=Math.min(2,radius);
+  return Number.isInteger(id)&&id>=0&&id<SIZE*SIZE&&Math.max(dx,dy)<=radius&&dx+dy<=2*radius-cut;
+}
+export function inControl(state,id,radius=state.params.controlRadius) {
+  return (state.hp>0&&inStationRange(id,state.camp,radius)) || [...state.outposts].some(([center,p])=>p.hp>0&&inStationRange(id,center,state.params.outpostRadius));
+}
+export const incomeEligible=(state,id)=>inControl(state,id)&&!state.lostControl.has(id);
+// 每个目标共用一张方向表；同一格可因目标不同而有不同下一格。
+export function rebuildFields(state) {
+  state.field=routeField(state.camp,state.walls);
+  state.fields=new Map([...state.outposts.keys()].map(id=>[id,routeField(id,state.walls)]));
+}
+export const liveTarget=(state,target)=>state.outposts.get(target)?.hp>0?target:state.camp;
+export const fieldFor=(state,target)=>target===state.camp?state.field:state.fields.get(target)||state.field;
+export function sourceTarget(state,source) {
+  if(source.target===-1)return state.camp;
+  if((source.target??-2)!==-2)return liveTarget(state,source.target);
+  // 自动模式只在出生时选择最近目标；行进中目标固定，失守才改打火光。
+  const start=key(source.x,source.y),targets=[state.camp,...[...state.outposts].filter(([,p])=>p.hp>0).map(([id])=>id).sort((a,b)=>a-b)];
+  return targets.reduce((best,id)=>(fieldFor(state,id).distance.get(start)??Infinity)<(fieldFor(state,best).distance.get(start)??Infinity)?id:best,state.camp);
+}
+export const enemyKey=(enemy)=>`${enemy.id}:${enemy.target}`;
+export function outpostError(state,id,repair=false) {
+  if(state.phase!=='build')return '防守中不能建设或修复前哨。';
+  const old=state.outposts.get(id);
+  if(repair){
+    if(state.day!==2)return '次日才能修复受损前哨。';
+    if(!old||old.hp>=old.max)return '请选择受损前哨或废墟。';
+    return funds(state)<state.params.repairCost?'资金不足，无法修复前哨。':'';
+  }
+  if(!inControl(state,id))return '前哨必须建在已有控制范围内。';
+  if(state.walls.has(id)||old||id===state.camp||state.sources.some(s=>key(s.x,s.y)===id))return '前哨需要未占用的空地。';
+  if(!state.field.distance.has(id))return '前哨须与火光连通，不能建在封闭区域。';
+  return funds(state)<state.params.outpostCost?'资金不足，无法建造前哨。':'';
+}
+export function buildOutpost(state,id,repair=false) {
+  const error=outpostError(state,id,repair);if(error)return error;
+  if(repair){state.outposts.get(id).hp=state.outposts.get(id).max;state.repairSpent+=state.params.repairCost;}
+  else state.outposts.set(id,{hp:state.params.outpostHP,max:state.params.outpostHP});
+  rebuildFields(state);return '';
+}
+export function removeOutpost(state,id) {
+  if(state.phase!=='build'||state.day!==1)return '只能在第一天建设时撤销前哨。';
+  if(!state.outposts.has(id))return '这里没有前哨。';
+  const posts=new Map(state.outposts);posts.delete(id);const candidate={...state,outposts:posts};
+  if([...state.playerWalls,...state.towers.keys(),...posts.keys()].some(cell=>!inControl(candidate,cell)))return '其他设施依赖此前哨的控制范围，请先拆除外围设施。';
+  if(state.sources.some(s=>s.target===id))return '敌源指定了此前哨，请先修改目标配置。';
+  state.outposts=posts;rebuildFields(state);return '';
+}
+export function enterMorning(state) {
+  if(state.phase!=='won'||state.day!==1)return false;
+  state.day=2;state.phase='build';return true;
 }
 export function placementError(state, id, type = 'A') {
   if (state.phase !== 'build') return '战斗时不能修改布局，请先返回布防。';
@@ -85,6 +135,7 @@ export function wallPreview(state, id, remove = false) {
   else if (remove && state.towers.has(id)) error = '请先拆除墙上的炮台。';
   else if (remove && !state.playerWalls.has(id)) error = '固定墙不能拆除。';
   else if (!remove && !inControl(state,id)) error = '超出控制范围，不能建墙。';
+  else if (!remove && state.outposts.has(id)) error = '不能覆盖前哨或废墟。';
   else if (!remove && state.walls.has(id)) error = '这里已经有墙。';
   else if (!remove && (id === state.camp || state.sources.some(s=>key(s.x,s.y)===id))) error = '不能覆盖篝火或敌人源头。';
   else if (!remove && funds(state) < state.params.wallCost) error = '资金不足，墙与炮台共用资金。';
@@ -92,13 +143,13 @@ export function wallPreview(state, id, remove = false) {
   const walls = new Set(state.walls);
   if (remove) walls.delete(id); else walls.add(id);
   const field = routeField(state.camp, walls);
-  if (state.sources.some(s=>!field.distance.has(key(s.x,s.y)))) error = '不能封死路线：每个源头都必须能到达篝火。';
-  return { error, field, walls };
+  if ([...state.sources.map(s=>key(s.x,s.y)),...state.outposts.keys()].some(id=>!field.distance.has(id))) error = '不能封死路线：源头、前哨都必须与火光连通。';
+  return { error, field, walls, fields:new Map([...state.outposts.keys()].map(id=>[id,routeField(id,walls)])) };
 }
 export function changeWall(state, id, remove = false) {
   const preview = wallPreview(state,id,remove);
   if (preview.error) return preview.error;
-  state.walls = preview.walls; state.field = preview.field;
+  state.walls = preview.walls; state.field = preview.field;state.fields=preview.fields;
   if (remove) state.playerWalls.delete(id); else state.playerWalls.add(id);
   return '';
 }
@@ -107,11 +158,12 @@ export function changeWall(state, id, remove = false) {
 export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
+  if(!integer(params.outpostCost,1,1000)||!integer(params.outpostHP,1,10000)||!integer(params.outpostRadius,1,30)||!integer(params.repairCost,1,params.outpostCost))return '前哨价格 1–1000、耐久 1–10000、半径 1–30；修复价格不能超过建造价格。';
   for (const type of ['A','B']) {
     const w=params.weapons[type];
     if (!w || !['square','diamond'].includes(w.shape) || !integer(w.range,1,8) || !integer(w.power,1,99) || !integer(w.cost,1,1000)) return `武器 ${type}：范围 1–8、火力 1–99、价格 1–1000，均为整数。`;
   }
-  if (checkLayout && [...state.playerWalls,...state.towers.keys()].some(id=>!inControl(state,id,params.controlRadius))) return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
+  if (checkLayout && [...state.playerWalls,...state.towers.keys()].some(id=>!inControl({...state,params},id,params.controlRadius))) return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
   if (checkLayout && funds({...state,params}) < 0) return '按新价格计算，现有布局超出预算（墙与炮台合计）。请提高资金，或取消预览后拆除设施。';
   return '';
 }
@@ -121,9 +173,10 @@ export function validateSources(sources, state) {
   const seen = new Set();
   for (let i = 0; i < sources.length; i++) {
     const s = sources[i], id = key(s.x, s.y), prefix = `源头 ${i + 1}：`;
-    if (!Object.values(s).every(Number.isInteger)) return prefix + '请填写整数。';
+    if (!['x','y','hp','count','first','interval'].every(k=>Number.isInteger(s[k])) || !Number.isInteger(s.target??-2)) return prefix + '请填写整数。';
     if (!inside(s.x, s.y)) return prefix + '坐标应为 0–29。';
-    if (state.walls.has(id) || id === state.camp || state.towers.has(id)) return prefix + '与障碍、篝火或武器冲突。';
+    if (state.walls.has(id) || id === state.camp || state.towers.has(id) || state.outposts.has(id)) return prefix + '与障碍、篝火或武器冲突。';
+    if(![-2,-1].includes(s.target??-2)&&!state.outposts.has(s.target))return prefix+'指定前哨不存在。';
     if (seen.has(id)) return prefix + '位置不能重复。';
     if (!state.field.distance.has(id)) return prefix + '无法到达篝火。';
     if (s.hp < 1 || s.hp > 999 || s.count < 1 || s.count > 30 || s.first < 1 || s.first > 200 || s.interval < 1 || s.interval > 100) return prefix + '生命 1–999，批数 1–30，首拍 1–200，间隔 1–100。';
@@ -136,36 +189,49 @@ export function validateSources(sources, state) {
 export function stepBattle(state) {
   if (state.phase !== 'battle') return;
   state.tick++; state.events = [];
-  for (const enemy of state.enemies) enemy.id = state.field.next.get(enemy.id) ?? enemy.id;
+  for (const enemy of state.enemies){enemy.target=liveTarget(state,enemy.target);enemy.id=fieldFor(state,enemy.target).next.get(enemy.id)??enemy.id;}
   for (const [index, source] of state.sources.entries()) {
     const age = state.tick - source.first;
     if (age >= 0 && age % source.interval === 0 && age / source.interval < source.count) {
-      state.enemies.push({ id: key(source.x, source.y), hp: source.hp, max: source.hp, members: 1, sources: [index] });
+      state.enemies.push({ id: key(source.x, source.y), target:sourceTarget(state,source), hp: source.hp, max: source.hp, members: 1, sources: [index] });
       state.spawned++;
     }
   }
   const groups = new Map(), merged = new Set();
   for (const enemy of state.enemies) {
-    if (!groups.has(enemy.id)) groups.set(enemy.id, { ...enemy, sources: [...enemy.sources] });
+    const groupId=enemyKey(enemy);
+    if (!groups.has(groupId)) groups.set(groupId, { ...enemy, sources: [...enemy.sources] });
     else {
-      const group = groups.get(enemy.id);
+      const group = groups.get(groupId);
       group.hp += enemy.hp; group.max += enemy.max; group.members += enemy.members;
       group.sources = [...new Set([...group.sources, ...enemy.sources])];
       state.merges++;
-      merged.add(enemy.id);
+      merged.add(groupId);
     }
   }
-  for (const id of merged) { const group = groups.get(id); state.events.push({ type: 'merge', id, value: group.hp, members: group.members }); }
+  for (const groupId of merged) { const group = groups.get(groupId); state.events.push({ type: 'merge', id:group.id,target:group.target, value: group.hp, members: group.members }); }
   const fire = fireField(state); state.enemies = [];
   for (const enemy of groups.values()) {
     const damage = Math.min(enemy.hp, fire.get(enemy.id) || 0);
     enemy.hp -= damage; state.damage += damage;
-    if (damage) state.events.push({ type: 'hit', id: enemy.id, value: damage });
+    if (damage) state.events.push({ type: 'hit', id: enemy.id,target:enemy.target, value: damage });
     if (enemy.hp <= 0) {
-      state.removed += enemy.members; state.events.push({ type: 'kill', id: enemy.id, value: enemy.members });
-    } else if (enemy.id === state.camp) {
+      state.removed += enemy.members; state.events.push({ type: 'kill', id: enemy.id,target:enemy.target, value: enemy.members });
+    } else if (enemy.target===state.camp&&enemy.id === state.camp) {
       state.hp = Math.max(0, state.hp - enemy.hp); state.leaked += enemy.hp;
       state.events.push({ type: 'leak', id: enemy.id, value: enemy.hp });
+    } else if(enemy.id===enemy.target){
+      const post=state.outposts.get(enemy.target),before=new Set();
+      if(post?.hp>0){
+        for(let id=0;id<SIZE*SIZE;id++)if(inControl(state,id))before.add(id);
+        const hit=Math.min(post.hp,enemy.hp);post.hp-=hit;enemy.hp-=hit;
+        state.events.push({type:'postHit',id:enemy.id,value:hit});
+        if(post.hp===0){
+          for(const id of before)if(!inControl(state,id))state.lostControl.add(id);
+          state.events.push({type:'postLost',id:enemy.id,value:0});
+        }
+      }
+      if(enemy.hp>0){enemy.target=state.camp;state.enemies.push(enemy);}
     } else state.enemies.push(enemy);
   }
   if (state.hp <= 0) state.phase = 'lost';
