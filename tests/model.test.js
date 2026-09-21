@@ -70,7 +70,9 @@ test('两类火力与形状切换，参数拒绝非法、超预算和控制范�
 test('控制范围与建造格分开，范围外不能造墙或架炮但仍可通行和受火力',()=>{
   const s=makeState();
   assert.equal(inControl(s,key(15,16)),true);assert.equal(inControl(s,key(15,15)),false);
-  assert.equal(inControl(s,key(24,25)),true);assert.equal(inControl(s,key(24,24)),false);
+  assert.equal(inControl(s,key(24,25)),true);assert.equal(inControl(s,key(24,24)),true);
+  assert.equal(inControl(s,key(24,16)),false);assert.equal(inControl(s,key(23,16)),false);
+  assert.equal(inControl(s,key(22,16)),true);assert.equal(inControl(s,key(23,17)),true);
   assert.match(changeWall(s,key(15,15)),/控制范围/);assert.match(placementError(s,key(16,14)),/控制范围/);
   assert.match(placementError(s,key(15,17)),/墙上/);assert.match(changeWall(s,s.camp),/篝火/);
   assert.equal(changeWall(s,key(15,16)),'');s.towers.set(key(15,16),'B');

@@ -1,5 +1,5 @@
 import { SIZE, DEFAULTS } from './config.js';
-import { key, xy, inside, createState, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl } from './model.js';
+import { key, xy, inside, createState, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl } from './model.js?v=5';
 const $ = id => document.getElementById(id);
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createState(), tool = 'wall', hover = null, dragging = null;
@@ -151,14 +151,14 @@ function draw() {
 function update() {
   fire = fireField({...state,params:previewParams()});
   const w=selectedWeapon();
-  $('toolInfo').textContent = ['build','long'].includes(tool) ? `${weaponType()} · ${w.cost} 资金 · ${w.shape==='square'?'方形':'菱形'}范围 ${w.range} · 火力 ${w.power}。仅架设在墙上。` : tool==='wall' ? `每格墙 ${state.params.wallCost} 资金。仅限控制范围内空地；悬停预览路线。` : `点击拆除并全额退款：有炮台先拆炮，再点拆自建墙（返还 ${state.params.wallCost} 资金）。固定墙不可拆；防守中不可拆除。`;
+  $('toolInfo').textContent = ['build','long'].includes(tool) ? `${weaponType()==='A'?'近防炮':'远防炮'} · ${w.cost} 资金 · ${w.shape==='square'?'方形':'菱形'}范围 ${w.range} · 火力 ${w.power}。仅架设在墙上。` : tool==='wall' ? `每格墙 ${state.params.wallCost} 资金。仅限控制范围内空地；悬停预览路线。` : `点击拆除并全额退款：有炮台先拆炮，再点拆自建墙（返还 ${state.params.wallCost} 资金）。固定墙不可拆；防守中不可拆除。`;
   $('budget').textContent = funds(state); $('tick').textContent = state.tick;
-  $('campHP').textContent = `${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
+  $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
   $('spawned').textContent = `${state.spawned} / ${state.sources.reduce((n,s)=>n+s.count,0)}`;
   const active = state.phase === 'battle', build = state.phase === 'build';
   $('phase').textContent = build ? '准备布防' : active ? (paused ? '防守暂停' : '防守进行中') : state.phase === 'won' ? '守住了' : '篝火熄灭';
-  $('start').disabled = !build; $('pause').disabled = !active; $('step').disabled = !active || !paused || !!motion?.singleStep;
-  $('pause').textContent = paused ? '继续' : '暂停';
+  $('start').disabled = !build && !active; $('step').disabled = !active || !paused || !!motion?.singleStep;
+  $('start').textContent = active ? (paused ? '继续防守' : '暂停') : build ? '开始防守' : '防守结束';
   for (const id of ['build','long','wall','erase','apply','addSource','applyParams','cancelParams','defaults']) $(id).disabled = !build;
   document.querySelectorAll('#sources input, #sources button, #params input, #params select').forEach(el=>el.disabled=!build);
   $('result').textContent = build ? '修改位置后再试。敌人不攻击武器与障碍。' : `${state.phase === 'won' ? '防守成功' : state.phase === 'lost' ? '防守失败' : '防守中'} · 削减 ${state.damage} · 漏过 ${state.leaked} · 合并 ${state.merges} 次`;
@@ -292,13 +292,13 @@ function advance() {
   update();
 }
 $('start').onclick=()=>{
+  if(state.phase==='battle'){paused=!paused;timer=0;update();return;}
   if(state.phase!=='build')return;
   if(paramsDirty()){ $('experiments').open=true;notify('实验参数有未应用修改，请先应用或取消预览。');return; }
   if(JSON.stringify(readSources())!==JSON.stringify(state.sources)){ $('configError').textContent='来袭配置有未应用修改，请先应用配置。';$('settings').open=true;notify('请先应用来袭配置，确保预览与实际波次一致。');return; }
   const error=validateSources(state.sources,state);if(error){notify(error);return;}
   state.phase='battle';paused=false;timer=0;last=performance.now();$('settings').open=false;notify('敌人正在接近。可以暂停、逐步观察或加速。');update();
 };
-$('pause').onclick=()=>{if(state.phase!=='battle')return;paused=!paused;timer=0;update();};
 // 简单的逐格滑动：动画结束才提交一步战斗，无独立动画框架。
 function beginMotion(singleStep=false){
   if(motion||state.phase!=='battle')return;

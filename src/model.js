@@ -62,7 +62,9 @@ export const funds = state => state.params.budget - state.playerWalls.size * sta
 // 控制权只限制建造权限；不限制通行、寻路或武器向外开火。
 export function inControl(state, id, radius = state.params.controlRadius) {
   const [x,y] = xy(id), [cx,cy] = xy(state.camp);
-  return Number.isInteger(id) && id >= 0 && id < SIZE * SIZE && (x-cx)**2 + (y-cy)**2 <= radius**2;
+  // 正方形四角沿两条边各收进 2 格；小半径时缩减削角，保留中心。
+  const dx=Math.abs(x-cx), dy=Math.abs(y-cy), cut=Math.min(2,radius);
+  return Number.isInteger(id) && id >= 0 && id < SIZE * SIZE && Math.max(dx,dy)<=radius && dx+dy<=2*radius-cut;
 }
 export function placementError(state, id, type = 'A') {
   if (state.phase !== 'build') return '战斗时不能修改布局，请先返回布防。';
