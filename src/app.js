@@ -48,6 +48,14 @@ function draw() {
   const wallEdit = hover !== null && state.phase === 'build' && (tool==='wall'||(tool==='erase'&&!state.towers.has(hover)));
   const candidate = wallEdit ? wallPreview(state,hover,tool==='erase') : null;
   const field = candidate && !candidate.error ? candidate.field : state.field;
+  const weaponHover=hover!==null&&state.phase==='build'&&['build','long'].includes(tool);
+  const weapon=selectedWeapon();
+  const previewError=weaponHover ? (paramsDirty()?'请先应用或取消实验参数预览。':placementError(state,hover,weaponType())) : '';
+  const ghost=weaponHover&&!previewError;
+  const added=new Set(ghost?coverage(hover,weapon.range,weapon.shape):[]);
+  // 只预览本次建设的确定变化，不模拟整波胜负。
+  $('placementInfo').textContent=weaponHover ? (previewError||`建造预览 · 每格火力 +${weapon.power} · 花费 ${weapon.cost} · 建造后剩余 ${funds(state)-weapon.cost}`) : '';
+
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
   for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
@@ -85,18 +93,32 @@ function draw() {
   });
   if (hover !== null && state.phase === 'build') {
     const isWeapon = ['build','long'].includes(tool), weapon = selectedWeapon();
-    const error = isWeapon ? placementError(state,hover,weaponType()) : candidate?.error;
+    const error = isWeapon ? previewError : candidate?.error;
     for (const id of isWeapon ? coverage(hover,weapon.range,weapon.shape) : [hover]) {
       const [x,y] = xy(id); ctx.fillStyle = error ? '#ff776644' : '#92ffd43b'; ctx.fillRect(x,y,1,1);
+    }
+    if(ghost){
+      ctx.strokeStyle='#d8f9a8';ctx.lineWidth=.07;ctx.setLineDash([.15,.1]);ctx.beginPath();
+      for(const id of added){const [x,y]=xy(id);for(const [dx,dy,a,b,c,d] of [[-1,0,x,y,x,y+1],[1,0,x+1,y,x+1,y+1],[0,-1,x,y,x+1,y],[0,1,x,y+1,x+1,y+1]]){
+        if(!inside(x+dx,y+dy)||!added.has(key(x+dx,y+dy))){ctx.moveTo(a,b);ctx.lineTo(c,d);}
+      }}ctx.stroke();ctx.setLineDash([]);
+      // 提亮覆盖到的路线格，不把路线总长度误当作实际伤害。
+      ctx.strokeStyle='#e5ef9b';ctx.lineWidth=.055;
+      for(const id of new Set(state.sources.flatMap(source=>pathFrom(key(source.x,source.y),field))))if(added.has(id)){
+        const [x,y]=xy(id);ctx.strokeRect(x+.12,y+.12,.76,.76);
+      }
     }
     const [x,y] = xy(hover); ctx.strokeStyle = error ? '#ff8078' : '#d8f9e8'; ctx.lineWidth = .08; ctx.strokeRect(x+.04,y+.04,.92,.92);
   }
   const label = (text,x,y,color,font=.4) => {ctx.fillStyle=color;ctx.font=`600 ${font}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,x,y);};
-  if ($('heat').checked) for (const [id,power] of fire) {
-    const [x,y] = xy(id); if (!state.towers.has(id)) label(power,x+.5,y+.5,'#b8f1d3',.35);
+  for (const id of new Set([...($('heat').checked?fire.keys():[]),...added])) {
+    const [x,y]=xy(id), changed=added.has(id);
+    if(!state.walls.has(id)) label((fire.get(id)||0)+(changed?weapon.power:0),x+.5,y+.5,changed?'#f0ffad':'#b8f1d3',changed?.43:.35);
   }
-  for (const [id,type] of state.towers) {
+  for (const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])]) {
+    ctx.save();if(ghost&&id===hover)ctx.globalAlpha=.5;
     const [x,y] = xy(id); ctx.fillStyle=type==='B'?'#bab3f2':'#8bdbb9'; ctx.fillRect(x+.18,y+.22,.64,.6); ctx.fillStyle='#28483b'; ctx.fillRect(x+.37,y+.32,.26,.38); ctx.fillStyle='#ddffe7'; ctx.fillRect(x+.43,y+.08,.14,.35);if(type==='B'){ctx.fillRect(x+.22,y+.12,.12,.34);ctx.fillRect(x+.66,y+.12,.12,.34);}
+    ctx.restore();
   }
   state.sources.forEach((s,i) => {ctx.fillStyle=colors[i%colors.length];ctx.fillRect(s.x+.08,s.y+.08,.84,.84);label(i+1,s.x+.5,s.y+.5,'#23262b',.52);});
   const [cx,cy] = xy(state.camp); ctx.fillStyle='#ffc17c';ctx.beginPath();ctx.moveTo(cx+.5,cy+.06);ctx.lineTo(cx+.9,cy+.7);ctx.lineTo(cx+.5,cy+.95);ctx.lineTo(cx+.1,cy+.7);ctx.closePath();ctx.fill();label('火',cx+.5,cy+.59,'#402c24',.42);
@@ -151,7 +173,7 @@ function draw() {
 function update() {
   fire = fireField({...state,params:previewParams()});
   const w=selectedWeapon();
-  $('toolInfo').textContent = ['build','long'].includes(tool) ? `${weaponType()==='A'?'近防炮':'远防炮'} · ${w.cost} 资金 · ${w.shape==='square'?'方形':'菱形'}范围 ${w.range} · 火力 ${w.power}。仅架设在墙上。` : tool==='wall' ? `每格墙 ${state.params.wallCost} 资金。仅限控制范围内空地；悬停预览路线。` : `点击拆除并全额退款：有炮台先拆炮，再点拆自建墙（返还 ${state.params.wallCost} 资金）。固定墙不可拆；防守中不可拆除。`;
+  $('toolInfo').textContent = ['build','long'].includes(tool) ? `${weaponType()==='A'?'近防炮':'远防炮'} · ${w.cost} 资金 · ${w.shape==='square'?'方形':'菱形'}范围 ${w.range} · 火力 ${w.power}。仅架设在墙上。` : tool==='wall' ? `每格墙 ${state.params.wallCost} 资金。仅限控制范围内空地；悬停预览路线。` : `点击拆除并全额退款：有炮台先拆炮，再点拆自建墙。固定墙不可拆；防守中不可拆除。`;
   $('budget').textContent = funds(state); $('tick').textContent = state.tick;
   $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
   $('spawned').textContent = `${state.spawned} / ${state.sources.reduce((n,s)=>n+s.count,0)}`;
@@ -160,6 +182,12 @@ function update() {
   $('start').disabled = !build && !active; $('step').disabled = !active || !paused || !!motion?.singleStep;
   $('start').textContent = active ? (paused ? '继续防守' : '暂停') : build ? '开始防守' : '防守结束';
   for (const id of ['build','long','wall','erase','apply','addSource','applyParams','cancelParams','defaults']) $(id).disabled = !build;
+  // 通用建造交互：不足价即禁用，退款或应用参数后立即恢复。
+  for(const [id,cost] of [['wall',state.params.wallCost],['build',state.params.weapons.A.cost],['long',state.params.weapons.B.cost]]){
+    const short=funds(state)<cost;
+    $(id).disabled=!build||short;
+    $(id).title=!build?'防守中不能建设':short?`资金不足：需要 ${cost}，现有 ${funds(state)}`:`花费 ${cost} 资金`;
+  }
   document.querySelectorAll('#sources input, #sources button, #params input, #params select').forEach(el=>el.disabled=!build);
   $('result').textContent = build ? '修改位置后再试。敌人不攻击武器与障碍。' : `${state.phase === 'won' ? '防守成功' : state.phase === 'lost' ? '防守失败' : '防守中'} · 削减 ${state.damage} · 漏过 ${state.leaked} · 合并 ${state.merges} 次`;
   draw();
