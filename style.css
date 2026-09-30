@@ -16,3 +16,5 @@ main{grid-template-columns:220px minmax(0,1fr) 300px;gap:14px}
 #sources select{width:100%;margin-top:3px;padding:5px}.source .fields label:last-child{grid-column:1/-1}
 
 .coin-drop{position:fixed;z-index:100;pointer-events:none;color:#ffe59a;font:bold 17px system-ui;text-shadow:0 2px 5px #111;white-space:nowrap}
+
+#forecastDay{width:100%}#forecastTitle{color:var(--orange);font-weight:650}#forecastList{padding-left:16px;margin:8px 0;color:var(--muted);font-size:12px;line-height:1.7}#forecastList li{margin-bottom:8px}
