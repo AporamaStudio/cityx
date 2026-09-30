@@ -9,4 +9,4 @@
 - 尽量保持改动准确精简，不大批改动无关缩进或规范，不随意删除注释；代码中使用适当中文注释解释函数功能。
 - Web 实现后应在可用的浏览器环境中实际检查关键交互和运行结果；无法检查时明确说明。不要只凭代码推断运行成功，也不要把技术检查称为好玩验证。
 - 验证优先围绕当前体验问题，不建设与问题无关的测试体系。未经用户要求，不自动提交、发布或部署。
-- 发布到 `AporamaStudio/cityx-prototype`；仅在用户明确要求发布时推送，推送 `main` 后自动测试并部署 Pages。新提交的作者和提交者均使用 `Aporama Studio <dev@aporamastudio.com>`，不改写旧提交身份。
+- 发布到 `AporamaStudio/cityx`；仅在用户明确要求发布时推送，推送 `main` 后自动测试并部署 Pages。新提交的作者和提交者均使用 `Aporama Studio <dev@aporamastudio.com>`，不改写旧提交身份。使用 `python3 scripts/publish.py`，详见 `docs/publishing.md`；不要自动纳入无关日志或强推。

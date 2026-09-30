@@ -11,7 +11,9 @@ python3 -m http.server 8099 --bind 127.0.0.1
 
 ## 手机在线试玩与发布
 
-试玩地址：https://aporamastudio.github.io/cityx-prototype/ 。这是独立项目站点，不修改工作室官网。
+试玩地址：https://aporamastudio.github.io/cityx/ 。这是独立项目站点，不修改工作室官网。
+
+完整操作见 [发布与手机试玩工作流](docs/publishing.md)。统一入口是 `python3 scripts/publish.py`；`check` 只检查，`publish` 才提交并推送，`status` 查询上线结果。可通过 `$cityx-publish` skill 调用。
 
 继续在本项目开发；仅在用户明确要求发布时提交并推送 `main`。GitHub Actions 会先执行 `npm test`，通过后生成并部署网页。已打开的手机页面需要刷新；页面底部显示发布版本号，刷新会清空本局进度。
 
