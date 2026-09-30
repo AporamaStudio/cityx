@@ -177,3 +177,42 @@ test('修复不够钱时不改变生命或资金，战斗及失败不能修复',
   s.hp=10;s.phase='battle';assert.match(buildOutpost(s,s.camp,true),/防守/);assert.equal(s.hp,10);
   s.phase='lost';s.hp=0;assert.ok(buildOutpost(s,s.camp,true));assert.equal(s.hp,0);
 });
+
+
+const {createCampaign,beginBattle,restoreNight,restartCampaign,campaignComplete}=await import('../src/model.js');
+test('连续三晚继承受损 HP 和资金，单晚统计清零且第三晚结束',()=>{
+  const wave=[{x:15,y:24,hp:2,count:1,first:1,interval:1,target:-1}];
+  const s=createCampaign(DEFAULTS,[wave,wave,wave]);buildOutpost(s,key(15,16));
+  s.outposts.get(key(15,16)).hp=4;s.earned=7;s.repairSpent=2;const money=funds(s);
+  for(let day=1;day<=3;day++){
+    assert.ok(beginBattle(s));while(s.phase==='battle')stepBattle(s);
+    assert.equal(s.hp,30-2*day);assert.equal(funds(s),money);assert.equal(s.outposts.get(key(15,16)).hp,4);
+    assert.equal(campaignComplete(s),day===3);
+    assert.equal(enterMorning(s),day<3);
+    if(day<3){assert.equal(s.tick,0);assert.equal(s.spawned,0);assert.equal(s.lastNight.leaked,2);assert.equal(enterMorning(s),false);}
+  }
+  assert.equal(beginBattle(s),null);assert.equal(s.day,3);
+});
+test('第二晚重试保留之前损伤收入与修复，撤销本晚收入和补炮，快照不被污染',()=>{
+  const s=createCampaign();s.day=2;s.sources=s.waves[1];s.hp=22;s.earned=6;s.repairSpent=3;
+  buildOutpost(s,key(15,16));s.outposts.get(key(15,16)).hp=0;s.lostControl.add(key(15,10));
+  const snapshot=beginBattle(s);assert.equal(s.lostControl.size,0);
+  s.earned+=3;s.nightEarned=3;s.hp=11;s.towers.set(key(7,19),'A');s.phase='lost';
+  const retry=restoreNight(snapshot);assert.equal(retry.day,2);assert.equal(retry.hp,22);assert.equal(retry.earned,6);
+  assert.equal(retry.repairSpent,3);assert.equal(retry.nightEarned,0);assert.equal(retry.towers.size,0);assert.equal(retry.outposts.get(key(15,16)).hp,0);
+  retry.outposts.get(key(15,16)).hp=10;assert.equal(snapshot.outposts.get(key(15,16)).hp,0);
+  const fresh=restartCampaign(s);assert.equal(fresh.day,1);assert.equal(fresh.hp,30);assert.equal(funds(fresh),100);assert.equal(fresh.outposts.size,0);
+});
+test('预留未来源头与通路，第三天仍可修复，失败不能进入次日',()=>{
+  const s=createCampaign({...DEFAULTS,controlRadius:30});const future=key(15,1);
+  assert.ok(changeWall(s,future));assert.ok(buildOutpost(s,future));
+  for(const [x,y] of [[14,1],[16,1],[15,0]])assert.equal(changeWall(s,key(x,y)),'');
+  assert.match(changeWall(s,key(15,2)),/封死/);
+  s.day=3;s.hp=27;const before=funds(s);assert.equal(buildOutpost(s,s.camp,true),'');assert.equal(funds(s),before-3);
+  s.phase='lost';assert.equal(enterMorning(s),false);
+});
+test('跨晚击杀只累计一次，不因进入次日重复发钱',()=>{
+  const wave=[{x:15,y:20,hp:2,count:1,first:1,interval:1}];const s=createCampaign(DEFAULTS,[wave,wave,wave]);
+  changeWall(s,key(14,20));s.towers.set(key(14,20),'A');
+  for(let day=1;day<=3;day++){beginBattle(s);stepBattle(s);assert.equal(s.earned,day);assert.equal(s.nightEarned,1);stepBattle(s);assert.equal(s.earned,day);enterMorning(s);assert.equal(s.earned,day);}
+});

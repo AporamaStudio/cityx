@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS } from './config.js?v=9.1';
+import { SIZE, DEFAULTS, WAVES } from './config.js?v=10';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -45,11 +45,36 @@ export function coverage(id, range = 1, shape = 'diamond') {
 export function createState(sources = DEFAULTS.sources, towers = new Map(), playerWalls = new Set(), params = DEFAULTS, outposts = new Map()) {
   const fixedWalls = makeWalls(), walls = new Set([...fixedWalls, ...playerWalls]);
   const camp = key(...DEFAULTS.camp), field = routeField(camp, walls);
-  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p,hp:params.outpostHP,max:params.outpostHP}])), repairSpent:0, earned:0, day:1, lostControl:new Set(),
+  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p,hp:params.outpostHP,max:params.outpostHP}])), repairSpent:0, earned:0, nightEarned:0, day:1, lostControl:new Set(),
     fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
     hp: params.campHP, enemies: [], events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
   rebuildFields(state);return state;
+}
+
+// 只保留一局三晚和一次战前快照；无存档、回放或通用关卡框架。
+export function createCampaign(params=DEFAULTS, waves=WAVES) {
+  const state=createState(waves[0],new Map(),new Set(),params);
+  state.waves=structuredClone(waves).map(sources=>sources.map(s=>({...s,target:s.target??-2})));
+  state.sources=state.waves[0];state.lastNight=null;
+  return state;
+}
+export const reservedSources=state=>state.waves?.slice(state.day-1).flat()??state.sources;
+export const campaignComplete=state=>state.phase==='won'&&state.day===(state.waves?.length??1);
+function clearNight(state) {
+  state.tick=0;state.enemies=[];state.events=[];state.spawned=0;state.removed=0;
+  state.damage=0;state.leaked=0;state.merges=0;state.nightEarned=0;
+}
+export function beginBattle(state) {
+  if(state.phase!=='build'||state.hp<=0||validateSources(state.sources,state))return null;
+  clearNight(state);state.lostControl.clear();
+  const snapshot=structuredClone(state);
+  state.phase='battle';return snapshot;
+}
+export const restoreNight=snapshot=>structuredClone(snapshot);
+export function restartCampaign(state) {
+  // 整局重来保留已应用的实验参数和波次，已拆掉的前哨目标恢复自动。
+  return createCampaign(state.params,(state.waves??WAVES).map(w=>w.map(s=>({...s,target:(s.target??-2)>=0?-2:s.target}))));
 }
 
 export function fireField(state) {
@@ -95,13 +120,13 @@ export function outpostError(state,id,repair=false) {
   if(state.phase!=='build')return '防守中不能建设或修复。';
   const old=state.outposts.get(id);
   if(repair){
-    if(state.day!==2)return '次日才能修复火光或前哨。';
+    if(state.day<2)return '次日才能修复火光或前哨。';
     const quote=repairQuote(state,id);
     if(!quote.missing)return '请选择受损火光、前哨或废墟。';
     return funds(state)<quote.cost?`资金不足，修复需要 ${quote.cost} 钱（${quote.missing} HP）。`:'';
   }
   if(!inControl(state,id))return '前哨必须建在已有控制范围内。';
-  if(state.walls.has(id)||old||id===state.camp||state.sources.some(s=>key(s.x,s.y)===id))return '前哨需要未占用的空地。';
+  if(state.walls.has(id)||old||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '前哨需要未占用的空地。';
   if(!state.field.distance.has(id))return '前哨须与火光连通，不能建在封闭区域。';
   return funds(state)<state.params.outpostCost?'资金不足，无法建造前哨。':'';
 }
@@ -119,12 +144,17 @@ export function removeOutpost(state,id) {
   if(!state.outposts.has(id))return '这里没有前哨。';
   const posts=new Map(state.outposts);posts.delete(id);const candidate={...state,outposts:posts};
   if([...state.playerWalls,...state.towers.keys(),...posts.keys()].some(cell=>!inControl(candidate,cell)))return '其他设施依赖此前哨的控制范围，请先拆除外围设施。';
-  if(state.sources.some(s=>s.target===id))return '敌源指定了此前哨，请先修改目标配置。';
+  if(reservedSources(state).some(s=>s.target===id))return '敌源指定了此前哨，请先修改目标配置。';
   state.outposts=posts;rebuildFields(state);return '';
 }
 export function enterMorning(state) {
-  if(state.phase!=='won'||state.day!==1)return false;
-  state.day=2;state.phase='build';return true;
+  if(state.phase!=='won'||state.day>=(state.waves?.length??2))return false;
+  state.lastNight={day:state.day,earned:state.nightEarned,leaked:state.leaked,lost:state.lostControl.size};
+  state.day++;state.phase='build';
+  if(state.waves)state.sources=state.waves[state.day-1];
+  clearNight(state);
+  // 上晚失控标记保留供白天检查；下次开战清除，不影响永久的受损 HP 和资金。
+  return true;
 }
 export function placementError(state, id, type = 'A') {
   if (!['build','battle'].includes(state.phase)) return '本晚已结束，请进入次日或重试。';
@@ -147,13 +177,13 @@ export function wallPreview(state, id, remove = false) {
   else if (!remove && !inControl(state,id)) error = '超出控制范围，不能建墙。';
   else if (!remove && state.outposts.has(id)) error = '不能覆盖前哨或废墟。';
   else if (!remove && state.walls.has(id)) error = '这里已经有墙。';
-  else if (!remove && (id === state.camp || state.sources.some(s=>key(s.x,s.y)===id))) error = '不能覆盖篝火或敌人源头。';
+  else if (!remove && (id === state.camp || reservedSources(state).some(s=>key(s.x,s.y)===id))) error = '不能覆盖篝火或敌人源头。';
   else if (!remove && funds(state) < state.params.wallCost) error = '资金不足，墙与炮台共用资金。';
   if (error) return { error, field: state.field };
   const walls = new Set(state.walls);
   if (remove) walls.delete(id); else walls.add(id);
   const field = routeField(state.camp, walls);
-  if ([...state.sources.map(s=>key(s.x,s.y)),...state.outposts.keys()].some(id=>!field.distance.has(id))) error = '不能封死路线：源头、前哨都必须与火光连通。';
+  if ([...reservedSources(state).map(s=>key(s.x,s.y)),...state.outposts.keys()].some(id=>!field.distance.has(id))) error = '不能封死路线：源头、前哨都必须与火光连通。';
   return { error, field, walls, fields:new Map([...state.outposts.keys()].map(id=>[id,routeField(id,walls)])) };
 }
 export function changeWall(state, id, remove = false) {
@@ -227,7 +257,7 @@ export function stepBattle(state) {
     if (damage) state.events.push({ type: 'hit', id: enemy.id,target:enemy.target, value: damage });
     if (enemy.hp <= 0) {
       // 每个原始块奖励 1 钱；合并群完全消灭才一次结算，碰撞目标不算击杀。
-      state.earned += enemy.members;
+      state.earned += enemy.members;state.nightEarned += enemy.members;
       state.removed += enemy.members; state.events.push({ type: 'kill', id: enemy.id,target:enemy.target, value: enemy.members });
     } else if (enemy.target===state.camp&&enemy.id === state.camp) {
       state.hp = Math.max(0, state.hp - enemy.hp); state.leaked += enemy.hp;
