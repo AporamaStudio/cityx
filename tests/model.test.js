@@ -249,3 +249,27 @@ test('前哨失守仅停止真正失控的生产，重叠控制继续收益，�
   overlap.sources=[{x:7,y:16,hp:10,count:1,first:1,interval:1,target:key(7,17)}];beginBattle(overlap);
   while(overlap.phase==='battle')stepBattle(overlap);assert.equal(overlap.nightEconomy,8);
 });
+
+test('多格街区任意格操作同一投资，整块控制及边缘失控停产',async()=>{
+  const {createCampaign,productionCells,productionControlled,productionError,buildProduction,removeProduction,expectedIncome,buildOutpost}=await import('../src/model.js');
+  const s=createCampaign();
+  assert.equal(productionCells(key(12,25)).length,4);assert.equal(buildProduction(s,key(12,25)),'');
+  assert.equal(s.production.size,1);assert.equal(funds(s),90);assert.ok(buildProduction(s,key(11,24)));
+  assert.ok(changeWall(s,key(12,25)));assert.ok(buildOutpost(s,key(12,25)));
+  assert.equal(removeProduction(s,key(11,25)),'');assert.equal(funds(s),100);
+  assert.equal(buildOutpost(s,key(7,22)),'');assert.equal(productionControlled(s,key(2,22)),true);
+  assert.equal(buildProduction(s,key(4,24)),'');assert.equal(funds(s),50);assert.equal(expectedIncome(s),20);
+  s.phase='battle';s.lostControl.add(key(4,24));assert.equal(expectedIncome(s),0);
+  s.phase='build';assert.equal(expectedIncome(s),20);
+  const partial=createCampaign({...DEFAULTS,controlRadius:1});assert.match(productionError(partial,key(11,24)),/缺.*格控制/);
+});
+test('街区布局不重叠、不覆盖固定墙和源头，两类成本独立',async()=>{
+  const {PRODUCTION_SITES}=await import('../src/config.js');
+  const {createCampaign,productionCells,buildProduction,productionQuote,validateParams}=await import('../src/model.js');
+  const s=createCampaign(),seen=new Set();
+  for(const p of PRODUCTION_SITES)for(const id of productionCells(key(p.x,p.y))){assert.ok(!seen.has(id));assert.ok(!s.walls.has(id));assert.notEqual(id,s.camp);seen.add(id);}
+  for(const source of s.waves.flat())assert.ok(!seen.has(key(source.x,source.y)));
+  const params={...DEFAULTS,largeProductionCost:99};assert.equal(productionQuote({...s,params},key(2,22)).cost,99);
+  assert.equal(productionQuote({...s,params},key(11,24)).cost,10);
+  buildProduction(s,key(11,24));assert.ok(validateParams({...DEFAULTS,controlRadius:3},s));
+});
