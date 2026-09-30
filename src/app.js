@@ -72,7 +72,13 @@ function draw() {
     const sites=PRODUCTION_SITES.map(p=>key(p.x,p.y)).filter(id=>!state.production.has(id)&&productionControlled(previewState,id)&&!productionControlled(state,id));
     $('placementInfo').textContent+=` · 新纳入 ${sites.length} 处生产机会：另需 ${sites.reduce((n,id)=>n+productionQuote(state,id).cost,0)} 钱恢复，可增 ${sites.reduce((n,id)=>n+productionQuote(state,id).income,0)}/晚（尚未入账）`;
   }
-  if(tool==='production'&&hover!==null)$('placementInfo').textContent=productionError(state,hover)||`恢复预览 · 每晚收入 +${productionQuote(state,hover).income} · 花费 ${productionQuote(state,hover).cost} · 剩余 ${funds(state)-productionQuote(state,hover).cost}`;
+  if(tool==='production'&&hover!==null)$('placementInfo').textContent=productionError(state,hover)||`整块恢复预览 · 每晚收入 +${productionQuote(state,hover).income} · 花费 ${productionQuote(state,hover).cost} · 剩余 ${funds(state)-productionQuote(state,hover).cost}`;
+
+  const hoveredSite=hover!==null?productionSite(hover):null;
+  if(hoveredSite&&!state.production.has(productionId(hover))){
+    const quote=productionQuote(state,hover);
+    $('placementInfo').textContent=`${hoveredSite.size}×${hoveredSite.size} 街区 · 整块恢复 ${quote.cost} 钱 · 每晚 +${quote.income}。`+(tool==='production'?(productionError(state,hover)||'点击任意位置恢复整块。'):'选择「恢复生产」后点击街区。');
+  }
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
   for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
@@ -110,7 +116,7 @@ function draw() {
     }
     ctx.globalAlpha = 1;
   });
-  if (hover !== null && (state.phase === 'build' || weaponHover)) {
+  if (hover !== null && (state.phase === 'build' || weaponHover) && (!productionSite(hover)||weaponHover)) {
     const isWeapon = ['build','long'].includes(tool), weapon = selectedWeapon();
     const error = isWeapon ? previewError : tool==='production'?productionError(state,hover):postHover?postError:candidate?.error;
     for (const id of isWeapon ? coverage(hover,weapon.range,weapon.shape) : [hover]) {
@@ -136,9 +142,10 @@ function draw() {
   }
   for(const p of PRODUCTION_SITES){
     const {x,y,size:n}=p,id=key(x,y),built=state.production.has(id),active=built&&productionActive(state,id),selected=productionId(hover)===id;
-    ctx.fillStyle=active?'#91c99a99':built?'#a46f6088':'#766d4a77';ctx.fillRect(x+.08,y+.08,n-.16,n-.16);
+    // 悬停时把街区作为一个操作对象，盖住内部格线，避免误认为逐格恢复。
+    ctx.fillStyle=selected?(active?'#527e59':built?'#80594e':'#655f3d'):active?'#91c99a99':built?'#a46f6088':'#766d4a77';ctx.fillRect(x+.08,y+.08,n-.16,n-.16);
     ctx.strokeStyle=selected?'#fff0ae':productionControlled(previewState,id)?'#f5d789':'#a29670';ctx.lineWidth=selected?.12:.06;ctx.strokeRect(x+.08,y+.08,n-.16,n-.16);
-    if(selected)for(const cell of productionCells(id))if(!inControl(previewState,cell)){const [cx,cy]=xy(cell);ctx.fillStyle='#ed665877';ctx.fillRect(cx+.06,cy+.06,.88,.88);}
+    if(selected)for(const cell of productionCells(id))if(!inControl(previewState,cell)){const [cx,cy]=xy(cell);ctx.fillStyle='#ed665877';ctx.fillRect(cx,cy,1,1);}
     label(built?(active?'生产':'停产'):'待恢复',x+n/2,y+n/2-.2,active?'#ddffe4':'#ffe3a0',.4);
     label(`${n}×${n} · +${productionQuote(state,id).income}`,x+n/2,y+n/2+.3,'#fff0bf',.34);
   }
