@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=12';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=13';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -321,4 +321,19 @@ export function removeProduction(state,id) {
 export function settleEconomy(state) {
   if(state.phase!=='won'||state.economySettled)return;
   state.nightEconomy=expectedIncome(state);state.economyEarned+=state.nightEconomy;state.economySettled=true;
+}
+
+// 同一套目标/方向供移动和路线展示使用；区分场上敌群与尚未出生的批次。
+export function battleRoutes(state) {
+  const routes=state.sources.flatMap((source,index)=>{
+    const born=state.tick<source.first?0:Math.min(source.count,Math.floor((state.tick-source.first)/source.interval)+1);
+    if(born>=source.count)return [];
+    const target=sourceTarget(state,source);
+    return [{future:true,index,target,path:pathFrom(key(source.x,source.y),fieldFor(state,target))}];
+  });
+  for(const enemy of state.enemies){
+    const target=liveTarget(state,enemy.target);
+    routes.push({future:false,index:enemy.sources[0]??0,target,path:pathFrom(enemy.id,fieldFor(state,target))});
+  }
+  return routes;
 }

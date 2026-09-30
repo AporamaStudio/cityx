@@ -1,5 +1,5 @@
-import { SIZE, DEFAULTS, PRODUCTION_SITES } from './config.js?v=12';
-import { productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=12';
+import { SIZE, DEFAULTS, PRODUCTION_SITES } from './config.js?v=13';
+import { battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=13';
 const $ = id => document.getElementById(id);
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createCampaign(), tool = 'wall', hover = null, dragging = null;
@@ -74,6 +74,11 @@ function draw() {
   }
   if(tool==='production'&&hover!==null)$('placementInfo').textContent=productionError(state,hover)||`整块恢复预览 · 每晚收入 +${productionQuote(state,hover).income} · 花费 ${productionQuote(state,hover).cost} · 剩余 ${funds(state)-productionQuote(state,hover).cost}`;
 
+  if(tool==='erase'&&hover!==null&&state.phase==='build'){
+    const production=state.production.get(productionId(hover)),tower=state.towers.get(hover);
+    const refund=production?(production.locked?null:productionQuote(state,hover).cost):tower?state.params.weapons[tower].cost:state.outposts.has(hover)?(state.day===1?state.params.outpostCost:null):state.playerWalls.has(hover)?state.params.wallCost:null;
+    $('placementInfo').textContent=refund===null?'该设施当前不能拆除，或此处没有可拆设施。':`拆除预览 · 返还 ${refund} 金币${state.outposts.has(hover)?'，需先解除控制与目标依赖':''}`;
+  }
   const hoveredSite=hover!==null?productionSite(hover):null;
   if(hoveredSite&&!state.production.has(productionId(hover))){
     const quote=productionQuote(state,hover);
@@ -106,15 +111,17 @@ function draw() {
     }
     ctx.strokeStyle = '#324044'; ctx.lineWidth = .025; ctx.strokeRect(x, y, 1, 1);
   }
-  if ($('routes').checked || wallEdit || postGhost) viewedSources().forEach((source, index) => {
-    const path = sourcePath(source);
-    ctx.strokeStyle = colors[index % colors.length]; ctx.globalAlpha = .58; ctx.lineWidth = .075;
+  const actualNight=state.phase==='battle'&&Number($('forecastDay').value)===state.day-1;
+  const displayedRoutes=actualNight?battleRoutes(state):viewedSources().map((source,index)=>({path:sourcePath(source),index,future:false}));
+  if ($('routes').checked || wallEdit || postGhost) displayedRoutes.forEach(({path,index,future}) => {
+    ctx.setLineDash(future?[.25,.2]:[]);
+    ctx.strokeStyle = colors[index % colors.length]; ctx.globalAlpha = future?.35:.8; ctx.lineWidth = future?.065:.10;
     ctx.beginPath(); path.forEach((id, i) => { const [x,y] = xy(id), offset = (index % 3 - 1) * .12; if (!i) ctx.moveTo(x + .5 + offset,y + .5); else ctx.lineTo(x + .5 + offset,y + .5); }); ctx.stroke();
     for (let i = 1; i < path.length; i += 4) {
       const [x,y] = xy(path[i]), [nx,ny] = xy(path[Math.min(i + 1,path.length - 1)]);
       ctx.save(); ctx.translate(x+.5,y+.5); ctx.rotate(Math.atan2(ny-y,nx-x)); ctx.beginPath(); ctx.moveTo(-.15,-.16); ctx.lineTo(.1,0); ctx.lineTo(-.15,.16); ctx.stroke(); ctx.restore();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = 1;ctx.setLineDash([]);
   });
   if (hover !== null && (state.phase === 'build' || weaponHover) && (!productionSite(hover)||weaponHover)) {
     const isWeapon = ['build','long'].includes(tool), weapon = selectedWeapon();
@@ -235,6 +242,8 @@ function update() {
   if(tool==='repair')$('toolInfo').textContent=`次日点击受损火光、前哨或废墟，一次修满。前哨每 HP ${state.params.repairCost} 钱，火光每 HP ${state.params.campRepairCost} 钱；悬停查看总价。失控前哨可原址修复。`;
   if(tool==='production')$('toolInfo').textContent=`2×2：${state.params.productionCost} 钱／每晚 +${state.params.productionIncome}；3×3：${state.params.largeProductionCost} 钱／每晚 +${state.params.largeProductionIncome}。整块受控才能恢复，缺一格即停产；不阻路。开始防守前可撤销，此后不可出售。`;
   $('income').textContent=`预计经营 +${expectedIncome(state)} / 晚 · 已恢复 ${state.production.size} / ${PRODUCTION_SITES.length}`;
+  const prices={wall:state.params.wallCost,build:state.params.weapons.A.cost,long:state.params.weapons.B.cost,outpost:state.params.outpostCost,production:`小 ${state.params.productionCost} / 大 ${state.params.largeProductionCost}`,repair:state.params.repairCost===state.params.campRepairCost?`${state.params.repairCost}/HP`:`哨 ${state.params.repairCost} / 火 ${state.params.campRepairCost}/HP`,erase:'返还见预览'};
+  for(const [id,price] of Object.entries(prices))$('price-'+id).textContent=String(price);
   $('budget').textContent = funds(state); $('tick').textContent = state.tick;
   $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
   $('spawned').textContent = `${state.spawned} / ${state.sources.reduce((n,s)=>n+s.count,0)}`;
@@ -266,7 +275,7 @@ function update() {
 function updateForecast() {
   const night=Number($('forecastDay').value)+1, sources=viewedSources();
   $('forecastTitle').textContent=`第 ${night} 晚${night===state.day?' · 当晚':' · 预告'} · ${sources.reduce((sum,s)=>sum+s.count,0)} 块`;
-  $('routeNight').textContent=`路线：第 ${night} 晚`;
+  $('routeNight').textContent=state.phase==='battle'&&night===state.day?'实线：在场敌群 · 虚线：后续出怪':`预计路线：第 ${night} 晚`;
   $('forecastList').replaceChildren(...sources.map((s,i)=>{
     const row=document.createElement('li'),target=sourceTarget(state,s),name=target===state.camp?'火光':`前哨 (${xy(target)})`;
     const rule=s.target===-1?'指定火光':s.target===-2?'出生时最近':'指定前哨，失守转火光';

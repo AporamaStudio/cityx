@@ -273,3 +273,14 @@ test('街区布局不重叠、不覆盖固定墙和源头，两类成本独立',
   assert.equal(productionQuote({...s,params},key(11,24)).cost,10);
   buildProduction(s,key(11,24));assert.ok(validateParams({...DEFAULTS,controlRadius:3},s));
 });
+
+test('前哨失守后在场路线去火光，未来路线去另一个前哨，出完后不再预告',async()=>{
+  const {createCampaign,buildOutpost,beginBattle,battleRoutes}=await import('../src/model.js');
+  const s=createCampaign();buildOutpost(s,key(15,16));buildOutpost(s,key(15,20));
+  s.sources=[{x:15,y:15,hp:11,count:2,first:1,interval:20,target:-2}];beginBattle(s);stepBattle(s);stepBattle(s);
+  const routes=battleRoutes(s),existing=routes.find(r=>!r.future),future=routes.find(r=>r.future);
+  assert.equal(existing.target,s.camp);assert.equal(existing.path[0],s.enemies[0].id);assert.equal(existing.path.at(-1),s.camp);
+  assert.equal(future.target,key(15,20));assert.equal(future.path.at(-1),key(15,20));
+  stepBattle(s);assert.equal(s.enemies[0].id,existing.path[1]);
+  s.tick=21;assert.ok(battleRoutes(s).every(r=>!r.future));
+});
