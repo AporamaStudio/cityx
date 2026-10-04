@@ -45,7 +45,7 @@ export function coverage(id, range = 1, shape = 'diamond') {
 export function createState(sources = DEFAULTS.sources, towers = new Map(), playerWalls = new Set(), params = DEFAULTS, outposts = new Map()) {
   const fixedWalls = makeWalls(), walls = new Set([...fixedWalls, ...playerWalls]);
   const camp = key(...DEFAULTS.camp), field = routeField(camp, walls);
-  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p,hp:params.outpostHP,max:params.outpostHP}])), production:new Map(), economyEarned:0, nightEconomy:0, economySettled:false, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1, lostControl:new Set(),
+  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p,hp:params.outpostHP,max:params.outpostHP}])), production:new Map(), economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1, lostControl:new Set(),
     fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
     hp: params.campHP, enemies: [], events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
@@ -63,7 +63,7 @@ export const reservedSources=state=>state.waves?.slice(state.day-1).flat()??stat
 export const campaignComplete=state=>state.phase==='won'&&state.day===(state.waves?.length??1);
 function clearNight(state) {
   state.tick=0;state.enemies=[];state.events=[];state.spawned=0;state.removed=0;
-  state.damage=0;state.leaked=0;state.merges=0;state.nightEarned=0;state.nightEconomy=0;state.economySettled=false;
+  state.damage=0;state.leaked=0;state.merges=0;state.nightEarned=0;state.nightEconomy=0;state.economySettled=false;state.productionReport=null;
 }
 export function beginBattle(state) {
   if(state.phase!=='build'||state.hp<=0||validateSources(state.sources,state))return null;
@@ -150,7 +150,7 @@ export function removeOutpost(state,id) {
 }
 export function enterMorning(state) {
   if(state.phase!=='won'||state.day>=(state.waves?.length??2))return false;
-  state.lastNight={day:state.day,earned:state.nightEarned,economy:state.nightEconomy,leaked:state.leaked,lost:state.lostControl.size};
+  state.lastNight={day:state.day,earned:state.nightEarned,economy:state.nightEconomy,...state.productionReport,leaked:state.leaked,lost:state.lostControl.size};
   state.day++;state.phase='build';
   if(state.waves)state.sources=state.waves[state.day-1];
   clearNight(state);
@@ -322,6 +322,10 @@ export function removeProduction(state,id) {
 // 只在守住当晚时入账一次；失败不结算，重试由完整战前快照回滚。
 export function settleEconomy(state) {
   if(state.phase!=='won'||state.economySettled)return;
+  // 固定当晚经营结果，次日恢复控制或拆建不会改写昨夜账单。
+  const productive=[...state.production.keys()].filter(id=>productionActive(state,id));
+  const stopped=[...state.production.keys()].filter(id=>!productionActive(state,id));
+  state.productionReport={productive:productive.length,stopped:stopped.length,missed:stopped.reduce((sum,id)=>sum+productionQuote(state,id).income,0)};
   state.nightEconomy=expectedIncome(state);state.economyEarned+=state.nightEconomy;state.economySettled=true;
 }
 

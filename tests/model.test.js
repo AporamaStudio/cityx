@@ -319,3 +319,17 @@ test('默认五晚可完整推进，第四第五晚预告合法，最后一晚�
   }
   assert.equal(s.day,5);assert.equal(beginBattle(s),null);
 });
+
+test('昨夜经营报告固定停产数量与少收金额，次日修复和拆建不改写历史',async()=>{
+  const {buildProduction,settleEconomy,removeProduction}=await import('../src/model.js');
+  const s=createCampaign();buildProduction(s,key(11,24));buildProduction(s,key(19,26));
+  const snapshot=beginBattle(s);s.lostControl.add(key(12,25));s.phase='won';s.nightEarned=3;
+  settleEconomy(s);
+  assert.equal(s.nightEconomy,8);assert.deepEqual(s.productionReport,{productive:1,stopped:1,missed:8});
+  settleEconomy(s);assert.equal(s.economyEarned,8);
+  enterMorning(s);assert.equal(s.lastNight.economy,8);assert.equal(s.lastNight.earned,3);
+  s.lostControl.clear();removeProduction(s,key(19,26));
+  assert.equal(s.lastNight.productive,1);assert.equal(s.lastNight.stopped,1);assert.equal(s.lastNight.missed,8);
+  assert.equal(restoreNight(snapshot).productionReport,null);
+  beginBattle(s);assert.equal(s.productionReport,null);assert.equal(s.lastNight.missed,8);
+});
