@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=13';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=14';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -52,7 +52,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
   rebuildFields(state);return state;
 }
 
-// 只保留一局三晚和一次战前快照；无存档、回放或通用关卡框架。
+// 只保留一局实验和一次战前快照；无存档、回放或通用关卡框架。
 export function createCampaign(params=DEFAULTS, waves=WAVES) {
   const state=createState(waves[0],new Map(),new Set(),params);
   state.waves=structuredClone(waves).map(sources=>sources.map(s=>({...s,target:s.target??-2})));
@@ -242,9 +242,10 @@ export function stepBattle(state) {
       state.spawned++;
     }
   }
-  const groups = new Map(), merged = new Set();
+  const groups = new Map(), merged = new Set(), mergeParts=new Map();
   for (const enemy of state.enemies) {
     const groupId=enemyKey(enemy);
+    if(!mergeParts.has(groupId))mergeParts.set(groupId,[]);mergeParts.get(groupId).push(enemy.hp);
     if (!groups.has(groupId)) groups.set(groupId, { ...enemy, sources: [...enemy.sources] });
     else {
       const group = groups.get(groupId);
@@ -254,7 +255,7 @@ export function stepBattle(state) {
       merged.add(groupId);
     }
   }
-  for (const groupId of merged) { const group = groups.get(groupId); state.events.push({ type: 'merge', id:group.id,target:group.target, value: group.hp, members: group.members }); }
+  for (const groupId of merged) { const group = groups.get(groupId); state.events.push({ type: 'merge', id:group.id,target:group.target, value: group.hp, members: group.members, parts:mergeParts.get(groupId) }); }
   const fire = fireField(state); state.enemies = [];
   for (const enemy of groups.values()) {
     const damage = Math.min(enemy.hp, fire.get(enemy.id) || 0);

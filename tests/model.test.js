@@ -307,3 +307,15 @@ test('夜间补炮建造日保留到次日，旧墙上的新炮按各自日期�
   buildTower(s,id,'A');assert.equal(demolitionQuote(s,id).refund,10);removeTower(s,id);assert.equal(demolitionQuote(s,id).refund,0);
   beginBattle(s);buildTower(s,id,'A');s.phase='won';enterMorning(s);assert.equal(demolitionQuote(s,id).day,2);assert.equal(demolitionQuote(s,id).refund,0);
 });
+
+test('默认五晚可完整推进，第四第五晚预告合法，最后一晚只结算一次',async()=>{
+  const {buildProduction,settleEconomy}=await import('../src/model.js');
+  const s=createCampaign({...DEFAULTS,campHP:1000});assert.equal(s.waves.length,5);buildProduction(s,key(11,24));
+  for(let day=1;day<=5;day++){
+    assert.equal(validateSources(s.sources,s),'');beginBattle(s);
+    for(let tick=0;s.phase==='battle'&&tick<300;tick++)stepBattle(s);
+    assert.equal(s.phase,'won');assert.equal(s.economyEarned,day*8);settleEconomy(s);assert.equal(s.economyEarned,day*8);
+    assert.equal(campaignComplete(s),day===5);assert.equal(enterMorning(s),day<5);
+  }
+  assert.equal(s.day,5);assert.equal(beginBattle(s),null);
+});

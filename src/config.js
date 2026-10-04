@@ -17,11 +17,13 @@ export const DEFAULTS = {
 };
 
 
-// 三晚固定实验；每晚独立计拍，不随机刷新源头。
+// 五晚固定实验；每晚独立计拍，不随机刷新源头。
 export const WAVES = [
   [{x:5,y:3,hp:6,count:3,first:1,interval:12}, {x:25,y:3,hp:6,count:3,first:7,interval:12}],
   [{x:5,y:3,hp:8,count:3,first:1,interval:12}, {x:25,y:3,hp:8,count:3,first:7,interval:12}, {x:15,y:1,hp:8,count:2,first:13,interval:12}],
   [{x:5,y:3,hp:8,count:3,first:1,interval:12}, {x:25,y:3,hp:8,count:3,first:1,interval:12}, {x:15,y:1,hp:12,count:3,first:9,interval:12}],
+  [{x:5,y:3,hp:10,count:3,first:1,interval:12}, {x:25,y:3,hp:10,count:3,first:7,interval:12}, {x:15,y:1,hp:14,count:3,first:13,interval:12}],
+  [{x:5,y:3,hp:12,count:3,first:1,interval:12}, {x:25,y:3,hp:12,count:3,first:1,interval:12}, {x:15,y:1,hp:16,count:3,first:9,interval:12}],
 ];
 
 // 固定街区占用整片土地；外围两侧均有大小街区可比较。
