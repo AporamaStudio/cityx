@@ -1,5 +1,5 @@
 import { SIZE, DEFAULTS, PRODUCTION_SITES } from './config.js?v=13';
-import { battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=13';
+import { demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=13';
 const $ = id => document.getElementById(id);
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createCampaign(), tool = 'wall', hover = null, dragging = null;
@@ -75,9 +75,8 @@ function draw() {
   if(tool==='production'&&hover!==null)$('placementInfo').textContent=productionError(state,hover)||`整块恢复预览 · 每晚收入 +${productionQuote(state,hover).income} · 花费 ${productionQuote(state,hover).cost} · 剩余 ${funds(state)-productionQuote(state,hover).cost}`;
 
   if(tool==='erase'&&hover!==null&&state.phase==='build'){
-    const production=state.production.get(productionId(hover)),tower=state.towers.get(hover);
-    const refund=production?(production.locked?null:productionQuote(state,hover).cost):tower?state.params.weapons[tower].cost:state.outposts.has(hover)?(state.day===1?state.params.outpostCost:null):state.playerWalls.has(hover)?state.params.wallCost:null;
-    $('placementInfo').textContent=refund===null?'该设施当前不能拆除，或此处没有可拆设施。':`拆除预览 · 返还 ${refund} 金币${state.outposts.has(hover)?'，需先解除控制与目标依赖':''}`;
+    const quote=demolitionQuote(state,hover);
+    $('placementInfo').textContent=!quote.type?'这里没有可拆设施；固定墙与火光不可拆。':`第 ${quote.day} 天建造 · ${quote.day===state.day?'当天撤销':'旧设施清除'} · 返还 ${quote.refund} 金币${quote.type==='outpost'?'，须先解除控制与目标依赖':''}`;
   }
   const hoveredSite=hover!==null?productionSite(hover):null;
   if(hoveredSite&&!state.production.has(productionId(hover))){
@@ -237,10 +236,10 @@ function draw() {
 function update() {
   fire = fireField({...state,params:previewParams()});
   const w=selectedWeapon();
-  $('toolInfo').textContent = ['build','long'].includes(tool) ? `${weaponType()==='A'?'近防炮':'远防炮'} · ${w.cost} 资金 · ${w.shape==='square'?'方形':'菱形'}范围 ${w.range} · 火力 ${w.power}。仅架设在墙上。` : tool==='wall' ? `每格墙 ${state.params.wallCost} 资金。仅限控制范围内空地；悬停预览路线。` : `墙炮全额退款，有炮先拆炮；生产点仅开战前可撤销，经历防守后不可出售。固定墙不可拆；防守中不可拆除。`;
+  $('toolInfo').textContent = ['build','long'].includes(tool) ? `${weaponType()==='A'?'近防炮':'远防炮'} · ${w.cost} 资金 · ${w.shape==='square'?'方形':'菱形'}范围 ${w.range} · 火力 ${w.power}。仅架设在墙上。` : tool==='wall' ? `每格墙 ${state.params.wallCost} 资金。仅限控制范围内空地；悬停预览路线。` : `当天新建全额退款，旧设施可清除但不退款；有炮先拆炮。固定墙不可拆；防守中不可拆除。`;
   if(tool==='outpost')$('toolInfo').textContent=`前哨 ${state.params.outpostCost} 资金 · HP ${state.params.outpostHP} · 范围 ${state.params.outpostRadius}。建于已有控制区空地；无攻击能力，会成为目标。`;
   if(tool==='repair')$('toolInfo').textContent=`次日点击受损火光、前哨或废墟，一次修满。前哨每 HP ${state.params.repairCost} 钱，火光每 HP ${state.params.campRepairCost} 钱；悬停查看总价。失控前哨可原址修复。`;
-  if(tool==='production')$('toolInfo').textContent=`2×2：${state.params.productionCost} 钱／每晚 +${state.params.productionIncome}；3×3：${state.params.largeProductionCost} 钱／每晚 +${state.params.largeProductionIncome}。整块受控才能恢复，缺一格即停产；不阻路。开始防守前可撤销，此后不可出售。`;
+  if(tool==='production')$('toolInfo').textContent=`2×2：${state.params.productionCost} 钱／每晚 +${state.params.productionIncome}；3×3：${state.params.largeProductionCost} 钱／每晚 +${state.params.largeProductionIncome}。整块受控才能恢复，缺一格即停产；不阻路。当天新建全额拆返；旧街区清除不退款。`;
   $('income').textContent=`预计经营 +${expectedIncome(state)} / 晚 · 已恢复 ${state.production.size} / ${PRODUCTION_SITES.length}`;
   const prices={wall:state.params.wallCost,build:state.params.weapons.A.cost,long:state.params.weapons.B.cost,outpost:state.params.outpostCost,production:`小 ${state.params.productionCost} / 大 ${state.params.largeProductionCost}`,repair:state.params.repairCost===state.params.campRepairCost?`${state.params.repairCost}/HP`:`哨 ${state.params.repairCost} / 火 ${state.params.campRepairCost}/HP`,erase:'返还见预览'};
   for(const [id,price] of Object.entries(prices))$('price-'+id).textContent=String(price);
@@ -399,15 +398,13 @@ canvas.addEventListener('pointerup',e=>{
   } else if(tool==='wall'){
     const error=changeWall(state,id);notify(error||'墙已建造，路线已更新。');
   } else if(tool==='erase'){
-    const type=state.towers.get(id);
-    if(state.production.has(productionId(id))){const error=removeProduction(state,id);notify(error||`生产建设已撤销，返还 ${productionQuote(state,id).cost} 钱。`);}
-    else if(type){state.towers.delete(id);notify(`炮台已拆除，返还 ${state.params.weapons[type].cost} 资金，墙体保留。`);}
-    else if(state.outposts.has(id)){const error=removeOutpost(state,id);notify(error||'前哨已撤销，资金返还。');if(!error)sourceEditor(readSources());}
-    else if(state.walls.has(id)){const error=changeWall(state,id,true);notify(error||`自建墙已拆除，返还 ${state.params.wallCost} 资金，路线已更新。`);}
-    else notify('这里没有可拆除的设施。');
+    const quote=demolitionQuote(state,id);
+    const error=quote.type==='production'?removeProduction(state,id):quote.type==='tower'?removeTower(state,id):quote.type==='outpost'?removeOutpost(state,id):quote.type==='wall'?changeWall(state,id,true):'这里没有可拆除的设施。';
+    notify(error||`已${quote.day===state.day?'撤销当天建设':'清除旧设施'}，返还 ${quote.refund} 金币。`);
+    if(!error&&quote.type==='outpost')sourceEditor(readSources());
   } else {
-    const type=weaponType(),error=placementError(state,id,type);
-    if(error)notify(error);else{state.towers.set(id,type);notify(`武器 ${type} 已架设，覆盖格火力 +${state.params.weapons[type].power}。`);}
+    const type=weaponType(),error=buildTower(state,id,type);
+    if(error)notify(error);else{notify(`武器 ${type} 已架设，覆盖格火力 +${state.params.weapons[type].power}。`);}
   }
   update();
 });

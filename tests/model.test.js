@@ -218,14 +218,14 @@ test('跨晚击杀只累计一次，不因进入次日重复发钱',()=>{
 });
 
 // 经营投资跨晚固定；收益必须和真实控制及重试快照一致。
-test('生产建设限制、撤销与开战锁定，资金不足不改变设施',async()=>{
+test('生产建设限制、撤销与跨天清除，资金不足不改变设施',async()=>{
   const {createCampaign,buildProduction,removeProduction,beginBattle,restoreNight,productionError,buildOutpost,removeOutpost}=await import('../src/model.js');
   const s=createCampaign(),id=key(11,24);
   assert.equal(buildProduction(s,id),'');assert.equal(funds(s),90);
   assert.equal(removeProduction(s,id),'');assert.equal(funds(s),100);
   assert.ok(productionError(s,key(3,17)));assert.ok(changeWall(s,id));assert.ok(buildOutpost(s,id));
   buildProduction(s,id);const snapshot=beginBattle(s);assert.ok(removeProduction(s,id));
-  s.phase='build';assert.ok(removeProduction(s,id));assert.equal(removeProduction(restoreNight(snapshot),id),'');
+  s.phase='build';s.day=2;const prior=funds(s);assert.equal(removeProduction(s,id),'');assert.equal(funds(s),prior);assert.equal(removeProduction(restoreNight(snapshot),id),'');
   const poor=createCampaign({...DEFAULTS,budget:9});assert.ok(buildProduction(poor,id));assert.equal(poor.production.size,0);
   const outer=createCampaign();buildOutpost(outer,key(7,17));buildProduction(outer,key(3,17));assert.ok(removeOutpost(outer,key(7,17)));
 });
@@ -283,4 +283,27 @@ test('前哨失守后在场路线去火光，未来路线去另一个前哨，�
   assert.equal(future.target,key(15,20));assert.equal(future.path.at(-1),key(15,20));
   stepBattle(s);assert.equal(s.enemies[0].id,existing.path[1]);
   s.tick=21;assert.ok(battleRoutes(s).every(r=>!r.future));
+});
+
+test('当天撤销、旧设施零退款、修复不刷新日期，拆建及重试不制造资金',async()=>{
+  const {buildTower,removeTower,demolitionQuote,removeProduction}=await import('../src/model.js');
+  const s=createCampaign(),wall=key(14,18),post=key(15,16);
+  changeWall(s,wall);buildTower(s,wall,'A');buildOutpost(s,post);
+  const {buildProduction}=await import('../src/model.js');buildProduction(s,key(11,24));
+  const prior=funds(s);s.day=2;
+  s.outposts.get(post).hp=4;buildOutpost(s,post,true);assert.equal(demolitionQuote(s,post).refund,0);
+  assert.equal(removeTower(s,wall),'');assert.equal(changeWall(s,wall,true),'');assert.equal(removeOutpost(s,post),'');assert.equal(removeProduction(s,key(12,25)),'');
+  assert.equal(funds(s),prior-6);assert.equal(s.demolitionSpent,47);
+  changeWall(s,wall);buildTower(s,wall,'A');buildOutpost(s,post);
+  assert.equal(demolitionQuote(s,post).refund,25);const snapshot=beginBattle(s);
+  assert.ok(removeTower(s,wall));assert.ok(removeOutpost(s,post));assert.ok(changeWall(s,wall,true));
+  const retry=restoreNight(snapshot);assert.equal(demolitionQuote(retry,wall).refund,10);
+  removeTower(retry,wall);changeWall(retry,wall,true);removeOutpost(retry,post);assert.equal(funds(retry),prior-6);
+  assert.equal(funds(restartCampaign(retry)),100);
+});
+test('夜间补炮建造日保留到次日，旧墙上的新炮按各自日期退款',async()=>{
+  const {buildTower,removeTower,demolitionQuote}=await import('../src/model.js');
+  const s=createCampaign(),id=key(14,18);changeWall(s,id);s.day=2;
+  buildTower(s,id,'A');assert.equal(demolitionQuote(s,id).refund,10);removeTower(s,id);assert.equal(demolitionQuote(s,id).refund,0);
+  beginBattle(s);buildTower(s,id,'A');s.phase='won';enterMorning(s);assert.equal(demolitionQuote(s,id).day,2);assert.equal(demolitionQuote(s,id).refund,0);
 });

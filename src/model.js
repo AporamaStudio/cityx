@@ -45,7 +45,7 @@ export function coverage(id, range = 1, shape = 'diamond') {
 export function createState(sources = DEFAULTS.sources, towers = new Map(), playerWalls = new Set(), params = DEFAULTS, outposts = new Map()) {
   const fixedWalls = makeWalls(), walls = new Set([...fixedWalls, ...playerWalls]);
   const camp = key(...DEFAULTS.camp), field = routeField(camp, walls);
-  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p,hp:params.outpostHP,max:params.outpostHP}])), production:new Map(), economyEarned:0, nightEconomy:0, economySettled:false, repairSpent:0, earned:0, nightEarned:0, day:1, lostControl:new Set(),
+  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p,hp:params.outpostHP,max:params.outpostHP}])), production:new Map(), economyEarned:0, nightEconomy:0, economySettled:false, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1, lostControl:new Set(),
     fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
     hp: params.campHP, enemies: [], events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
@@ -69,7 +69,6 @@ export function beginBattle(state) {
   if(state.phase!=='build'||state.hp<=0||validateSources(state.sources,state))return null;
   clearNight(state);state.lostControl.clear();
   const snapshot=structuredClone(state);
-  for(const p of state.production.values())p.locked=true;
   state.phase='battle';return snapshot;
 }
 export const restoreNight=snapshot=>structuredClone(snapshot);
@@ -86,7 +85,7 @@ export function fireField(state) {
   }
   return fire;
 }
-export const funds = state => state.params.budget + state.earned + state.economyEarned - [...state.production.keys()].reduce((sum,id)=>sum+productionQuote(state,id).cost,0) - state.outposts.size*state.params.outpostCost - state.repairSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
+export const funds = state => state.params.budget + state.earned + state.economyEarned - [...state.production.keys()].reduce((sum,id)=>sum+productionQuote(state,id).cost,0) - state.outposts.size*state.params.outpostCost - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
 // 控制范围为所有存活控制站的并集；重叠覆盖不会随单站失守而失去。
 export function inStationRange(id, center, radius) {
   const [x,y]=xy(id),[cx,cy]=xy(center),dx=Math.abs(x-cx),dy=Math.abs(y-cy),cut=Math.min(2,radius);
@@ -137,15 +136,16 @@ export function buildOutpost(state,id,repair=false) {
     state.repairSpent+=repairQuote(state,id).cost;
     if(id===state.camp)state.hp=state.params.campHP;
     else state.outposts.get(id).hp=state.outposts.get(id).max;
-  } else state.outposts.set(id,{hp:state.params.outpostHP,max:state.params.outpostHP});
+  } else state.outposts.set(id,{hp:state.params.outpostHP,max:state.params.outpostHP,day:state.day});
   rebuildFields(state);return '';
 }
 export function removeOutpost(state,id) {
-  if(state.phase!=='build'||state.day!==1)return '只能在第一天建设时撤销前哨。';
+  if(state.phase!=='build')return '只能在建设阶段拆除前哨。';
   if(!state.outposts.has(id))return '这里没有前哨。';
   const posts=new Map(state.outposts);posts.delete(id);const candidate={...state,outposts:posts};
-  if([...state.playerWalls,...state.towers.keys(),...posts.keys(),...[...state.production.keys()].flatMap(productionCells)].some(cell=>!inControl(candidate,cell)))return '其他设施依赖此前哨的控制范围，请先拆除外围设施。';
+  if([...state.playerWalls,...state.towers.keys(),...posts.keys(),...[...state.production.keys()].flatMap(productionCells)].some(cell=>inControl(state,cell)&&!inControl(candidate,cell)))return '其他设施依赖此前哨的控制范围，请先拆除外围设施。';
   if(reservedSources(state).some(s=>s.target===id))return '敌源指定了此前哨，请先修改目标配置。';
+  retainDemolitionCost(state,demolitionQuote(state,id));
   state.outposts=posts;rebuildFields(state);return '';
 }
 export function enterMorning(state) {
@@ -192,7 +192,8 @@ export function changeWall(state, id, remove = false) {
   const preview = wallPreview(state,id,remove);
   if (preview.error) return preview.error;
   state.walls = preview.walls; state.field = preview.field;state.fields=preview.fields;
-  if (remove) state.playerWalls.delete(id); else state.playerWalls.add(id);
+  if (remove) {retainDemolitionCost(state,demolitionQuote(state,id));state.playerWalls.delete(id);state.wallDays.delete(id);}
+  else {state.playerWalls.add(id);state.wallDays.set(id,state.day);}
   return '';
 }
 
@@ -308,13 +309,13 @@ export function productionError(state,id) {
 }
 export function buildProduction(state,id) {
   const error=productionError(state,id);if(error)return error;
-  state.production.set(productionId(id),{locked:false});return '';
+  state.production.set(productionId(id),{day:state.day});return '';
 }
 export function removeProduction(state,id) {
   if(state.phase!=='build')return '防守中不能撤销生产设施。';
   id=productionId(id);const p=state.production.get(id);
   if(!p)return '这里没有已恢复的生产设施。';
-  if(p.locked)return '已经经历防守的生产投资不能出售。';
+  retainDemolitionCost(state,demolitionQuote(state,id));
   state.production.delete(id);return '';
 }
 // 只在守住当晚时入账一次；失败不结算，重试由完整战前快照回滚。
@@ -336,4 +337,25 @@ export function battleRoutes(state) {
     routes.push({future:false,index:enemy.sources[0]??0,target,path:pathFrom(enemy.id,fieldFor(state,target))});
   }
   return routes;
+}
+
+// 今天的建设可以撤销；跨天拆除保留原投资支出，防止删掉设施凭空退钱。
+export function demolitionQuote(state,id) {
+  const production=state.production.get(productionId(id)),tower=state.towers.get(id),post=state.outposts.get(id);
+  let cost=0,day=1,type='';
+  if(production){type='production';cost=productionQuote(state,id).cost;day=production.day??1;}
+  else if(tower){type='tower';cost=state.params.weapons[tower].cost;day=state.towerDays.get(id)??1;}
+  else if(post){type='outpost';cost=state.params.outpostCost;day=post.day??1;}
+  else if(state.playerWalls.has(id)){type='wall';cost=state.params.wallCost;day=state.wallDays.get(id)??1;}
+  return {type,cost,day,refund:day===state.day?cost:0};
+}
+function retainDemolitionCost(state,quote){state.demolitionSpent+=quote.cost-quote.refund;}
+export function buildTower(state,id,type) {
+  const error=placementError(state,id,type);if(error)return error;
+  state.towers.set(id,type);state.towerDays.set(id,state.day);return '';
+}
+export function removeTower(state,id) {
+  if(state.phase!=='build')return '防守中不能拆除炮台。';
+  if(!state.towers.has(id))return '这里没有炮台。';
+  retainDemolitionCost(state,demolitionQuote(state,id));state.towers.delete(id);state.towerDays.delete(id);return '';
 }
