@@ -1,5 +1,5 @@
-import { SIZE, DEFAULTS, PRODUCTION_SITES } from './config.js?v=16';
-import { demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=16';
+import { SIZE, DEFAULTS, PRODUCTION_SITES } from './config.js?v=17';
+import { demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=17';
 const $ = id => document.getElementById(id);
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createCampaign(), tool = 'wall', hover = null, dragging = null;
@@ -172,12 +172,22 @@ function draw() {
     ctx.fillStyle=p.hp>0?'#8ecbe5':'#85645b';ctx.fillRect(x+.16,y+.3,.68,.6);
     ctx.fillRect(x+.45,y+.05,.08,.5);ctx.fillRect(x+.53,y+.05,.32,.22);ctx.restore();
   }
-  viewedSources().forEach((s,i) => {ctx.fillStyle=colors[i%colors.length];ctx.fillRect(s.x+.08,s.y+.08,.84,.84);label(i+1,s.x+.5,s.y+.5,'#23262b',.52);});
+  // 敌源共用红色切角轮廓；细色条仅对应路线，不暗示不同敌种。
+  const drawSource=(source,index,futureDay=null)=>{
+    const {x,y}=source;ctx.save();
+    ctx.fillStyle=futureDay?'#1b2429':'#632f36';ctx.strokeStyle=futureDay?'#c48985':'#ff9a8b';ctx.lineWidth=.09;
+    if(futureDay)ctx.setLineDash([.14,.10]);
+    ctx.beginPath();ctx.moveTo(x+.23,y+.04);ctx.lineTo(x+.77,y+.04);ctx.lineTo(x+.96,y+.23);ctx.lineTo(x+.96,y+.77);ctx.lineTo(x+.77,y+.96);ctx.lineTo(x+.23,y+.96);ctx.lineTo(x+.04,y+.77);ctx.lineTo(x+.04,y+.23);ctx.closePath();ctx.fill();ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=colors[index%colors.length];ctx.fillRect(x+.24,y+.79,.52,.08);
+    label(index+1,x+.5,y+.43,futureDay?'#d6b2ad':'#fff0e9',Math.max(.5,9/size));
+    if(futureDay){ctx.fillStyle='#142024';ctx.fillRect(x-.15,y- .65,1.3,.58);label(`D${futureDay}`,x+.5,y-.35,'#e0b3ab',Math.max(.36,9/size));}
+    ctx.restore();
+  };
+  viewedSources().forEach((source,index)=>drawSource(source,index));
   const visibleIds=new Set(viewedSources().map(s=>key(s.x,s.y)));
-  state.waves.slice(state.day).forEach((wave,index)=>wave.forEach(source=>{
+  state.waves.slice(state.day).forEach((wave,index)=>wave.forEach((source,sourceIndex)=>{
     const id=key(source.x,source.y);if(visibleIds.has(id))return;visibleIds.add(id);
-    ctx.strokeStyle='#d5bd79';ctx.lineWidth=.08;ctx.setLineDash([.15,.12]);ctx.strokeRect(source.x+.08,source.y+.08,.84,.84);ctx.setLineDash([]);
-    label(`D${state.day+index+1}`,source.x+.5,source.y+.5,'#d5bd79',.32);
+    drawSource(source,sourceIndex,state.day+index+1);
   }));
   const [cx,cy] = xy(state.camp);
   // 火光是共同守护目标，用局部光晕定位；不暗化整个战场。
