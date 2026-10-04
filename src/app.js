@@ -1,5 +1,5 @@
-import { SIZE, DEFAULTS, PRODUCTION_SITES } from './config.js?v=14';
-import { demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=14';
+import { SIZE, DEFAULTS, PRODUCTION_SITES } from './config.js?v=16';
+import { demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=16';
 const $ = id => document.getElementById(id);
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createCampaign(), tool = 'wall', hover = null, dragging = null;
@@ -9,6 +9,8 @@ let messages = [], preparation = null, explainedMerge = false;
 const canBuildWeapon = () => ['build','battle'].includes(state.phase);
 let motion = null, impactAge = 1000, incoming = new Map();
 const MOVE_MS = 160, IMPACT_MS = 220;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let placementFx = null, playbackSpeed = 1, recentGain = 0, gainUntil = 0;
 const colors = ['#df9989', '#a6a1e9', '#d5bd79', '#78bcd3'];
 const notify = message => { $('notice').textContent = message; };
 const weaponType = () => tool === 'long' ? 'B' : 'A';
@@ -96,6 +98,8 @@ function draw() {
     if ($('heat').checked && power) { ctx.fillStyle = `rgba(99,211,166,${Math.min(.6,.17 + power * .045)})`; ctx.fillRect(x, y, 1, 1); }
     if (state.walls.has(id)) {
       ctx.fillStyle = state.playerWalls.has(id) ? '#617e72' : '#455055'; ctx.fillRect(x + .05, y + .05, .9, .9);
+      ctx.fillStyle='#0c171c77';ctx.fillRect(x+.05,y+.78,.9,.17);
+      ctx.fillStyle=state.playerWalls.has(id)?'#a2b9aa':'#728187';ctx.fillRect(x+.05,y+.05,.9,.10);
       ctx.strokeStyle = state.playerWalls.has(id) ? '#b3d0ac' : '#5a6569'; ctx.lineWidth = .045; ctx.beginPath(); ctx.moveTo(x + .15, y + .8); ctx.lineTo(x + .8, y + .15); ctx.stroke();
     }
     if(postGhost&&inControl(previewState,id)&&!inControl(state,id)){ctx.fillStyle='#f0d18b66';ctx.fillRect(x,y,1,1);}
@@ -112,7 +116,7 @@ function draw() {
       }
       ctx.stroke();ctx.setLineDash([]);
     }
-    ctx.strokeStyle = '#324044'; ctx.lineWidth = .025; ctx.strokeRect(x, y, 1, 1);
+    ctx.strokeStyle = '#2d3e43'; ctx.lineWidth = .025; ctx.strokeRect(x, y, 1, 1);
   }
   const actualNight=state.phase==='battle'&&Number($('forecastDay').value)===state.day-1;
   const displayedRoutes=actualNight?battleRoutes(state):viewedSources().map((source,index)=>({path:sourcePath(source),index,future:false}));
@@ -156,8 +160,7 @@ function draw() {
     ctx.fillStyle=selected?(active?'#527e59':built?'#80594e':'#655f3d'):active?'#91c99a99':built?'#a46f6088':'#766d4a77';ctx.fillRect(x+.08,y+.08,n-.16,n-.16);
     ctx.strokeStyle=selected?'#fff0ae':productionControlled(previewState,id)?'#f5d789':'#a29670';ctx.lineWidth=selected?.12:.06;ctx.strokeRect(x+.08,y+.08,n-.16,n-.16);
     if(selected)for(const cell of productionCells(id))if(!inControl(previewState,cell)){const [cx,cy]=xy(cell);ctx.fillStyle='#ed665877';ctx.fillRect(cx,cy,1,1);}
-    label(built?(active?'生产':'停产'):'待恢复',x+n/2,y+n/2-.2,active?'#ddffe4':'#ffe3a0',.4);
-    label(`${n}×${n} · +${productionQuote(state,id).income}`,x+n/2,y+n/2+.3,'#fff0bf',.34);
+    // 街区标签在屏幕空间绘制，缩小棋盘时仍保持可读。
   }
   for (const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])]) {
     ctx.save();if(ghost&&id===hover)ctx.globalAlpha=.5;
@@ -176,7 +179,12 @@ function draw() {
     ctx.strokeStyle='#d5bd79';ctx.lineWidth=.08;ctx.setLineDash([.15,.12]);ctx.strokeRect(source.x+.08,source.y+.08,.84,.84);ctx.setLineDash([]);
     label(`D${state.day+index+1}`,source.x+.5,source.y+.5,'#d5bd79',.32);
   }));
-  const [cx,cy] = xy(state.camp); ctx.fillStyle='#ffc17c';ctx.beginPath();ctx.moveTo(cx+.5,cy+.06);ctx.lineTo(cx+.9,cy+.7);ctx.lineTo(cx+.5,cy+.95);ctx.lineTo(cx+.1,cy+.7);ctx.closePath();ctx.fill();label('火',cx+.5,cy+.59,'#402c24',.42);
+  const [cx,cy] = xy(state.camp);
+  // 火光是共同守护目标，用局部光晕定位；不暗化整个战场。
+  const glow=ctx.createRadialGradient(cx+.5,cy+.5,.1,cx+.5,cy+.5,1.8);
+  glow.addColorStop(0,'#ffc17c44');glow.addColorStop(1,'#ffc17c00');ctx.fillStyle=glow;ctx.fillRect(cx-1.3,cy-1.3,3.6,3.6);
+  ctx.fillStyle=state.hp>0?'#ffc17c':'#75615b';ctx.beginPath();ctx.moveTo(cx+.52,cy-.03);ctx.bezierCurveTo(cx+.45,cy+.38,cx+1.03,cy+.44,cx+.82,cy+.79);ctx.bezierCurveTo(cx+.6,cy+1.1,cx+.08,cy+.9,cx+.17,cy+.56);ctx.lineTo(cx+.37,cy+.24);ctx.lineTo(cx+.37,cy+.51);ctx.closePath();ctx.fill();
+  if(state.hp>0){ctx.fillStyle='#fff1b0';ctx.beginPath();ctx.moveTo(cx+.51,cy+.39);ctx.lineTo(cx+.68,cy+.78);ctx.lineTo(cx+.36,cy+.78);ctx.closePath();ctx.fill();}
   const impact = Math.min(1,impactAge/IMPACT_MS);
   // 移动阶段仍显示出发时的生命，抵达后才展示结算结果。
   const drawEnemy = (enemy,x,y,scale=1,alpha=1,barHP=enemy.hp) => {
@@ -184,8 +192,11 @@ function draw() {
     if(occupants.length>1){const slot=Math.max(0,occupants.findIndex(e=>e.target===enemy.target));x+=(slot%2? .23:-.23);y+=Math.floor(slot/2)*.3;scale*=.55;}
     ctx.save();ctx.globalAlpha=alpha;ctx.translate(x+.5,y+.5);ctx.scale(scale,scale);ctx.translate(-.5,-.5);
     ctx.fillStyle=enemy.members>1?'#ffb079':'#f28780';ctx.fillRect(.04,.06,.92,.83);
-    label(enemy.hp,.5,.42,'#321d23',.46);ctx.fillStyle='#552b30';ctx.fillRect(.08,.73,.84,.1);ctx.fillStyle='#fff1c4';ctx.fillRect(.08,.73,.84*Math.max(0,Math.min(1,barHP/enemy.max)),.1);
+    label(enemy.hp,.5,.42,'#321d23',Math.max(.46,10/size));ctx.fillStyle='#552b30';ctx.fillRect(.08,.73,.84,.1);ctx.fillStyle='#fff1c4';ctx.fillRect(.08,.73,.84*Math.max(0,Math.min(1,barHP/enemy.max)),.1);
     if(enemy.members>1){ctx.strokeStyle='#ffe6b9';ctx.lineWidth=.07;ctx.strokeRect(.04,.06,.92,.83);}
+    if(!reducedMotion.matches&&impact<1&&state.events.some(e=>e.type==='hit'&&e.id===enemy.id&&e.target===enemy.target)){
+      ctx.fillStyle=`rgba(255,250,220,${.45*(1-impact)})`;ctx.fillRect(.04,.06,.92,.83);
+    }
     ctx.restore();
   };
   if(motion){
@@ -200,6 +211,10 @@ function draw() {
     if(impact<1)for(const event of state.events){
       const [x,y]=xy(event.id);
       if(event.type==='kill'){const old=incoming.get(`${event.id}:${event.target}`);if(old)drawEnemy({...old,hp:0},x,y,1-.7*impact,1-impact,0);}
+      if(!reducedMotion.matches&&event.type==='kill'){
+        ctx.strokeStyle=`rgba(255,222,151,${1-impact})`;ctx.lineWidth=.08;
+        for(let i=0;i<4;i++){const angle=i*Math.PI/2+.4,r=.3+impact*.6;ctx.beginPath();ctx.moveTo(x+.5+Math.cos(angle)*r,y+.5+Math.sin(angle)*r);ctx.lineTo(x+.5+Math.cos(angle)*(r+.2),y+.5+Math.sin(angle)*(r+.2));ctx.stroke();}
+      }
       if(event.type==='leak'){ctx.fillStyle=`rgba(255,100,80,${.6*(1-impact)})`;ctx.fillRect(x-.25,y-.25,1.5,1.5);}
       ctx.strokeStyle=event.type==='merge'?'#ffe0a1':'#ffbbb0';ctx.lineWidth=.075;ctx.strokeRect(x+.01,y+.01,.98,.98);
       if(event.type==='merge'||event.type==='hit') {
@@ -209,11 +224,35 @@ function draw() {
     }
   }
   ctx.restore();
+  // 街区状态与收益保持屏幕字号，不因全图缩小而变成难读的小字。
+  for(const p of PRODUCTION_SITES){
+    const id=key(p.x,p.y),built=state.production.has(id),active=built&&productionActive(state,id);
+    // 敌人经过街区时优先显示敌群，避免标签盖住生命与血条。
+    const cells=productionCells(id);
+    if((motion?.actors||state.enemies).some(e=>cells.includes(e.id)||cells.includes(e.to)))continue;
+    const x=panX+(p.x+p.size/2)*size,y=panY+(p.y+p.size/2)*size;
+    const title=built?(active?'生产中':'已停产'):'待恢复';
+    ctx.font='600 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+    const w=Math.max(ctx.measureText(title).width+8,42);
+    ctx.fillStyle='#142024ed';ctx.fillRect(x-w/2,y-14,w,30);
+    ctx.fillStyle=active?'#bff5ce':built?'#ffb7a5':'#f5df9c';ctx.fillText(title,x,y-6);
+    ctx.font='10px system-ui';ctx.fillText(built&&!active?'收入 0':`+${productionQuote(state,id).income}/晚`,x,y+8);
+  }
+  // 建设反馈跟随地图位置；短暂边框与金额提示不参与规则结算。
+  if(placementFx){
+    const fx=placementFx,t=Math.min(1,(performance.now()-fx.start)/750),[x,y]=xy(fx.id);
+    const sx=panX+x*size,sy=panY+y*size;
+    ctx.save();ctx.globalAlpha=1-t;ctx.strokeStyle=fx.color;ctx.lineWidth=2;
+    const expand=reducedMotion.matches?0:t*9;
+    ctx.strokeRect(sx-expand,sy-expand,fx.size*size+expand*2,fx.size*size+expand*2);
+    ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.lineWidth=4;ctx.strokeStyle='#142024';
+    const ty=sy-7-(reducedMotion.matches?0:t*18);ctx.strokeText(fx.text,sx+fx.size*size/2,ty);ctx.fillStyle=fx.color;ctx.fillText(fx.text,sx+fx.size*size/2,ty);ctx.restore();
+  }
   // 篝火血量最后绘制，固定屏幕字号，避免缩放后难以辨认或被敌群遮挡。
   const campX=panX+(cx+.5)*size, campY=panY+cy*size-25;
-  ctx.fillStyle='#11191cee';ctx.fillRect(campX-31,campY,62,23);
+  ctx.fillStyle='#11191cee';ctx.fillRect(campX-39,campY,78,23);
   ctx.font='600 11px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#ffe0b7';
-  ctx.fillText(`${Math.max(0,state.hp)} / ${state.params.campHP}`,campX,campY+8);
+  ctx.fillText(`HP ${Math.max(0,state.hp)} / ${state.params.campHP}`,campX,campY+8);
   ctx.fillStyle='#553a32';ctx.fillRect(campX-27,campY+17,54,4);
   ctx.fillStyle='#ffc17c';ctx.fillRect(campX-27,campY+17,54*Math.max(0,state.hp)/state.params.campHP,4);
   for(const [id,p] of state.outposts){
@@ -251,10 +290,13 @@ function update() {
   $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
   $('spawned').textContent = `${state.spawned} / ${state.sources.reduce((n,s)=>n+s.count,0)}`;
   const active = state.phase === 'battle', build = state.phase === 'build';
-  $('phase').textContent = `第 ${state.day} / ${state.waves.length} 天 · `+(build?'建设':active?(paused?'防守暂停':'防守进行中'):campaignComplete(state)?'全部夜晚守住了':state.phase==='won'?'当晚守住了':'火光熄灭');
+  document.body.dataset.phase=state.phase;
+  $('phaseTitle').textContent=build?'白天 · 建设':active?(paused?'夜晚 · 已暂停':'夜晚 · 防守'):state.phase==='won'?'守住了':'火光熄灭';
+  $('phaseHint').textContent=build?'墙改变路线 · 炮台架在墙上 · 蓝色边界内可建设':active?'每进一格结算伤害 · 可暂停补炮 · 不能造墙或拆除':state.phase==='won'?(campaignComplete(state)?'五晚实验完成，可重试当晚或整局重来。':'收入已结算，查看战果后继续。'):'重试当晚可回到开战前，重新布防。';
+  $('phase').textContent = `第 ${state.day} / ${state.waves.length} 天 · `+(build?'白天':active?(paused?'夜晚 · 暂停':'夜晚'):campaignComplete(state)?'全部夜晚守住了':state.phase==='won'?'当晚守住了':'火光熄灭');
   $('start').disabled = campaignComplete(state) || (!build && !active && state.phase!=='won');
   $('retry').disabled=!preparation; $('step').disabled = !active || !paused || !!motion?.singleStep;
-  $('start').textContent = active ? (paused ? '继续防守' : '暂停') : campaignComplete(state)?'实验完成':build?`开始第 ${state.day} 晚`:state.phase==='won'?`进入第 ${state.day+1} 天`:'防守结束';
+  $('start').textContent = active ? (paused ? '继续夜晚' : '暂停夜晚') : campaignComplete(state)?'实验完成':build?'开始夜晚':'防守结束';
   for (const id of ['build','long','wall','outpost','production','repair','erase','apply','addSource','applyParams','cancelParams','defaults']) $(id).disabled = !build;
   // 通用建造交互：不足价即禁用，退款或应用参数后立即恢复。
   for(const [id,cost] of [['wall',state.params.wallCost],['build',state.params.weapons.A.cost],['long',state.params.weapons.B.cost],['outpost',state.params.outpostCost],['production',Math.min(state.params.productionCost,state.params.largeProductionCost)]]){
@@ -282,6 +324,7 @@ function updateForecast() {
   $('forecastList').replaceChildren(...sources.map((s,i)=>{
     const row=document.createElement('li'),target=sourceTarget(state,s),name=target===state.camp?'火光':`前哨 (${xy(target)})`;
     const rule=s.target===-1?'指定火光':s.target===-2?'出生时最近':'指定前哨，失守转火光';
+    row.style.setProperty('--source-color',colors[i%colors.length]);
     row.textContent=`${i+1} · (${s.x},${s.y}) · ${s.count} 块 × ${s.hp} HP · 首拍 ${s.first} / 间隔 ${s.interval} · ${rule} → ${name}`;return row;
   }));
 }
@@ -341,7 +384,7 @@ function refreshParams(){
   update();
 }
 function clearPlayback() {
-  paused=false;timer=0;motion=null;impactAge=1000;incoming.clear();messages=[];explainedMerge=false;$('mergeNotice').hidden=true;$('log').replaceChildren();
+  paused=false;timer=0;motion=null;placementFx=null;impactAge=1000;incoming.clear();recentGain=0;gainUntil=0;$('moneyGain').textContent='';messages=[];explainedMerge=false;$('mergeNotice').hidden=true;$('log').replaceChildren();
   document.querySelectorAll('.coin-drop').forEach(el=>el.remove());
 }
 function reset(keep=true){
@@ -394,22 +437,29 @@ canvas.addEventListener('pointerup',e=>{
   const id=cellAt(e);if(id===null)return;
   if(state.phase!=='build'&&!(state.phase==='battle'&&['build','long'].includes(tool))){notify('防守中只能在已有墙上补炮，不能造墙、修复或拆除。');return;}
   if(paramsDirty()){notify('请先应用或取消实验参数预览，再修改布局。');return;}
+  const beforeFunds=funds(state);let actionError='';
   if(tool==='production'){
-    const error=buildProduction(state,id);notify(error||`街区已恢复！预计每晚收入 +${productionQuote(state,id).income}，守住后自动入账。`);
+    const error=actionError=buildProduction(state,id);notify(error||`街区已恢复！预计每晚收入 +${productionQuote(state,id).income}，守住后自动入账。`);
   } else if(['outpost','repair'].includes(tool)){
-    const error=buildOutpost(state,id,tool==='repair');notify(error||(tool==='repair'?'设施已修满，按缺失 HP 扣费。':'前哨已建立；默认自动目标会选择出生时最近的控制站。'));
+    const error=actionError=buildOutpost(state,id,tool==='repair');notify(error||(tool==='repair'?'设施已修满，按缺失 HP 扣费。':'前哨已建立；默认自动目标会选择出生时最近的控制站。'));
     if(!error)sourceEditor(readSources());
   } else if(tool==='wall'){
-    const error=changeWall(state,id);notify(error||'墙已建造，路线已更新。');
+    const error=actionError=changeWall(state,id);notify(error||'墙已建造，路线已更新。');
   } else if(tool==='erase'){
     const quote=demolitionQuote(state,id);
-    const error=quote.type==='production'?removeProduction(state,id):quote.type==='tower'?removeTower(state,id):quote.type==='outpost'?removeOutpost(state,id):quote.type==='wall'?changeWall(state,id,true):'这里没有可拆除的设施。';
+    const error=actionError=quote.type==='production'?removeProduction(state,id):quote.type==='tower'?removeTower(state,id):quote.type==='outpost'?removeOutpost(state,id):quote.type==='wall'?changeWall(state,id,true):'这里没有可拆除的设施。';
     notify(error||`已${quote.day===state.day?'撤销当天建设':'清除旧设施'}，返还 ${quote.refund} 金币。`);
     if(!error&&quote.type==='outpost')sourceEditor(readSources());
   } else {
-    const type=weaponType(),error=buildTower(state,id,type);
+    const type=weaponType(),error=actionError=buildTower(state,id,type);
     if(error)notify(error);else{notify(`武器 ${type} 已架设，覆盖格火力 +${state.params.weapons[type].power}。`);}
   }
+  if(!actionError){
+    const delta=funds(state)-beforeFunds,site=tool==='production'||tool==='erase'?productionSite(id):null;
+    const names={wall:'墙已建造',build:'近防炮就位',long:'远防炮就位',outpost:'控制区扩张',production:'生产已恢复',repair:'已修满',erase:'已拆除'};
+    placementFx={id:site?key(site.x,site.y):id,size:site?.size||1,start:performance.now(),color:delta<0?'#ffe1a0':'#aef2ce',text:`${names[tool]}${delta?` ${delta>0?'+':''}${delta} 金币`:''}`};
+    pulse($('budget'),delta<0?'#ffe1a0':'#bff5ce');
+  }else pulse($('notice'),'#ffb7a5');
   update();
 });
 canvas.addEventListener('pointercancel',()=>{dragging=null;});
@@ -420,8 +470,31 @@ new ResizeObserver(()=>resize()).observe(viewport);
 $('forecastDay').replaceChildren(...state.waves.map((_,i)=>{const option=document.createElement('option');option.value=i;option.textContent=`第 ${i+1} 晚`;return option;}));
 paramsEditor(state.params);sourceEditor(state.sources);resize(true);refreshParams();
 
+// 短促高亮确认发生变化，不震屏，不遮挡操作；尊重减少动态效果设置。
+function pulse(element,color){
+  if(reducedMotion.matches)return;
+  element.animate([{color,filter:'brightness(1.5)'},{filter:'brightness(1)'}],{duration:450});
+}
+
+// 括号是短暂的最近收入；余额已经包含它，不是待领取或每秒收益。
+function showIncome(amount){
+  if(amount<=0)return;
+  recentGain=performance.now()<gainUntil?recentGain+amount:amount;
+  gainUntil=performance.now()+1400;
+  $('moneyGain').textContent=`（+${recentGain}）`;
+  $('moneyGain').title='刚刚获得，已计入余额';
+  pulse($('budget'),'#ffe1a0');
+}
+for(const button of document.querySelectorAll('[data-speed]'))button.onclick=()=>{
+  playbackSpeed=Number(button.dataset.speed);
+  for(const option of document.querySelectorAll('[data-speed]')){
+    const selected=option===button;option.classList.toggle('selected',selected);option.setAttribute('aria-pressed',String(selected));
+  }
+};
+
 // 金币立即入账；弹出并飞向资金栏只是反馈，不要求点击，也不阻挡暂停和补炮。
 function showCoins(id, amount) {
+  if(reducedMotion.matches)return;
   const [x,y]=xy(id), rect=canvas.getBoundingClientRect(), target=$('budget').getBoundingClientRect();
   const sx=rect.left+panX+(x+.5)*base*zoom, sy=rect.top+panY+(y+.5)*base*zoom;
   const coin=document.createElement('span');coin.className='coin-drop';coin.textContent=`● +${amount}`;coin.setAttribute('aria-hidden','true');
@@ -443,16 +516,24 @@ function advance() {
       explainedMerge=true;$('mergeNotice').hidden=false;
       $('mergeNotice').textContent=`合流：${event.parts.join(' + ')} = ${event.value} HP。同格、同拍、同目标才合并；之后每进入一格只扣一次该格火力，整群消灭才获得合计金币。`;
     }
-    if(event.type==='kill')showCoins(event.id,event.value);
+    if(event.type==='kill'){showIncome(event.value);showCoins(event.id,event.value);}
+    if(event.type==='leak')pulse($('campHP'),'#ff978b');
     messages.unshift(`第 ${state.tick} 拍 · ${text}`);
   }
   messages = messages.slice(0,8); $('log').replaceChildren(...messages.map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
+  if(state.phase==='won')showIncome(state.nightEconomy);
   if (state.phase === 'won') notify(campaignComplete(state)?'全部夜晚守住了！可重试最后一晚或整局重来。':`第 ${state.day} 晚守住了。进入次日建设、修复并准备下一晚。`);
   if (state.phase === 'lost') notify('篝火熄灭。看看合流之前是否还有更好的覆盖位置。');
+  // 守住后直接回到白天建设，保留上晚收支摘要和刚刚到账提示。
+  if(enterMorning(state)){
+    preparation=null;paused=false;timer=0;motion=null;impactAge=1000;incoming.clear();
+    explainedMerge=false;$('mergeNotice').hidden=true;$('forecastDay').value=String(state.day-1);sourceEditor(state.sources);
+    notify(`第 ${state.day} 天 · 白天。昨夜守住了，收入已到账；可以建设与修复。`);
+  }
+  if(state.phase==='lost')$('testControls').open=true;
   update();
 }
 $('start').onclick=()=>{
-  if(enterMorning(state)){preparation=null;clearPlayback();$('forecastDay').value=String(state.day-1);sourceEditor(state.sources);update();notify(`进入第 ${state.day} 天。资金、设施与损伤保留；可以修复和调整防线。`);return;}
   if(campaignComplete(state))return;
   if(state.phase==='battle'){paused=!paused;timer=0;update();return;}
   if(state.phase!=='build')return;
@@ -476,7 +557,9 @@ $('step').onclick=()=>{if(state.phase!=='battle'||!paused)return;if(motion){moti
 // 移动占一个节拍的后 160ms；加速同步缩短动画，暂停冻结自动移动。
 function frame(now){
   const elapsed=Math.min(now-last,100);last=now;
-  const dt=elapsed*Number($('speed').value);
+  const dt=elapsed*playbackSpeed;
+  if(gainUntil&&now>=gainUntil){gainUntil=0;recentGain=0;$('moneyGain').textContent='';}
+  if(placementFx){if(now-placementFx.start>=750)placementFx=null;draw();}
   if(impactAge<IMPACT_MS){impactAge=Math.min(IMPACT_MS,impactAge+dt);draw();}
   if(state.phase==='battle'&&(!paused||motion?.singleStep)){
     if(motion){motion.elapsed+=dt;if(motion.elapsed>=MOVE_MS)advance();else draw();}

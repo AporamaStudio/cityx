@@ -23,3 +23,36 @@ main{grid-template-columns:220px minmax(0,1fr) 300px;gap:14px}
 .wallet{display:flex;align-items:center;gap:12px;padding:12px;margin-bottom:18px;border:1px solid #9b793b;border-radius:8px;background:#342d1e}.coin-icon{width:38px;height:38px;flex:none}.wallet small{display:block;color:#efd69b;font-size:12px}.wallet strong{display:block;font-size:32px;color:#ffdf83;line-height:1.2;font-variant-numeric:tabular-nums}.toolgrid button{display:flex;align-items:center;justify-content:space-between;gap:6px}.tool-name{display:flex;align-items:center;gap:4px}.tool-price{margin-left:auto;color:#f1ce79;font-size:11px;white-space:nowrap}.toolgrid button:disabled .tool-price{color:inherit}
 
 #mergeNotice{padding:10px;border:1px solid #bb9755;border-radius:6px;background:#3b3020;color:#ffe0a1}#mergeNotice[hidden]{display:none}
+
+/* 原型可读性：选择、花费、操作结果优先于装饰；保留现有布局断点。 */
+:root{--bg:#10191e;--panel:#1c292f;--line:#36494f;--muted:#a8babc;--teal:#99e6cb}
+body{background:radial-gradient(ellipse at 45% 0,#23363c 0, var(--bg) 65%)}
+header{height:64px;background:#101a20d9}.brand{letter-spacing:2px}.brand small{letter-spacing:1px}.tag{font-size:12px}
+main{height:calc(100dvh - 64px);padding:16px;gap:12px}
+.panel{background:linear-gradient(145deg,#223138,#1a272d);box-shadow:0 5px 18px #00000016}
+.arena{border-color:#486068;box-shadow:0 10px 30px #0002}#viewport{background:radial-gradient(ellipse,#21363b,#111e24)}
+.eyebrow{letter-spacing:1px;font-size:11px}.wallet{margin-bottom:16px;background:linear-gradient(125deg,#51422a,#302b22);border-color:#b79758}.wallet strong{font-size:36px;letter-spacing:1px}
+.toolgrid button{position:relative;min-height:43px;padding:10px 12px;transition:background .12s,border-color .12s;box-shadow:inset 0 1px #ffffff08}
+.toolgrid button.selected{background:#294d47;border-color:#a5efd1;box-shadow:inset 3px 0 #a5efd1,0 0 12px #9ce6cd10;color:#e7fff5}
+.toolgrid button:disabled{opacity:.5}.tool-price{font-size:12px;font-variant-numeric:tabular-nums}
+button:not(:disabled):active{transform:translateY(1px)}.primary{min-height:46px;background:linear-gradient(120deg,#aff0d4,#7ed1bc);border-color:#b5f5de;box-shadow:0 3px 12px #80dab820}
+#toolInfo{padding-top:12px;border-top:1px solid var(--line)}#notice{padding:10px 12px;background:#92e0c00a;border-left:2px solid #86cbb3;border-radius:0 5px 5px 0}
+#placementInfo{padding:10px;border:1px solid #c5d78955;background:#c5d7890b;border-radius:6px;line-height:1.8}
+.phase-guide{display:flex;align-items:center;gap:12px;padding:9px 16px;background:#1e3634;border-top:1px solid #a5e0c91c;border-bottom:1px solid #a5e0c92b;color:#b5cec6;font-size:11px}.phase-guide strong{color:#b1f1d7;font-size:12px;white-space:nowrap}
+body[data-phase="battle"] .phase-guide{background:#352c29;border-color:#b685553d}body[data-phase="battle"] .phase-guide strong{color:#ffd59c}
+body[data-phase="lost"] .phase-guide{background:#442c30}body[data-phase="lost"] .phase-guide strong{color:#ffb0a6}
+body[data-phase="won"] .arena{border-color:#85d1ad}body[data-phase="lost"] .arena{border-color:#cf837c}
+#income{padding:10px 0 0;color:#cde6be}.meter{height:7px}.stats{margin-top:12px}.stats b{font-size:20px}
+#result{padding-top:10px;border-top:1px solid var(--line)}#forecastList{list-style:none;padding:0}#forecastList li{padding:8px 10px;background:#101d234d;border-left:2px solid var(--source-color,#d5bd79);border-radius:0 5px 5px 0;color:#c1cdcd}
+.forecast-help summary{font-size:12px;color:var(--muted)}.maplegend{background:#10191eea;border:1px solid #41565b;padding:7px 9px;color:#b5c6c8}.mapbar{background:#223238}.badge{font-variant-numeric:tabular-nums;background:#8ed7bd0a}
+@media(max-width:1100px) and (min-width:901px){main{padding:10px;gap:10px}.toolgrid button{padding:9px 8px}}
+@media(max-width:900px){main{height:auto;padding:10px}.phase-guide{flex-wrap:wrap;gap:4px 12px}.build-sidebar .toolgrid button{min-height:43px}.arena{min-height:540px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
+
+/* 工具说明变长时仍让余额留在左栏，避免滚动后丢失购买依据。 */
+.build-sidebar .wallet{position:sticky;top:0;z-index:2;box-shadow:0 8px 12px #152228}
+
+/* 主流程优先：开始/暂停占主位，速度直接选择，测试操作收进次级折叠区。 */
+.controls .primary{min-height:68px;font-size:20px;letter-spacing:1px}.speed-controls{display:flex;align-items:center;gap:7px}.speed-controls>span{color:var(--muted);font-size:12px;margin-right:4px}.speed-controls button{flex:1;min-height:36px;font-variant-numeric:tabular-nums}.secondary-controls summary{font-size:12px;color:var(--muted)}.secondary-controls button{font-size:11px;padding:6px 8px}.secondary-controls .toolrow{margin:12px 0 8px}.price-coin{width:14px;height:14px;flex:none}.tool-price{display:inline-flex;align-items:center;gap:3px}.toolgrid button:disabled .price-coin{filter:grayscale(1)}#moneyGain{color:#c6f0b5;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}.wallet small{white-space:nowrap}
+
+.tool-name{white-space:nowrap}#production{flex-wrap:wrap}#production .tool-price{margin-left:auto}#moneyGain{font-size:11px}
