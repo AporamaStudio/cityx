@@ -23,7 +23,7 @@ test('墙让敌人停在原路线前，停留每拍持续受伤，击杀后不�
   step(s,2);assert.equal(s.enemies[0].id,key(15,21));const hp=s.enemies[0].hp;
   step(s,2);assert.equal(s.enemies[0].id,key(15,21));assert.equal(s.enemies[0].hp,hp-2);assert.equal(s.wallHealth.get(wall).hp,10);
   while(s.phase==='battle')stepBattle(s);
-  assert.equal(s.phase,'won');assert.equal(s.hp,30);assert.equal(s.earned,1);assert.ok(s.wallHealth.get(wall).hp>0);
+  assert.equal(s.phase,'won');assert.equal(s.hp,30);assert.equal(s.earned,2);assert.ok(s.wallHealth.get(wall).hp>0);
   const remaining=s.wallHealth.get(wall).hp;stepBattle(s);assert.equal(s.wallHealth.get(wall).hp,remaining);
 });
 

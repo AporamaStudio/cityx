@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
 import {MAP_DEFAULTS,readMapSettings,mapSearch} from '../src/map-settings.js';
 import {DEFAULTS} from '../src/config.js';
-import {createCampaign,key,productionCells,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning} from '../src/model.js';
+import {createCampaign,key,productionCells,productionQuote,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning} from '../src/model.js';
 
 test('尺寸、特殊设施和紧邻实验保持完整分区与通路',()=>{
   let joined=0;
@@ -31,6 +31,7 @@ test('生成地图接入路线、矩形经营、建设限制及重试',()=>{
   for(const wave of s.waves)assert.equal(validateSources(wave,s),'');
   const b=s.sites.find(b=>b.width!==b.height&&productionControlled(s,key(b.x,b.y))),id=key(b.x,b.y);
   assert.equal(productionCells(id,s).length,b.width*b.height);assert.ok(!s.field.distance.has(id));
+  assert.deepEqual(productionQuote(s,id),{area:b.width*b.height,cost:b.width*b.height*8,income:b.width*b.height});
   assert.ok(wallPreview(s,id).error);assert.ok(placementError(s,id));assert.ok(outpostError(s,id));
   assert.equal(buildProduction(s,id),'');assert.ok(!s.field.distance.has(id));
   const road=layout.tiles.findIndex((t,id)=>t==='road'&&!wallPreview(s,id).error);

@@ -141,8 +141,9 @@ test('合并群未死无收益，完全击杀按原始成员奖励且不重复�
   s.field.next=new Map([[1,3],[2,3],[3,4]]);s.towers.set(3,'A');
   s.enemies=[{id:1,hp:2,max:5,members:1,sources:[0]}, {id:2,hp:2,max:10,members:2,sources:[1]}];
   stepBattle(s);assert.equal(s.earned,0);assert.equal(s.enemies[0].hp,2);assert.equal(s.enemies[0].members,3);
-  stepBattle(s);assert.equal(s.earned,3);assert.equal(s.enemies.length,0);assert.equal(funds(s),93);
-  stepBattle(s);assert.equal(s.earned,3);
+  stepBattle(s);assert.equal(s.earned,6);assert.equal(s.enemies.length,0);assert.equal(funds(s),96);
+  assert.equal(s.events.find(e=>e.type==='kill').members,3);assert.equal(s.removed,3);
+  stepBattle(s);assert.equal(s.earned,6);
 });
 test('抵达火光或完成前哨攻击不发击杀收入',()=>{
   const s=makeState([{x:15,y:24,hp:2,count:1,first:1,interval:1}]);s.phase='battle';stepBattle(s);stepBattle(s);assert.equal(s.earned,0);
@@ -215,19 +216,19 @@ test('预留未来源头但允许封路，第三天仍可修复，失败不能�
 test('跨晚击杀只累计一次，不因进入次日重复发钱',()=>{
   const wave=[{x:15,y:20,hp:2,count:1,first:1,interval:1}];const s=createCampaign(DEFAULTS,[wave,wave,wave]);
   changeWall(s,key(14,20));s.towers.set(key(14,20),'A');
-  for(let day=1;day<=3;day++){beginBattle(s);stepBattle(s);assert.equal(s.earned,day);assert.equal(s.nightEarned,1);stepBattle(s);assert.equal(s.earned,day);enterMorning(s);assert.equal(s.earned,day);}
+  for(let day=1;day<=3;day++){beginBattle(s);stepBattle(s);assert.equal(s.earned,day*2);assert.equal(s.nightEarned,2);stepBattle(s);assert.equal(s.earned,day*2);enterMorning(s);assert.equal(s.earned,day*2);}
 });
 
 // 经营投资跨晚固定；收益必须和真实控制及重试快照一致。
 test('生产建设限制、撤销与跨天清除，资金不足不改变设施',async()=>{
   const {createCampaign,buildProduction,removeProduction,beginBattle,restoreNight,productionError,buildOutpost,removeOutpost}=await import('../src/model.js');
   const s=createCampaign(),id=key(11,24);
-  assert.equal(buildProduction(s,id),'');assert.equal(funds(s),90);
+  assert.equal(buildProduction(s,id),'');assert.equal(funds(s),68);
   assert.equal(removeProduction(s,id),'');assert.equal(funds(s),100);
   assert.ok(productionError(s,key(3,17)));assert.ok(changeWall(s,id));assert.ok(buildOutpost(s,id));
   buildProduction(s,id);const snapshot=beginBattle(s);assert.ok(removeProduction(s,id));
   s.phase='build';s.day=2;const prior=funds(s);assert.equal(removeProduction(s,id),'');assert.equal(funds(s),prior);assert.equal(removeProduction(restoreNight(snapshot),id),'');
-  const poor=createCampaign({...DEFAULTS,budget:9});assert.ok(buildProduction(poor,id));assert.equal(poor.production.size,0);
+  const poor=createCampaign({...DEFAULTS,budget:31});assert.ok(buildProduction(poor,id));assert.equal(poor.production.size,0);
   const outer=createCampaign();buildOutpost(outer,key(7,17));buildProduction(outer,key(3,17));assert.ok(removeOutpost(outer,key(7,17)));
 });
 test('经营胜利结算一次、跨晚继承，失败不发钱，重试不复制收益',async()=>{
@@ -235,44 +236,58 @@ test('经营胜利结算一次、跨晚继承，失败不发钱，重试不复�
   const waves=Array.from({length:3},()=>[{x:15,y:24,hp:1,count:1,first:1,interval:1,target:-1}]);
   const s=createCampaign(DEFAULTS,waves);buildProduction(s,key(11,24));buildProduction(s,key(19,26));
   const snap=beginBattle(s);while(s.phase==='battle')stepBattle(s);
-  assert.equal(s.phase,'won');assert.equal(s.nightEconomy,16);assert.equal(funds(s),96);settleEconomy(s);assert.equal(funds(s),96);
-  assert.equal(funds(restoreNight(snap)),80);enterMorning(s);assert.equal(s.lastNight.economy,16);assert.equal(s.nightEconomy,0);
-  beginBattle(s);while(s.phase==='battle')stepBattle(s);assert.equal(s.economyEarned,32);
+  assert.equal(s.phase,'won');assert.equal(s.nightEconomy,8);assert.equal(funds(s),44);settleEconomy(s);assert.equal(funds(s),44);
+  assert.equal(funds(restoreNight(snap)),36);enterMorning(s);assert.equal(s.lastNight.economy,8);assert.equal(s.nightEconomy,0);
+  beginBattle(s);while(s.phase==='battle')stepBattle(s);assert.equal(s.economyEarned,16);
   const lost=restoreNight(snap);lost.hp=1;beginBattle(lost);while(lost.phase==='battle')stepBattle(lost);assert.equal(lost.phase,'lost');assert.equal(lost.economyEarned,0);
 });
 test('前哨失守仅停止真正失控的生产，重叠控制继续收益，修复恢复下晚预估',async()=>{
   const {createCampaign,buildProduction,buildOutpost,beginBattle,expectedIncome,enterMorning}=await import('../src/model.js');
   const s=createCampaign();buildOutpost(s,key(7,17));buildProduction(s,key(3,17));buildProduction(s,key(11,24));
   s.day=2;s.sources=[{x:7,y:16,hp:10,count:1,first:1,interval:1,target:key(7,17)}];lockAttacks(s);beginBattle(s);
-  while(s.phase==='battle')stepBattle(s);assert.equal(s.nightEconomy,8);assert.equal(s.production.size,2);
-  enterMorning(s);assert.equal(expectedIncome(s),8);assert.equal(buildOutpost(s,key(7,17),true),'');assert.equal(expectedIncome(s),16);
+  while(s.phase==='battle')stepBattle(s);assert.equal(s.nightEconomy,4);assert.equal(s.production.size,2);
+  enterMorning(s);assert.equal(expectedIncome(s),4);assert.equal(buildOutpost(s,key(7,17),true),'');assert.equal(expectedIncome(s),8);
   const overlap=createCampaign();buildOutpost(overlap,key(7,17));buildOutpost(overlap,key(8,18));buildProduction(overlap,key(3,17));
   overlap.day=2;overlap.sources=[{x:7,y:16,hp:10,count:1,first:1,interval:1,target:key(7,17)}];lockAttacks(overlap);beginBattle(overlap);
-  while(overlap.phase==='battle')stepBattle(overlap);assert.equal(overlap.nightEconomy,8);
+  while(overlap.phase==='battle')stepBattle(overlap);assert.equal(overlap.nightEconomy,4);
 });
 
 test('多格街区任意格操作同一投资，整块控制及边缘失控停产',async()=>{
   const {createCampaign,productionCells,productionControlled,productionError,buildProduction,removeProduction,expectedIncome,buildOutpost}=await import('../src/model.js');
   const s=createCampaign();
   assert.equal(productionCells(key(12,25)).length,4);assert.equal(buildProduction(s,key(12,25)),'');
-  assert.equal(s.production.size,1);assert.equal(funds(s),90);assert.ok(buildProduction(s,key(11,24)));
+  assert.equal(s.production.size,1);assert.equal(funds(s),68);assert.ok(buildProduction(s,key(11,24)));
   assert.ok(changeWall(s,key(12,25)));assert.ok(buildOutpost(s,key(12,25)));
   assert.equal(removeProduction(s,key(11,25)),'');assert.equal(funds(s),100);
   assert.equal(buildOutpost(s,key(7,22)),'');assert.equal(productionControlled(s,key(2,22)),true);
-  assert.equal(buildProduction(s,key(4,24)),'');assert.equal(funds(s),50);assert.equal(expectedIncome(s),20);
+  assert.equal(buildProduction(s,key(4,24)),'');assert.equal(funds(s),3);assert.equal(expectedIncome(s),9);
+  assert.match(productionError(s,key(11,24)),/资金不足/);
   s.phase='battle';s.lostControl.add(key(4,24));assert.equal(expectedIncome(s),0);
-  s.phase='build';assert.equal(expectedIncome(s),20);
+  s.phase='build';assert.equal(expectedIncome(s),9);
   const partial=createCampaign({...DEFAULTS,controlRadius:1});assert.match(productionError(partial,key(11,24)),/缺.*格控制/);
 });
-test('街区布局不重叠、不覆盖固定墙和源头，两类成本独立',async()=>{
+test('街区布局不重叠、不覆盖固定墙和源头，占地统一按每格单价计算',async()=>{
   const {PRODUCTION_SITES}=await import('../src/config.js');
   const {createCampaign,productionCells,buildProduction,productionQuote,validateParams}=await import('../src/model.js');
   const s=createCampaign(),seen=new Set();
   for(const p of PRODUCTION_SITES)for(const id of productionCells(key(p.x,p.y))){assert.ok(!seen.has(id));assert.ok(!s.walls.has(id));assert.notEqual(id,s.camp);seen.add(id);}
   for(const source of s.waves.flat())assert.ok(!seen.has(key(source.x,source.y)));
-  const params={...DEFAULTS,largeProductionCost:99};assert.equal(productionQuote({...s,params},key(2,22)).cost,99);
-  assert.equal(productionQuote({...s,params},key(11,24)).cost,10);
+  const params={...DEFAULTS,productionCostPerCell:9,productionIncomePerCell:2};
+  assert.deepEqual(productionQuote({...s,params},key(2,22)),{area:9,cost:81,income:18});
+  assert.deepEqual(productionQuote({...s,params},key(11,24)),{area:4,cost:36,income:8});
   buildProduction(s,key(11,24));assert.ok(validateParams({...DEFAULTS,controlRadius:3},s));
+  assert.match(validateParams({...DEFAULTS,productionCostPerCell:NaN},s),/每格/);
+  assert.match(validateParams({...DEFAULTS,productionIncomePerCell:0},s),/每格/);
+});
+
+test('自定义击杀金币按原始成员累计，奖励金额与消灭数量分开',()=>{
+  const s=createState([{x:1,y:1,hp:1,count:1,first:100,interval:1}]);s.params.killReward=5;s.phase='battle';
+  s.field.next=new Map([[1,3],[2,3]]);s.towers.set(3,'A');
+  s.enemies=[{id:1,hp:1,max:1,members:1,sources:[0]},{id:2,hp:1,max:2,members:2,sources:[1]}];
+  stepBattle(s);const killed=s.events.find(e=>e.type==='kill');
+  assert.equal(s.earned,15);assert.equal(s.nightEarned,15);assert.equal(s.removed,3);assert.equal(killed.value,15);assert.equal(killed.members,3);
+  stepBattle(s);assert.equal(s.earned,15);
+  assert.match(validateParams({...s.params,killReward:1.5},s),/击杀奖励/);
 });
 
 test('前哨失守后在场与后续批次保持原目标和路线，不转攻火光',()=>{
@@ -287,19 +302,19 @@ test('前哨失守后在场与后续批次保持原目标和路线，不转攻�
 
 test('当天撤销、旧设施零退款、修复不刷新日期，拆建及重试不制造资金',async()=>{
   const {buildTower,removeTower,demolitionQuote,removeProduction}=await import('../src/model.js');
-  const s=createCampaign(),wall=key(14,18),tower=key(13,18),post=key(15,16);
+  const s=createCampaign({...DEFAULTS,budget:200}),wall=key(14,18),tower=key(13,18),post=key(15,16);
   changeWall(s,wall);buildTower(s,tower,'A');buildOutpost(s,post);
   const {buildProduction}=await import('../src/model.js');buildProduction(s,key(11,24));
   const prior=funds(s);s.day=2;
   s.outposts.get(post).hp=4;buildOutpost(s,post,true);assert.equal(demolitionQuote(s,post).refund,0);
   assert.equal(removeTower(s,tower),'');assert.equal(changeWall(s,wall,true),'');assert.equal(removeOutpost(s,post),'');assert.equal(removeProduction(s,key(12,25)),'');
-  assert.equal(funds(s),prior-6);assert.equal(s.demolitionSpent,47);
+  assert.equal(funds(s),prior-6);assert.equal(s.demolitionSpent,69);
   changeWall(s,wall);buildTower(s,tower,'A');buildOutpost(s,post);
   assert.equal(demolitionQuote(s,post).refund,25);const snapshot=beginBattle(s);
   assert.ok(removeTower(s,tower));assert.ok(removeOutpost(s,post));assert.ok(changeWall(s,wall,true));
   const retry=restoreNight(snapshot);assert.equal(demolitionQuote(retry,tower).refund,10);
   removeTower(retry,tower);changeWall(retry,wall,true);removeOutpost(retry,post);assert.equal(funds(retry),prior-6);
-  assert.equal(funds(restartCampaign(retry)),100);
+  assert.equal(funds(restartCampaign(retry)),200);
 });
 test('夜间独立补炮建造日保留到次日，损坏维修不刷新建造日',()=>{
   const s=createCampaign(),id=key(14,18);s.day=2;
@@ -315,7 +330,7 @@ test('默认五晚可完整推进，第四第五晚预告合法，最后一晚�
   for(let day=1;day<=5;day++){
     assert.equal(validateSources(s.sources,s),'');beginBattle(s);
     for(let tick=0;s.phase==='battle'&&tick<300;tick++)stepBattle(s);
-    assert.equal(s.phase,'won');assert.equal(s.economyEarned,day*8);settleEconomy(s);assert.equal(s.economyEarned,day*8);
+    assert.equal(s.phase,'won');assert.equal(s.economyEarned,day*4);settleEconomy(s);assert.equal(s.economyEarned,day*4);
     assert.equal(campaignComplete(s),day===5);assert.equal(enterMorning(s),day<5);
   }
   assert.equal(s.day,5);assert.equal(beginBattle(s),null);
@@ -326,11 +341,11 @@ test('昨夜经营报告固定停产数量与少收金额，次日修复和拆�
   const s=createCampaign();buildProduction(s,key(11,24));buildProduction(s,key(19,26));
   const snapshot=beginBattle(s);s.lostControl.add(key(12,25));s.phase='won';s.nightEarned=3;
   settleEconomy(s);
-  assert.equal(s.nightEconomy,8);assert.deepEqual(s.productionReport,{productive:1,stopped:1,missed:8});
-  settleEconomy(s);assert.equal(s.economyEarned,8);
-  enterMorning(s);assert.equal(s.lastNight.economy,8);assert.equal(s.lastNight.earned,3);
+  assert.equal(s.nightEconomy,4);assert.deepEqual(s.productionReport,{productive:1,stopped:1,missed:4});
+  settleEconomy(s);assert.equal(s.economyEarned,4);
+  enterMorning(s);assert.equal(s.lastNight.economy,4);assert.equal(s.lastNight.earned,3);
   s.lostControl.clear();removeProduction(s,key(19,26));
-  assert.equal(s.lastNight.productive,1);assert.equal(s.lastNight.stopped,1);assert.equal(s.lastNight.missed,8);
+  assert.equal(s.lastNight.productive,1);assert.equal(s.lastNight.stopped,1);assert.equal(s.lastNight.missed,4);
   assert.equal(restoreNight(snapshot).productionReport,null);
-  beginBattle(s);assert.equal(s.productionReport,null);assert.equal(s.lastNight.missed,8);
+  beginBattle(s);assert.equal(s.productionReport,null);assert.equal(s.lastNight.missed,4);
 });

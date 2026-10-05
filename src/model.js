@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=22';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=23';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -255,8 +255,8 @@ export function validateParams(params, state, checkLayout = true) {
     const w=params.weapons[type];
     if (!w || !['square','diamond'].includes(w.shape) || !integer(w.range,1,8) || !integer(w.power,1,99) || !integer(w.cost,1,1000)||!integer(w.hp,1,10000)) return `武器 ${type}：范围 1–8、火力 1–99、价格 1–1000、耐久 1–10000，均为整数。`;
   }
-  if (!integer(params.largeProductionCost,1,1000)||!integer(params.largeProductionIncome,1,1000)) return '大街区费用和收入须为 1–1000 整数。';
-  if (!integer(params.productionCost,1,1000)||!integer(params.productionIncome,1,1000)) return '生产恢复费用和每晚收入须为 1–1000 整数。';
+  if (!integer(params.productionCostPerCell,1,1000)||!integer(params.productionIncomePerCell,1,1000)) return '每格生产恢复费用和每格每晚收入须为 1–1000 整数。';
+  if (!integer(params.killReward,0,1000)) return '每个敌人击杀奖励须为 0–1000 整数。';
   if (checkLayout && [...state.playerWalls,...state.towers.keys(),...[...state.production.keys()].flatMap(id=>productionCells(id,state))].some(id=>!inControl({...state,params},id,params.controlRadius))) return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
   if (checkLayout && funds({...state,params}) < 0) return '按新价格计算，现有布局超出预算（含经营与前哨）。请提高资金，或取消预览后拆除设施。';
   return '';
@@ -326,8 +326,9 @@ export function stepBattle(state,actions=null) {
     if(damage)state.events.push({type:'hit',id:enemy.id,target:enemy.target,value:damage});
     if(enemy.hp<=0){
       // 仍按原始成员发击杀奖励；攻抵目标或撤离不发钱。
-      state.earned+=enemy.members;state.nightEarned+=enemy.members;state.removed+=enemy.members;
-      state.events.push({type:'kill',id:enemy.id,target:enemy.target,value:enemy.members});
+      const reward=enemy.members*state.params.killReward;
+      state.earned+=reward;state.nightEarned+=reward;state.removed+=enemy.members;
+      state.events.push({type:'kill',id:enemy.id,target:enemy.target,value:reward,members:enemy.members});
     }else if(enemy.id===enemy.target){
       // 战略目标暂沿用剩余 HP 的一次性伤害；攻击完成退场，绝不换目标。
       if(enemy.target===state.camp){
@@ -375,8 +376,9 @@ export function productionCells(id,state) {
   const p=productionSite(id,state);return p?Array.from({length:(p.width??p.size)*(p.height??p.size)},(_,i)=>key(p.x+i%(p.width??p.size),p.y+Math.floor(i/(p.width??p.size)))):[];
 }
 export function productionQuote(state,id) {
-  const p=productionSite(id,state),large=p&&((p.width??p.size)*(p.height??p.size)>4);
-  return {cost:large?state.params.largeProductionCost:state.params.productionCost,income:large?state.params.largeProductionIncome:state.params.productionIncome};
+  // 按街区实际占地报价，矩形和特殊大街区共用每格单价。
+  const p=productionSite(id,state),area=p?(p.width??p.size)*(p.height??p.size):0;
+  return {area,cost:area*state.params.productionCostPerCell,income:area*state.params.productionIncomePerCell};
 }
 export const productionControlled=(state,id)=>productionCells(id,state).length>0&&productionCells(id,state).every(cell=>inControl(state,cell));
 export const productionActive=(state,id)=>productionControlled(state,id)&&(state.phase==='build'||productionCells(id,state).every(cell=>incomeEligible(state,cell)));

@@ -1,5 +1,5 @@
-import { SIZE, DEFAULTS } from './config.js?v=22';
-import { demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=22';
+import { SIZE, DEFAULTS } from './config.js?v=23';
+import { demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=23';
 import {generateCityMap} from './city-map.js?v=3';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -101,7 +101,7 @@ function draw() {
   const hoveredSite=hover!==null?productionSite(hover,state):null;
   if(hoveredSite&&!state.production.has(productionId(hover,state))){
     const quote=productionQuote(state,hover);
-    $('placementInfo').textContent=`${hoveredSite.width??hoveredSite.size}×${hoveredSite.height??hoveredSite.size} 街区 · 整块恢复 ${quote.cost} 钱 · 每晚 +${quote.income}。`+(tool==='production'?(productionError(state,hover)||'点击任意位置恢复整块。'):'选择「恢复生产」后点击街区。');
+    $('placementInfo').textContent=`${hoveredSite.width??hoveredSite.size}×${hoveredSite.height??hoveredSite.size} 街区 · ${quote.area} 格 × ${state.params.productionCostPerCell} 钱 = ${quote.cost} 钱 · 每晚 ${quote.area} 格 × ${state.params.productionIncomePerCell} = +${quote.income}。`+(tool==='production'?(productionError(state,hover)||'点击任意位置恢复整块。'):'选择「恢复生产」后点击街区。');
   }
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
@@ -341,12 +341,12 @@ function update() {
   const w=selectedWeapon();
   $('toolInfo').textContent = ['build','long'].includes(tool) ? `${weaponType()==='A'?'近防炮':'远防炮'} · ${w.cost} 资金 · ${w.shape==='square'?'方形':'菱形'}范围 ${w.range} · HP ${w.hp} · 每拍火力 ${w.power}。独立建于道路或空场；敌人停留也持续受伤。损坏后停火，次日可维修。` : tool==='wall' ? `每格墙 ${state.params.wallCost} 资金 · HP ${state.params.wallHP}。允许封路，敌人沿锁定路线撞墙就攻击；墙为炮火争取时间。` : `当天新建全额退款，旧设施可清除但不退款；墙与炮塔分别拆除。固定墙不可拆；防守中不可拆除。`;
   if(tool==='outpost')$('toolInfo').textContent=`前哨 ${state.params.outpostCost} 资金 · HP ${state.params.outpostHP} · 范围 ${state.params.outpostRadius}。仅建于已有控制区内的绿色开放场地；无攻击能力；新建前哨从下一晚进入目标池，不改变今晚进攻。`;
-  if(tool==='repair')$('toolInfo').textContent=`次日点击受损火光、前哨、墙或损坏炮塔修满。前哨/火光按 HP 计费；墙与塔按损伤比例 × 造价 ${state.params.defenseRepairPercent}% 计费（向上取整）。悬停查看总价；失守前哨可原址修复。`;
-  if(tool==='production')$('toolInfo').textContent=`4 格及以下：${state.params.productionCost} 钱／每晚 +${state.params.productionIncome}；更大街区：${state.params.largeProductionCost} 钱／每晚 +${state.params.largeProductionIncome}。整块受控才能恢复，缺一格即停产；建筑街区始终阻路。当天修缮可撤销；旧街区不可清除。`;
+  if(tool==='repair')$('toolInfo').textContent=`次日点击受损火光、前哨、墙或损坏炮塔修满。前哨/火光按 HP 计费；墙与塔完全损坏时，维修费为造价的 ${state.params.defenseRepairPercent}%，部分受损按缺失 HP 比例计费（向上取整）。悬停查看总价；失守前哨可原址修复。`;
+  if(tool==='production')$('toolInfo').textContent=`按街区占地计费：每格恢复 ${state.params.productionCostPerCell} 钱，每格每晚 +${state.params.productionIncomePerCell}。例如 2×2 街区花 ${4*state.params.productionCostPerCell} 钱，每晚 +${4*state.params.productionIncomePerCell}。整块受控才能恢复，缺一格即停产；建筑街区始终阻路。当天修缮可撤销；旧街区不可清除。`;
   updateNightReport();
   $('mapConfigLink').href=`map-preview.html?${new URLSearchParams(mapSettings)}`;
   $('income').textContent=`预计经营 +${expectedIncome(state)} / 晚 · 已恢复 ${state.production.size} / ${state.sites.length}`;
-  const prices={wall:state.params.wallCost,build:state.params.weapons.A.cost,long:state.params.weapons.B.cost,outpost:state.params.outpostCost,production:`小 ${state.params.productionCost} / 大 ${state.params.largeProductionCost}`,repair:'按损伤报价',erase:'返还见预览'};
+  const prices={wall:state.params.wallCost,build:state.params.weapons.A.cost,long:state.params.weapons.B.cost,outpost:state.params.outpostCost,production:`${state.params.productionCostPerCell} / 格`,repair:'按损伤报价',erase:'返还见预览'};
   for(const [id,price] of Object.entries(prices))$('price-'+id).textContent=String(price);
   $('budget').textContent = funds(state); $('tick').textContent = state.tick;
   $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
@@ -363,7 +363,8 @@ function update() {
   $('start').textContent = active ? (paused ? '继续夜晚' : '暂停夜晚') : campaignComplete(state)?'实验完成':build?'开始夜晚':state.phase==='won'?'守住了 · 即将天亮':'防守结束';
   for (const id of ['build','long','wall','outpost','production','repair','erase','apply','addSource','applyParams','cancelParams','defaults']) $(id).disabled = !build;
   // 通用建造交互：不足价即禁用，退款或应用参数后立即恢复。
-  for(const [id,cost] of [['wall',state.params.wallCost],['build',state.params.weapons.A.cost],['long',state.params.weapons.B.cost],['outpost',state.params.outpostCost],['production',Math.min(state.params.productionCost,state.params.largeProductionCost)]]){
+  const minProductionCost=Math.min(...state.sites.map(p=>productionQuote(state,key(p.x,p.y)).cost));
+  for(const [id,cost] of [['wall',state.params.wallCost],['build',state.params.weapons.A.cost],['long',state.params.weapons.B.cost],['outpost',state.params.outpostCost],['production',minProductionCost]]){
     const short=funds(state)<cost;
     const allowed=build||(active&&['build','long'].includes(id));
     $(id).disabled=!allowed||short;
@@ -401,7 +402,7 @@ function updateForecast() {
     const row=document.createElement('li'),target=forecastAttacks(state,night)[i].target,name=target===state.camp?'火光':`前哨 (${xy(target)})`;
     const rule=s.target===-1?'指定火光':s.target===-2?'来袭方向前线':'指定前哨';
     row.style.setProperty('--source-color',colors[i%colors.length]);
-    row.textContent=`${i+1} · (${s.x},${s.y}) · ${s.count} 块 × ${s.hp} HP · 首拍 ${s.first} / 间隔 ${s.interval} · ${rule} → ${name}`;return row;
+    row.textContent=`${i+1} · (${s.x},${s.y}) · ${s.count} 块 × ${s.hp} HP · 拆墙/塔 ${state.params.enemyPower}/块/拍 · 击杀 ${state.params.killReward} 钱/块 · 首拍 ${s.first} / 间隔 ${s.interval} · ${rule} → ${name}`;return row;
   }));
 }
 $('forecastDay').onchange=()=>{updateForecast();draw();};
@@ -439,9 +440,9 @@ function paramsEditor(params) {
     }
     $('params').append(row);
   }
-  fields('全局',params,'',[['budget','资金',0,10000],['wallCost','墙价',1,1000],['wallHP','墙耐久',1,10000],['enemyPower','敌人每批每拍攻击',1,99],['defenseRepairPercent','墙/塔维修比例%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campRepairCost','火光修复单价/HP',1,1000]]);
-  fields('小街区（≤4 格）',params,'',[['productionCost','恢复费用',1,1000],['productionIncome','每晚收入',1,1000]]);
-  fields('大街区（>4 格）',params,'',[['largeProductionCost','恢复费用',1,1000],['largeProductionIncome','每晚收入',1,1000]]);
+  fields('全局',params,'',[['budget','资金',0,10000],['wallCost','墙价',1,1000],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙/塔伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙/塔造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campRepairCost','火光修复单价/HP',1,1000]]);
+  fields('街区生产（按占地）',params,'',[['productionCostPerCell','每格恢复费用',1,1000],['productionIncomePerCell','每格每晚收入',1,1000]]);
+  fields('击杀收益',params,'',[['killReward','每个原始敌人金币',0,1000]]);
   fields('前哨',params,'',[['outpostCost','造价',1,1000],['outpostHP','耐久',1,10000],['outpostRadius','半径',1,30],['repairCost','修复单价/HP',1,1000]]);
   for(const type of ['A','B'])fields(`武器 ${type}`,params.weapons[type],type+'.',[['shape','范围形状'],['range','半径',1,8],['power','每拍火力',1,99],['cost','价格',1,1000],['hp','炮塔耐久',1,10000]]);
 }
@@ -589,7 +590,7 @@ function advance() {
   for (const event of state.events) {
     const [x,y] = xy(event.id);
     const defenseText={wallHit:`墙 (${x},${y}) 受到 ${event.value} 点伤害`,towerHit:`炮塔 (${x},${y}) 受到 ${event.value} 点伤害`,wallLost:`墙 (${x},${y}) 被攻破，敌人将沿原路线推进`,towerLost:`炮塔 (${x},${y}) 损坏停火，次日可维修`,retreat:`敌群完成对前哨 (${x},${y}) 的攻击并退场，不转攻火光`};
-    const text = defenseText[event.type]|| (event.type==='postLost'?`前哨 (${x},${y}) 失守，独占区域失控`:event.type==='postHit'?`前哨 (${x},${y}) 受到 ${event.value} 点伤害`:event.type === 'merge' ? `(${x},${y}) ${event.members} 批合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.value} 批敌人，+${event.value} 资金` : `(${x},${y}) 火力削减 ${event.value}`);
+    const text = defenseText[event.type]|| (event.type==='postLost'?`前哨 (${x},${y}) 失守，独占区域失控`:event.type==='postHit'?`前哨 (${x},${y}) 受到 ${event.value} 点伤害`:event.type === 'merge' ? `(${x},${y}) ${event.members} 批合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.members} 批敌人，+${event.value} 资金` : `(${x},${y}) 火力削减 ${event.value}`);
     if(event.type==='merge'&&!explainedMerge){
       explainedMerge=true;$('mergeNotice').hidden=false;
       $('mergeNotice').textContent=`合流：${event.parts.join(' + ')} = ${event.value} HP。同格、同拍、同目标才合并；停留时每拍也扣该格叠加火力，整群消灭才获得合计金币。`;
