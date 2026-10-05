@@ -1,5 +1,5 @@
-import { SIZE, DEFAULTS } from './config.js?v=23';
-import { demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=23';
+import { SIZE, DEFAULTS } from './config.js?v=24';
+import { plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=24';
 import {generateCityMap} from './city-map.js?v=3';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -63,13 +63,13 @@ function draw() {
   const palette=Object.fromEntries(Object.keys(terrainColors).map(name=>[name,terrainColor(name)]));
   const controlState={...state,params:previewParams()};
   const controlRadius = controlState.params.controlRadius;
-  const wallEdit = hover !== null && state.phase === 'build' && (tool==='wall'||(tool==='erase'&&!state.towers.has(hover)&&!state.production.has(productionId(hover,state))));
+  const wallEdit = hover !== null && state.phase === 'build' && (tool==='wall'||(tool==='erase'&&!productionSite(hover,state)&&!state.towers.has(hover)));
   const candidate = wallEdit ? wallPreview(state,hover,tool==='erase') : null;
   const repairHover=hover!==null&&state.phase==='build'&&tool==='repair';
-  const postHover=hover!==null&&state.phase==='build'&&(tool==='outpost'||(tool==='repair'&&(hover===state.camp||state.outposts.has(hover))));
-  const postError=postHover?(paramsDirty()?'请先应用或取消参数预览。':outpostError(state,hover,tool==='repair')):'';
+  const postHover=hover!==null&&state.phase==='build'&&tool==='outpost';
+  const postError=postHover?(paramsDirty()?'请先应用或取消参数预览。':outpostError(state,hover)):'';
   const postGhost=postHover&&!postError;
-  const previewState=postGhost&&hover!==state.camp?{...state,outposts:new Map([...state.outposts,[hover,{hp:state.params.outpostHP,max:state.params.outpostHP}]])}:state;
+  const previewState=postGhost?{...state,outposts:new Map([...state.outposts,[hover,{plotId:productionId(hover,state),day:state.day}]])}:state;
   const plannedRoutes=forecastAttacks(state,Number($('forecastDay').value)+1);
   const sourcePath=source=>plannedRoutes[viewedSources().indexOf(source)]?.path||[];
   const weaponHover=hover!==null&&canBuildWeapon()&&['build','long'].includes(tool);
@@ -84,24 +84,26 @@ function draw() {
   if(tool==='wall'&&candidate){
     $('placementInfo').textContent=candidate.error||`建墙预览 · 花费 ${state.params.wallCost} · HP ${state.params.wallHP}。可封住道路；今晚路线不变，敌人撞墙后攻击。`;
   }
-  if(postHover)$('placementInfo').textContent=postError||`${tool==='repair'?'修复':'建设'}预览 · ${Array.from({length:SIZE*SIZE},(_,id)=>id).filter(id=>inControl(previewState,id)&&!inControl(state,id)).length} 格恢复或新增控制 · 花费 ${tool==='repair'?repairQuote(state,hover).cost:state.params.outpostCost}${tool==='repair'?` · 恢复 ${repairQuote(state,hover).missing} HP`:''}`;
+  if(postHover)$('placementInfo').textContent=postError||`建设预览 · ${Array.from({length:SIZE*SIZE},(_,id)=>id).filter(id=>inControl(previewState,id)&&!inControl(state,id)).length} 格新增控制 · 花费 ${state.params.outpostCost}`;
 
-  if(repairHover&&!postHover){const quote=repairQuote(state,hover);$('placementInfo').textContent=repairError(state,hover)||`维修预览 · 恢复 ${quote.missing} HP · 花费 ${quote.cost} · 原有建造日期不变`;}
+  if(repairHover){const quote=repairQuote(state,hover);$('placementInfo').textContent=repairError(state,hover)||`维修预览 · 恢复 ${quote.missing} HP · 花费 ${quote.cost} · 原有建造日期不变`;}
 
   if(postGhost){
-    const sites=state.sites.map(p=>key(p.x,p.y)).filter(id=>!state.production.has(id)&&productionControlled(previewState,id)&&!productionControlled(state,id));
+    const sites=state.sites.map(p=>key(p.x,p.y)).filter(id=>id!==productionId(hover,state)&&plotContent(state,id).type!=='outpost'&&!state.production.has(id)&&productionControlled(previewState,id)&&!productionControlled(state,id));
     $('placementInfo').textContent+=` · 新纳入 ${sites.length} 处生产机会：另需 ${sites.reduce((n,id)=>n+productionQuote(state,id).cost,0)} 钱恢复，可增 ${sites.reduce((n,id)=>n+productionQuote(state,id).income,0)}/晚（尚未入账）`;
   }
   if(tool==='production'&&hover!==null)$('placementInfo').textContent=productionError(state,hover)||`整块恢复预览 · 每晚收入 +${productionQuote(state,hover).income} · 花费 ${productionQuote(state,hover).cost} · 剩余 ${funds(state)-productionQuote(state,hover).cost}`;
 
   if(tool==='erase'&&hover!==null&&state.phase==='build'){
     const quote=demolitionQuote(state,hover);
-    $('placementInfo').textContent=!quote.type?'这里没有可拆设施；固定墙与火光不可拆。':`第 ${quote.day} 天建造 · ${quote.day===state.day?'当天撤销':'旧设施清除'} · 返还 ${quote.refund} 金币${quote.type==='outpost'?'，须先解除控制依赖，今晚锁定目标不可拆':''}`;
+    $('placementInfo').textContent=quote.type==='ruin'?'清理整块废墟 · 免费、即时变为空地 · 可换建前哨或生产设施':!quote.type?'这里没有可拆设施；固定墙与火光不可拆。':`第 ${quote.day} 天建造 · ${quote.day===state.day?'当天撤销':'旧设施清除'} · 返还 ${quote.refund} 金币${productionSite(hover,state)?' · 拆后变为空地':''}${quote.type==='outpost'?'，须先解除控制依赖':''}`;
   }
   const hoveredSite=hover!==null?productionSite(hover,state):null;
-  if(hoveredSite&&!state.production.has(productionId(hover,state))){
-    const quote=productionQuote(state,hover);
-    $('placementInfo').textContent=`${hoveredSite.width??hoveredSite.size}×${hoveredSite.height??hoveredSite.size} 街区 · ${quote.area} 格 × ${state.params.productionCostPerCell} 钱 = ${quote.cost} 钱 · 每晚 ${quote.area} 格 × ${state.params.productionIncomePerCell} = +${quote.income}。`+(tool==='production'?(productionError(state,hover)||'点击任意位置恢复整块。'):'选择「恢复生产」后点击街区。');
+  if(hoveredSite){
+    const quote=productionQuote(state,hover),content=plotContent(state,hover);
+    const summary=`${hoveredSite.width??hoveredSite.size}×${hoveredSite.height??hoveredSite.size} 地块 · ${quote.area} 格 · ${content.status==='empty'?'空地':content.status==='ruin'?'生产废墟':content.type==='outpost'?'前哨建筑':'生产建筑'}。`;
+    if(tool==='production')$('placementInfo').textContent=summary+`生产费用 ${quote.cost} 钱 · 每晚 +${quote.income} · 正常生产 ${Math.ceil(quote.cost/quote.income)} 晚回本。`+(productionError(state,hover)||'点击修缮或新建整块。');
+    else $('placementInfo').textContent=summary+($('placementInfo').textContent||'选择生产、前哨或拆除 / 清理工具。');
   }
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
@@ -111,7 +113,7 @@ function draw() {
     ctx.fillRect(x, y, 1, 1);
     if ($('heat').checked && power) { ctx.fillStyle = `rgba(99,211,166,${Math.min(.6,.17 + power * .045)})`; ctx.fillRect(x, y, 1, 1); }
     if(state.layout?.tiles[id]==='road'){ctx.fillStyle=nightMix>.5?'#293c4d':'#7d8888';ctx.fillRect(x,y,1,1);}
-    if(state.layout?.tiles[id]==='open'){ctx.fillStyle=nightMix>.5?'#2c4841':'#77967b';ctx.fillRect(x,y,1,1);}
+    if(productionSite(id,state)&&plotContent(state,id).status==='empty'){ctx.fillStyle=nightMix>.5?'#2c4841':'#77967b';ctx.fillRect(x,y,1,1);}
     if (state.walls.has(id)&&!state.blocked.has(id)) {
       ctx.fillStyle = palette.wall; ctx.fillRect(x + .05, y + .05, .9, .9);
       ctx.fillStyle='#0c171c77';ctx.fillRect(x+.05,y+.78,.9,.17);
@@ -122,12 +124,11 @@ function draw() {
     if(wallBody?.hp===0){ctx.fillStyle='#956b57';ctx.fillRect(x+.1,y+.6,.8,.24);ctx.strokeStyle='#dfaa81';ctx.lineWidth=.06;ctx.beginPath();ctx.moveTo(x+.2,y+.2);ctx.lineTo(x+.8,y+.8);ctx.stroke();}
     if(wallBody&&wallBody.hp>0&&wallBody.hp<wallBody.max){ctx.fillStyle='#533a32';ctx.fillRect(x+.1,y+.85,.8,.1);ctx.fillStyle='#ecc58f';ctx.fillRect(x+.1,y+.85,.8*wallBody.hp/wallBody.max,.1);}
     if(postGhost&&inControl(previewState,id)&&!inControl(state,id)){ctx.fillStyle='#f0d18b66';ctx.fillRect(x,y,1,1);}
-    if(state.lostControl.has(id)){ctx.fillStyle='#dc686638';ctx.fillRect(x,y,1,1);}
     if (!inControl(controlState,id,controlRadius)) {ctx.fillStyle='#07121577';ctx.fillRect(x,y,1,1);}
     else {
       ctx.fillStyle='#7fc8e810';ctx.fillRect(x,y,1,1);
       // 控制范围不等于建造格：只标出当前工具符合地形条件的位置。
-      const eligible = tool==='wall' ? !productionSite(id,state)&&!state.walls.has(id)&&!state.playerWalls.has(id)&&!state.towers.has(id)&&!state.outposts.has(id)&&id!==state.camp&&!reservedSources(state).some(a=>key(a.x,a.y)===id) : ['build','long'].includes(tool)&&!state.walls.has(id)&&!state.playerWalls.has(id)&&!productionSite(id,state)&&!state.towers.has(id)&&!state.outposts.has(id)&&id!==state.camp&&!reservedSources(state).some(a=>key(a.x,a.y)===id);
+      const eligible = tool==='wall' ? !state.blocked.has(id)&&!state.walls.has(id)&&!state.playerWalls.has(id)&&!state.towers.has(id)&&!state.outposts.has(id)&&id!==state.camp&&!reservedSources(state).some(a=>key(a.x,a.y)===id) : ['build','long'].includes(tool)&&!state.walls.has(id)&&!state.playerWalls.has(id)&&!state.blocked.has(id)&&!state.towers.has(id)&&!state.outposts.has(id)&&id!==state.camp&&!reservedSources(state).some(a=>key(a.x,a.y)===id);
       if((state.phase==='build'||(state.phase==='battle'&&['build','long'].includes(tool)))&&eligible){ctx.fillStyle='#a9d4cb55';ctx.fillRect(x+.46,y+.46,.08,.08);}
       ctx.strokeStyle='#86ccea';ctx.lineWidth=.08;ctx.setLineDash([.16,.12]);ctx.beginPath();
       for(const [dx,dy,a,b,c,d] of [[-1,0,x,y,x,y+1],[1,0,x+1,y,x+1,y+1],[0,-1,x,y,x+1,y],[0,1,x,y+1,x+1,y+1]]) {
@@ -145,7 +146,7 @@ function draw() {
   if(nightMix>0){
     ctx.save();ctx.globalAlpha=nightMix;
     if(state.hp>0){const [x,y]=xy(state.camp);lamp(x+.5,y+.5,3,'#ffbe6855');}
-    for(const [id,p] of state.outposts)if(p.hp>0){const [x,y]=xy(id);lamp(x+.5,y+.5,1.7,'#9bddf344');}
+    for(const [id,p] of state.outposts){const [x,y]=xy(id);lamp(x+.5,y+.5,1.7,'#9bddf344');}
     for(const p of state.sites)if(state.production.has(key(p.x,p.y))&&productionActive(state,key(p.x,p.y)))lamp(p.x+(p.width??p.size)/2,p.y+(p.height??p.size)/2,Math.max(p.width??p.size,p.height??p.size),'#f4d68b33');
     ctx.restore();
   }
@@ -186,8 +187,9 @@ function draw() {
     if(!state.walls.has(id)) label((fire.get(id)||0)+(changed?weapon.power:0),x+.5,y+.5,changed?'#f0ffad':'#b8f1d3',changed?.43:.35);
   }
   for(const p of state.sites){
-    const {x,y}=p,n=p.width??p.size,m=p.height??p.size,id=key(x,y),built=state.production.has(id),active=built&&productionActive(state,id),selected=productionId(hover,state)===id;
+    const {x,y}=p,n=p.width??p.size,m=p.height??p.size,id=key(x,y),built=state.production.has(id),active=built&&productionActive(state,id),selected=productionId(hover,state)===id,empty=plotContent(state,id).status==='empty';
     // 悬停时把街区作为一个操作对象，盖住内部格线，避免误认为逐格恢复。
+    if(empty){ctx.strokeStyle=selected?'#fff0ae':'#a8d5ad';ctx.lineWidth=selected?.12:.06;ctx.setLineDash([.2,.12]);ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);ctx.setLineDash([]);continue;}
     ctx.fillStyle=selected?(active?'#527e59':built?'#80594e':'#655f3d'):active?'#527e59':built?'#80594e':nightMix>.5?'#494b42':'#81745b';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);
     ctx.strokeStyle=selected?'#fff0ae':productionControlled(previewState,id)?'#f5d789':'#a29670';ctx.lineWidth=selected?.12:.06;ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);
     // 街区内多栋建筑仅用于表现；矩形整体仍是单次修缮对象。
@@ -210,9 +212,9 @@ function draw() {
   }
   for(const [id,p] of previewState.outposts){
     const [x,y]=xy(id);ctx.save();if(postGhost&&id===hover)ctx.globalAlpha=.5;
-    ctx.fillStyle=p.hp>0?'#8ecbe5':'#85645b';ctx.fillRect(x+.16,y+.3,.68,.6);
+    ctx.fillStyle='#8ecbe5';ctx.fillRect(x+.16,y+.3,.68,.6);
     ctx.fillRect(x+.45,y+.05,.08,.5);ctx.fillRect(x+.53,y+.05,.32,.22);
-    if(p.hp>0&&nightMix>0){ctx.fillStyle=`rgba(255,233,163,${nightMix})`;ctx.fillRect(x+.3,y+.48,.14,.18);ctx.fillRect(x+.57,y+.48,.14,.18);}
+    if(nightMix>0){ctx.fillStyle=`rgba(255,233,163,${nightMix})`;ctx.fillRect(x+.3,y+.48,.14,.18);ctx.fillRect(x+.57,y+.48,.14,.18);}
     ctx.restore();
   }
   // 敌源共用红色切角轮廓；细色条仅对应路线，不暗示不同敌种。
@@ -285,12 +287,14 @@ function draw() {
     if((motion?.actors||state.enemies).some(e=>cells.includes(e.id)||cells.includes(e.to)))continue;
     const x=panX+(p.x+(p.width??p.size)/2)*size,y=panY+(p.y+(p.height??p.size)/2)*size;
     if(!built&&productionId(hover,state)!==id&&!productionControlled(state,id))continue;
-    const title=built?(active?'生产中':'已停产'):p.special?'特殊设施':'待恢复';
+    const content=plotContent(state,id),post=content.type==='outpost';
+    if(cells.includes(state.camp))continue;
+    const title=post?'前哨':built?(active?'生产中':'已停产'):content.status==='empty'?'空地':'生产废墟';
     ctx.font='600 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
-    const w=Math.max(ctx.measureText(title).width+8,42);
+    const w=Math.max(ctx.measureText(title).width+8,48);
     ctx.fillStyle='#142024ed';ctx.fillRect(x-w/2,y-14,w,30);
     ctx.fillStyle=active?'#bff5ce':built?'#ffb7a5':'#f5df9c';ctx.fillText(title,x,y-6);
-    ctx.font='10px system-ui';ctx.fillText(built&&!active?'收入 0':`+${productionQuote(state,id).income}/晚`,x,y+8);
+    ctx.font='10px system-ui';ctx.fillText(post?'不受击':built&&!active?'收入 0':content.status==='empty'?'可选建筑':`+${productionQuote(state,id).income}/晚`,x,y+8);
   }
   // 建设反馈跟随地图位置；短暂边框与金额提示不参与规则结算。
   if(placementFx){
@@ -309,12 +313,6 @@ function draw() {
   ctx.fillText(`HP ${Math.max(0,state.hp)} / ${state.params.campHP}`,campX,campY+8);
   ctx.fillStyle='#553a32';ctx.fillRect(campX-27,campY+17,54,4);
   ctx.fillStyle='#ffc17c';ctx.fillRect(campX-27,campY+17,54*Math.max(0,state.hp)/state.params.campHP,4);
-  for(const [id,p] of state.outposts){
-    const [x,y]=xy(id),sx=panX+(x+.5)*size,sy=panY+y*size-21;
-    ctx.fillStyle='#11191cee';ctx.fillRect(sx-33,sy,66,20);ctx.fillStyle=p.hp>0?'#bce8fb':'#ffaca0';
-    ctx.fillText(p.hp>0?`${p.hp}/${p.max}`:'失守',sx,sy+7);
-    ctx.fillStyle='#553a32';ctx.fillRect(sx-28,sy+15,56,3);ctx.fillStyle='#8ecbe5';ctx.fillRect(sx-28,sy+15,56*p.hp/p.max,3);
-  }
   ctx.textBaseline='alphabetic';
   // 坐标标记帮助修改源头；屏幕字号不随棋盘缩小。
   ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillStyle='#81999c';
@@ -323,10 +321,9 @@ function draw() {
   if (hover !== null) {
     const [x,y] = xy(hover), enemy = state.enemies.find(e=>e.id===hover);
     $('cellInfo').textContent = `格子 (${x}, ${y}) · ${inControl(controlState,hover,controlRadius)?'控制范围内':'控制范围外'} · 每拍火力 ${fire.get(hover)||0} · ${state.walls.has(hover)?'不可通行':'可通行'}${state.towers.has(hover)?` · 炮塔 ${state.towers.get(hover)} HP ${state.towerHealth.get(hover)?.hp}/${state.towerHealth.get(hover)?.max}${state.towerHealth.get(hover)?.hp===0?'（损坏停火）':''}`:''}${state.wallHealth.has(hover)?` · 墙 HP ${state.wallHealth.get(hover).hp}/${state.wallHealth.get(hover).max}`:''}${enemy?` · 敌群 ${enemy.hp}/${enemy.max}（${Math.round(enemy.hp/enemy.max*100)}%） · ${enemy.members} 批`:''}`;
-    if(productionSite(hover,state))$('cellInfo').textContent+=state.production.has(productionId(hover,state))?` · 生产点 ${productionActive(state,hover)?'已恢复':'失控停产'} · ${productionQuote(state,hover).income} 钱/晚`:` · 待恢复生产点 · 费用 ${productionQuote(state,hover).cost} · 收入 ${productionQuote(state,hover).income}/晚`;
-    const post=state.outposts.get(hover);if(post)$('cellInfo').textContent+=` · 前哨 ${post.hp}/${post.max}`;
-    if(state.lostControl.has(hover))$('cellInfo').textContent+=state.phase==='build'?' · 上晚失控记录':' · 当晚失控，无收益资格';
-    const groups=state.enemies.filter(e=>e.id===hover);if(groups.length)$('cellInfo').textContent+=groups.map(e=>` · ${e.hp}/${e.max} → ${e.target===state.camp?'火光':`前哨(${xy(e.target)})`}`).join('');
+    if(productionSite(hover,state)&&plotContent(state,hover).type!=='outpost')$('cellInfo').textContent+=state.production.has(productionId(hover,state))?` · 生产点 ${productionActive(state,hover)?'已恢复':'失控停产'} · ${productionQuote(state,hover).income} 钱/晚`:` · 待恢复生产点 · 费用 ${productionQuote(state,hover).cost} · 收入 ${productionQuote(state,hover).income}/晚`;
+    if(outpostAt(state,hover)!==undefined)$('cellInfo').textContent+=' · 前哨不可受击、不失守';
+    const groups=state.enemies.filter(e=>e.id===hover);if(groups.length)$('cellInfo').textContent+=groups.map(e=>` · ${e.hp}/${e.max} → ${'火光'}`).join('');
     if(candidate) $('cellInfo').textContent += candidate.error ? ` · ${candidate.error}` : ' · 今晚路线已锁定，墙只阻挡敌人';
   } else $('cellInfo').textContent = '单击建造 · 拖动平移 · 滚轮缩放 · 悬停看生命';
 }
@@ -340,13 +337,15 @@ function update() {
   $('toolHeading').textContent=daytime?'建设工具 · 悬停棋盘预览':'夜间补炮 · 独立建于道路或空场';
   const w=selectedWeapon();
   $('toolInfo').textContent = ['build','long'].includes(tool) ? `${weaponType()==='A'?'近防炮':'远防炮'} · ${w.cost} 资金 · ${w.shape==='square'?'方形':'菱形'}范围 ${w.range} · HP ${w.hp} · 每拍火力 ${w.power}。独立建于道路或空场；敌人停留也持续受伤。损坏后停火，次日可维修。` : tool==='wall' ? `每格墙 ${state.params.wallCost} 资金 · HP ${state.params.wallHP}。允许封路，敌人沿锁定路线撞墙就攻击；墙为炮火争取时间。` : `当天新建全额退款，旧设施可清除但不退款；墙与炮塔分别拆除。固定墙不可拆；防守中不可拆除。`;
-  if(tool==='outpost')$('toolInfo').textContent=`前哨 ${state.params.outpostCost} 资金 · HP ${state.params.outpostHP} · 范围 ${state.params.outpostRadius}。仅建于已有控制区内的绿色开放场地；无攻击能力；新建前哨从下一晚进入目标池，不改变今晚进攻。`;
-  if(tool==='repair')$('toolInfo').textContent=`次日点击受损火光、前哨、墙或损坏炮塔修满。前哨/火光按 HP 计费；墙与塔完全损坏时，维修费为造价的 ${state.params.defenseRepairPercent}%，部分受损按缺失 HP 比例计费（向上取整）。悬停查看总价；失守前哨可原址修复。`;
-  if(tool==='production')$('toolInfo').textContent=`按街区占地计费：每格恢复 ${state.params.productionCostPerCell} 钱，每格每晚 +${state.params.productionIncomePerCell}。例如 2×2 街区花 ${4*state.params.productionCostPerCell} 钱，每晚 +${4*state.params.productionIncomePerCell}。整块受控才能恢复，缺一格即停产；建筑街区始终阻路。当天修缮可撤销；旧街区不可清除。`;
+  if(tool==='outpost')$('toolInfo').textContent=`前哨 ${state.params.outpostCost} 资金 · 范围 ${state.params.outpostRadius}。在地块内受控位置建设，须整块为空地；废墟先清理。占用整块地并立即扩张控制，不受击、不失守；敌人仍攻击火光。`;
+  if(tool==='repair')$('toolInfo').textContent=`次日点击受损火光、墙或损坏炮塔修满。火光按 HP 计费；墙与塔完全损坏时，维修费为造价的 ${state.params.defenseRepairPercent}%，部分受损按缺失 HP 比例计费（向上取整）。前哨不受击，无需维修。`;
+  if(tool==='production')$('toolInfo').textContent=`小地块回款快，大地块持续产出高。4×4 基准费用 ${16*state.params.productionCostPerCell}、每晚 +${16*state.params.productionIncomePerCell}；悬停看实际报价与回本时间。整块受控才可修缮或新建。地块建筑不受击，挡路时敌人绕行。`;
+  if(tool==='erase')$('toolInfo').textContent='点击废墟免费清理整块，变为空地后可换建。当天建筑拆除全额退款，旧建筑不退款；墙与炮塔分别拆除。前哨拆除须先解除外围控制依赖，火光地块保留。';
+
   updateNightReport();
   $('mapConfigLink').href=`map-preview.html?${new URLSearchParams(mapSettings)}`;
-  $('income').textContent=`预计经营 +${expectedIncome(state)} / 晚 · 已恢复 ${state.production.size} / ${state.sites.length}`;
-  const prices={wall:state.params.wallCost,build:state.params.weapons.A.cost,long:state.params.weapons.B.cost,outpost:state.params.outpostCost,production:`${state.params.productionCostPerCell} / 格`,repair:'按损伤报价',erase:'返还见预览'};
+  $('income').textContent=`预计经营 +${expectedIncome(state)} / 晚 · 生产建筑 ${state.production.size} 处`;
+  const prices={wall:state.params.wallCost,build:state.params.weapons.A.cost,long:state.params.weapons.B.cost,outpost:state.params.outpostCost,production:'按地块报价',repair:'按损伤报价',erase:'返还见预览'};
   for(const [id,price] of Object.entries(prices))$('price-'+id).textContent=String(price);
   $('budget').textContent = funds(state); $('tick').textContent = state.tick;
   $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
@@ -356,7 +355,7 @@ function update() {
   document.body.dataset.time=build?'day':'night';
   $('daylightLabel').textContent=build?'☀ 白天 · 建设时间':state.phase==='won'?'☾ 守住了':state.phase==='lost'?'☾ 火光熄灭':paused?'☾ 夜晚 · 已暂停':'☾ 夜晚 · 防守时间';
   $('phaseTitle').textContent=build?'白天 · 建设':active?(paused?'夜晚 · 已暂停':'夜晚 · 防守'):state.phase==='won'?'守住了':'火光熄灭';
-  $('phaseHint').textContent=build?'今晚路线已锁定 · 墙拖时间、塔持续输出 · 新前哨不吸引今晚敌人':active?'每拍持续炮火 · 敌人撞墙攻击，破墙后继续原路线 · 可暂停补炮':state.phase==='won'?(campaignComplete(state)?'五晚实验完成，可重试当晚或整局重来。':'守住了，即将自动进入白天。经营收入已到账。'):'重试当晚可回到开战前，重新布防。';
+  $('phaseHint').textContent=build?'来源与火光目标已锁定 · 建筑挡路可绕行，墙拖时间、塔输出':active?'每拍持续炮火 · 敌人撞墙攻击，破墙后继续原路线 · 可暂停补炮':state.phase==='won'?(campaignComplete(state)?'十五晚实验完成，可重试当晚或整局重来。':'守住了，即将自动进入白天。经营收入已到账。'):'重试当晚可回到开战前，重新布防。';
   $('phase').textContent = `第 ${state.day} / ${state.waves.length} 天 · `+(build?'白天':active?(paused?'夜晚 · 暂停':'夜晚'):campaignComplete(state)?'全部夜晚守住了':state.phase==='won'?'当晚守住了':'火光熄灭');
   $('start').disabled = !build && !active;
   $('retry').disabled=!preparation; $('step').disabled = !active || !paused || !!motion?.singleStep;
@@ -370,14 +369,14 @@ function update() {
     $(id).disabled=!allowed||short;
     $(id).title=!allowed?'防守中不能建设':short?`资金不足：需要 ${cost}，现有 ${funds(state)}`:`花费 ${cost} 资金`;
   }
-  const repairPrices=[state.camp,...state.outposts.keys(),...state.wallHealth.keys(),...state.towerHealth.keys()].map(id=>repairQuote(state,id)).filter(q=>q.missing>0);
+  const repairPrices=[state.camp,...state.wallHealth.keys(),...state.towerHealth.keys()].map(id=>repairQuote(state,id)).filter(q=>q.missing>0);
   $('repair').disabled=!build||state.day<2||!repairPrices.some(q=>q.cost<=funds(state));
   $('repair').title=state.day<2?'次日才能修复':!repairPrices.length?'没有受损设施':`修满最低需要 ${Math.min(...repairPrices.map(q=>q.cost))} 钱`;
   for(const id of ['applyParams','cancelParams','defaults'])$(id).disabled=!build||state.day!==1;
   document.querySelectorAll('#sources input, #sources select, #sources button').forEach(el=>el.disabled=!build);
   document.querySelectorAll('#params input, #params select').forEach(el=>el.disabled=!build||state.day!==1);
-  $('result').textContent = build ? '来源、目标、路线已锁定。墙拖时间，塔杀敌，前哨定义下一晚前线。' : `${state.phase === 'won' ? '防守成功' : state.phase === 'lost' ? '防守失败' : '防守中'} · 削减 ${state.damage} · 火光受伤 ${state.leaked} · 合并 ${state.merges} 次 · 本晚击杀收入 ${state.nightEarned} · 经营收入 ${state.nightEconomy}${state.economySettled?'（已入账）':'（尚未结算）'}`;
-  if(build&&state.lastNight)$('result').textContent=`昨夜火光受伤 ${state.lastNight.leaked} HP、失控 ${state.lastNight.lost} 格。收入明细见左侧；现在可以建设与修复。`;
+  $('result').textContent = build ? '来源与火光目标已锁定。墙拖时间，塔杀敌，前哨扩张控制；建筑挡路就近绕行。' : `${state.phase === 'won' ? '防守成功' : state.phase === 'lost' ? '防守失败' : '防守中'} · 削减 ${state.damage} · 火光受伤 ${state.leaked} · 合并 ${state.merges} 次 · 本晚击杀收入 ${state.nightEarned} · 经营收入 ${state.nightEconomy}${state.economySettled?'（已入账）':'（尚未结算）'}`;
+  if(build&&state.lastNight)$('result').textContent=`昨夜火光受伤 ${state.lastNight.leaked} HP。收入明细见左侧；现在可以建设与修复。`;
   if(campaignComplete(state))$('result').textContent+=` · ${state.waves.length} 晚完成！累计击杀收入 ${state.earned}、经营收入 ${state.economyEarned}。可重试最后一晚或整局重来。`;
   updateForecast();
   draw();
@@ -396,11 +395,11 @@ function updateNightReport(){
 }
 function updateForecast() {
   const night=Number($('forecastDay').value)+1, sources=viewedSources();
-  $('forecastTitle').textContent=`第 ${night} 晚${night===state.day?' · 来源/目标/路线已锁定':' · 暂定预告，届时生成目标'} · ${sources.reduce((sum,s)=>sum+s.count,0)} 块`;
-  $('routeNight').textContent=state.phase==='battle'&&night===state.day?'实线：在场敌群 · 虚线：后续出怪':`第 ${night} 晚 · ${night===state.day?'锁定路线':'暂定路线'}`;
+  $('forecastTitle').textContent=`第 ${night} 晚${night===state.day?' · 来源/目标已锁定，建筑挡路可绕行':' · 暂定路线预告'} · ${sources.reduce((sum,s)=>sum+s.count,0)} 块`;
+  $('routeNight').textContent=state.phase==='battle'&&night===state.day?'实线：在场敌群 · 虚线：后续出怪':`第 ${night} 晚 · ${night===state.day?'当前走法':'暂定路线'}`;
   $('forecastList').replaceChildren(...sources.map((s,i)=>{
-    const row=document.createElement('li'),target=forecastAttacks(state,night)[i].target,name=target===state.camp?'火光':`前哨 (${xy(target)})`;
-    const rule=s.target===-1?'指定火光':s.target===-2?'来袭方向前线':'指定前哨';
+    const row=document.createElement('li'),name='火光';
+    const rule='固定目标';
     row.style.setProperty('--source-color',colors[i%colors.length]);
     row.textContent=`${i+1} · (${s.x},${s.y}) · ${s.count} 块 × ${s.hp} HP · 拆墙/塔 ${state.params.enemyPower}/块/拍 · 击杀 ${state.params.killReward} 钱/块 · 首拍 ${s.first} / 间隔 ${s.interval} · ${rule} → ${name}`;return row;
   }));
@@ -417,13 +416,11 @@ function sourceEditor(sources) {
     for(const [name,label,max] of [['x','X',29],['y','Y',29],['hp','生命',999],['count','批数',30],['first','首拍',200],['interval','间隔',100]]){
       const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('input');input.type='number';input.name=name;input.value=s[name];input.min=['x','y'].includes(name)?0:1;input.max=max;input.step=1;input.setAttribute('aria-label',`源头${i+1} ${label}`);wrap.append(input);fields.append(wrap);
     }
-    const wrap=document.createElement('label');wrap.textContent='攻击目标';const select=document.createElement('select');select.name='target';select.setAttribute('aria-label',`源头${i+1} 攻击目标`);
-    for(const [value,name] of [[-2,'自动：来袭方向前线'],[-1,'火光'],...state.attackCandidates.map(id=>[id,`前哨 (${xy(id)})`])]){const option=document.createElement('option');option.value=value;option.textContent=name;select.append(option);}
-    select.value=s.target??-2;wrap.append(select);fields.append(wrap);
+    const target=document.createElement('p');target.className='muted';target.textContent='攻击目标：火光（前哨不可受击）';fields.append(target);
     card.append(fields);$('sources').append(card);
   });
 }
-function readSources(){return [...document.querySelectorAll('.source')].map(card=>Object.fromEntries([...card.querySelectorAll('input,select')].map(input=>[input.name,input.value.trim()===''?NaN:Number(input.value)])));}
+function readSources(){return [...document.querySelectorAll('.source')].map(card=>({...Object.fromEntries([...card.querySelectorAll('input')].map(input=>[input.name,input.value.trim()===''?NaN:Number(input.value)])),target:-2}));}
 // 小型参数面板：仅编辑当前实验，默认值仍保留在 config.js。
 function paramsEditor(params) {
   $('params').replaceChildren();
@@ -441,9 +438,9 @@ function paramsEditor(params) {
     $('params').append(row);
   }
   fields('全局',params,'',[['budget','资金',0,10000],['wallCost','墙价',1,1000],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙/塔伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙/塔造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campRepairCost','火光修复单价/HP',1,1000]]);
-  fields('街区生产（按占地）',params,'',[['productionCostPerCell','每格恢复费用',1,1000],['productionIncomePerCell','每格每晚收入',1,1000]]);
+  fields('街区生产（4×4 基准）',params,'',[['productionCostPerCell','基准每格恢复费用',1,1000],['productionIncomePerCell','基准每格每晚收入',1,1000]]);
   fields('击杀收益',params,'',[['killReward','每个原始敌人金币',0,1000]]);
-  fields('前哨',params,'',[['outpostCost','造价',1,1000],['outpostHP','耐久',1,10000],['outpostRadius','半径',1,30],['repairCost','修复单价/HP',1,1000]]);
+  fields('前哨',params,'',[['outpostCost','造价',1,1000],['outpostRadius','半径',1,30]]);
   for(const type of ['A','B'])fields(`武器 ${type}`,params.weapons[type],type+'.',[['shape','范围形状'],['range','半径',1,8],['power','每拍火力',1,99],['cost','价格',1,1000],['hp','炮塔耐久',1,10000]]);
 }
 function readParams() {
@@ -480,7 +477,11 @@ $('retry').onclick=()=>reset();$('clear').onclick=()=>reset(false);
 $('applyParams').onclick=()=>{
   if(state.phase!=='build'||state.day!==1)return;
   const params=readParams(),error=validateParams(params,state);$('paramStatus').textContent=error;if(error)return;
-  const waves=state.waves,production=state.production,attackCandidates=state.attackCandidates;state=createState(state.sources,state.towers,state.playerWalls,params,state.outposts,state.layout);state.production=production;state.waves=waves;state.waves[0]=state.sources;state.lastNight=null;state.attackCandidates=attackCandidates;lockAttacks(state,false);preparation=null;clearPlayback();
+  state.params=structuredClone(params);state.hp=params.campHP;
+  for(const body of state.wallHealth.values())body.hp=body.max=params.wallHP;
+  for(const [id,type] of state.towers)state.towerHealth.set(id,{hp:params.weapons[type].hp,max:params.weapons[type].hp});
+  rebuildTerrain(state);state.lastNight=null;preparation=null;clearPlayback();
+
   paramsEditor(state.params);refreshParams();notify('参数已应用，本轮已重置，墙、炮台、前哨与生产点保留。');
 };
 $('cancelParams').onclick=()=>{paramsEditor(state.params);refreshParams();};
@@ -489,7 +490,7 @@ $('apply').onclick=()=>{
   if(state.phase!=='build')return;
   if(paramsDirty()){notify('请先应用或取消实验参数预览。');return;}
   const sources=readSources(),error=validateSources(sources,state);$('configError').textContent=error;if(error)return;
-  state.sources=structuredClone(sources);state.waves[state.day-1]=state.sources;lockAttacks(state,false);preparation=null;clearPlayback();sourceEditor(state.sources);notify(`第 ${state.day} 晚实验配置已重新出题并锁定；资金与损伤不变。`);update();
+  state.sources=structuredClone(sources);state.waves[state.day-1]=state.sources;lockAttacks(state);preparation=null;clearPlayback();sourceEditor(state.sources);notify(`第 ${state.day} 晚实验配置已重新出题并锁定；资金与损伤不变。`);update();
 };
 $('addSource').onclick=()=>{const sources=readSources();if(sources.length>=12){$('configError').textContent='最多 12 个源头。';return;}sources.push({x:1,y:1,hp:12,count:4,first:1,interval:6,target:-2});sourceEditor(sources);};
 $('fit').onclick=()=>resize(true);$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;
@@ -519,21 +520,21 @@ canvas.addEventListener('pointerup',e=>{
   if(tool==='production'){
     const error=actionError=buildProduction(state,id);notify(error||`街区已恢复！预计每晚收入 +${productionQuote(state,id).income}，守住后自动入账。`);
   } else if(['outpost','repair'].includes(tool)){
-    const error=actionError=tool==='repair'?repairFacility(state,id):buildOutpost(state,id);notify(error||(tool==='repair'?'设施已修满，按缺失 HP 扣费。':'前哨已建立；扩张控制，下一晚才进入目标池，今晚路线不变。'));
+    const error=actionError=tool==='repair'?repairFacility(state,id):buildOutpost(state,id);notify(error||(tool==='repair'?'设施已修满，按缺失 HP 扣费。':'前哨已建立；立即扩张控制，不受敌人攻击。建筑挡路时敌人就近绕行，目标仍是火光。'));
     if(!error)sourceEditor(readSources());
   } else if(tool==='wall'){
     const error=actionError=changeWall(state,id);notify(error||'墙已建造；今晚路线不变，敌人到这里会停下攻击。');
   } else if(tool==='erase'){
     const quote=demolitionQuote(state,id);
-    const error=actionError=quote.type==='production'?removeProduction(state,id):quote.type==='tower'?removeTower(state,id):quote.type==='outpost'?removeOutpost(state,id):quote.type==='wall'?changeWall(state,id,true):'这里没有可拆除的设施。';
-    notify(error||`已${quote.day===state.day?'撤销当天建设':'清除旧设施'}，返还 ${quote.refund} 金币。`);
+    const error=actionError=quote.type==='production'?removeProduction(state,id):quote.type==='tower'?removeTower(state,id):quote.type==='outpost'?removeOutpost(state,id):quote.type==='wall'?changeWall(state,id,true):quote.type==='ruin'?clearPlot(state,id):'这里没有可拆除的设施。';
+    notify(error||(quote.type==='ruin'?'废墟已免费清理，整块变为空地，可建设前哨或生产设施。':`已${quote.day===state.day?'撤销当天建设':'清除旧设施'}，返还 ${quote.refund} 金币${productionSite(id,state)?'；地块变为空地':''}。`));
     if(!error&&quote.type==='outpost')sourceEditor(readSources());
   } else {
     const type=weaponType(),error=actionError=weaponPlacementError(id)||buildTower(state,id,type);
     if(error)notify(error);else{notify(`武器 ${type} 已独立建造，每拍火力 +${state.params.weapons[type].power}。`);}
   }
   if(!actionError){
-    const delta=funds(state)-beforeFunds,site=tool==='production'||tool==='erase'?productionSite(id,state):null;
+    const delta=funds(state)-beforeFunds,site=['production','erase','outpost'].includes(tool)?productionSite(id,state):null;
     const names={wall:'墙已建造',build:'近防炮就位',long:'远防炮就位',outpost:'控制区扩张',production:'生产已恢复',repair:'已修满',erase:'已拆除'};
     placementFx={id:site?key(site.x,site.y):id,size:site?.width||site?.size||1,height:site?.height||site?.size||1,start:performance.now(),color:delta<0?'#ffe1a0':'#aef2ce',text:`${names[tool]}${delta?` ${delta>0?'+':''}${delta} 金币`:''}`};
     pulse($('budget'),delta<0?'#ffe1a0':'#bff5ce');
@@ -589,8 +590,8 @@ function advance() {
   motion=null;impactAge=0;timer=0;
   for (const event of state.events) {
     const [x,y] = xy(event.id);
-    const defenseText={wallHit:`墙 (${x},${y}) 受到 ${event.value} 点伤害`,towerHit:`炮塔 (${x},${y}) 受到 ${event.value} 点伤害`,wallLost:`墙 (${x},${y}) 被攻破，敌人将沿原路线推进`,towerLost:`炮塔 (${x},${y}) 损坏停火，次日可维修`,retreat:`敌群完成对前哨 (${x},${y}) 的攻击并退场，不转攻火光`};
-    const text = defenseText[event.type]|| (event.type==='postLost'?`前哨 (${x},${y}) 失守，独占区域失控`:event.type==='postHit'?`前哨 (${x},${y}) 受到 ${event.value} 点伤害`:event.type === 'merge' ? `(${x},${y}) ${event.members} 批合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.members} 批敌人，+${event.value} 资金` : `(${x},${y}) 火力削减 ${event.value}`);
+    const defenseText={wallHit:`墙 (${x},${y}) 受到 ${event.value} 点伤害`,towerHit:`炮塔 (${x},${y}) 受到 ${event.value} 点伤害`,wallLost:`墙 (${x},${y}) 被攻破，敌人将沿原路线推进`,towerLost:`炮塔 (${x},${y}) 损坏停火，次日可维修`};
+    const text = defenseText[event.type]|| (event.type === 'merge' ? `(${x},${y}) ${event.members} 批合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.members} 批敌人，+${event.value} 资金` : `(${x},${y}) 火力削减 ${event.value}`);
     if(event.type==='merge'&&!explainedMerge){
       explainedMerge=true;$('mergeNotice').hidden=false;
       $('mergeNotice').textContent=`合流：${event.parts.join(' + ')} = ${event.value} HP。同格、同拍、同目标才合并；停留时每拍也扣该格叠加火力，整群消灭才获得合计金币。`;

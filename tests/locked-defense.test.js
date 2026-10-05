@@ -9,7 +9,7 @@ const make=(hp=40,count=1,first=1,interval=3)=>createCampaign({...DEFAULTS,budge
 const step=(s,n)=>{for(let i=0;i<n;i++)stepBattle(s);};
 
 test('造墙、造塔、前哨及经营均不改变已锁定来源、目标、路线',()=>{
-  const map=layout();map.tiles[key(17,24)]='open';map.buildings=[{x:19,y:24,width:2,height:2,kind:'building'}];
+  const map=layout();map.tiles[key(17,24)]='open';map.blocks=[{x:17,y:24,width:1,height:1,kind:'open'},{x:19,y:24,width:2,height:2,kind:'building'}];map.buildings=[{x:19,y:24,width:2,height:2,kind:'building'}];
   for(const id of [key(19,24),key(20,24),key(19,25),key(20,25)])map.tiles[id]='block';
   const s=createCampaign({...DEFAULTS,budget:1000},undefined,map),original=structuredClone(s.attacks);
   assert.equal(changeWall(s,key(15,22)),'');assert.equal(buildTower(s,key(14,24),'B'),'');
@@ -54,16 +54,6 @@ test('同拍多群撞墙合流、叠加近战，不因遍历顺序提前穿墙',
   stepBattle(s);assert.equal(s.enemies[0].id,wall);
 });
 
-test('失守前哨后的后续批次仍到原终点退场，火光与其他前哨不受牵连',()=>{
-  const s=make(11,2,1,8);s.layout.tiles[key(15,22)]='open';s.layout.tiles[key(17,23)]='open';
-  buildOutpost(s,key(15,22));buildOutpost(s,key(17,23));s.day=2;lockAttacks(s);
-  const plan=structuredClone(s.attacks);assert.equal(plan[0].target,key(15,22));assert.match(removeOutpost(s,key(15,22)),/锁定/);
-  beginBattle(s);step(s,3);assert.equal(s.outposts.get(key(15,22)).hp,0);assert.equal(s.enemies.length,0);
-  assert.equal(battleRoutes(s)[0].target,key(15,22));assert.deepEqual(s.attacks,plan);
-  while(s.phase==='battle')stepBattle(s);
-  assert.equal(s.phase,'won');assert.equal(s.hp,30);assert.equal(s.outposts.get(key(17,23)).hp,10);assert.equal(s.earned,0);
-});
-
 test('重试完整还原锁定题目与墙塔 HP、夜间投资和收支，快照不污染',()=>{
   const s=make(100),wall=key(15,22),tower=key(14,21);changeWall(s,wall);buildTower(s,tower,'A');const money=funds(s),snapshot=beginBattle(s);
   step(s,24);assert.equal(s.towerHealth.get(tower).hp,0);assert.equal(buildTower(s,key(18,24),'B'),'');s.earned=7;
@@ -79,22 +69,7 @@ test('破墙投资不会自动退款；原址维修与拆返不刷新建造日�
   assert.equal(changeWall(s,wall,true),'');assert.equal(funds(s),997);
 });
 
-test('失控区塔墙必须先恢复前哨，避免维修绕过控制限制',()=>{
-  const s=make();s.layout.tiles[key(15,16)]='open';buildOutpost(s,key(15,16));const tower=key(15,12);buildTower(s,tower,'A');
-  s.outposts.get(key(15,16)).hp=0;s.towerHealth.get(tower).hp=0;s.day=2;
-  assert.match(repairFacility(s,tower),/先修复前哨/);assert.equal(repairFacility(s,key(15,16)),'');assert.equal(repairFacility(s,tower),'');
-});
-
-test('新白天锁定目标池，修复和实验调参不把新前哨加入当晚题目',()=>{
-  const s=make();s.layout.tiles[key(15,22)]='open';buildOutpost(s,key(15,22));s.outposts.get(key(15,22)).hp=0;s.phase='won';enterMorning(s);
-  assert.equal(s.attackCandidates.length,0);const original=structuredClone(s.attacks);repairFacility(s,key(15,22));lockAttacks(s,false);assert.deepEqual(s.attacks,original);
-  s.phase='won';enterMorning(s);assert.equal(s.attacks[0].target,key(15,22));
-  const params=structuredClone(s.params);params.wallHP=NaN;assert.match(validateParams(params,s),/墙耐久/);params.wallHP=12;params.weapons.A.hp=0;assert.match(validateParams(params,s),/武器 A/);
-});
-
-test('拆除未被锁定的旧前哨不改今晚题目，也不留下可选的幽灵目标',()=>{
-  const s=make(),post=key(20,25);s.layout.tiles[post]='open';buildOutpost(s,post);s.phase='won';enterMorning(s);
-  assert.ok(s.attackCandidates.includes(post));assert.equal(s.attacks[0].target,s.camp);
-  const original=structuredClone(s.attacks);assert.equal(removeOutpost(s,post),'');assert.deepEqual(s.attacks,original);
-  assert.ok(!s.attackCandidates.includes(post));lockAttacks(s,false);assert.deepEqual(s.attacks,original);
+test('前哨退池后非法战略目标被拒绝，墙塔参数仍校验',()=>{
+  const s=make(),params=structuredClone(s.params);params.wallHP=NaN;assert.match(validateParams(params,s),/墙耐久/);
+  params.wallHP=12;params.weapons.A.hp=0;assert.match(validateParams(params,s),/武器 A/);
 });

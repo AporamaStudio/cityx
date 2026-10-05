@@ -1,4 +1,4 @@
-// 先划街区与道路，再决定街区用途；建筑状态不决定地形通行性。
+// 先划地块与道路，再给出初始内容；战斗中的清理与换建保存在独立运行状态。
 export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2,minBlock=2,maxBlock=5,special=false,specialMin=10,specialMax=30,touching=false}={}) {
   for(const [name,value,min,max] of [['width',width,20,240],['height',height,20,240],['mainRoadWidth',mainRoadWidth,2,3],['minBlock',minBlock,2,8],['maxBlock',maxBlock,2,8],['specialMin',specialMin,10,30],['specialMax',specialMax,10,30]]) {
     if(!Number.isInteger(value)||value<min||value>max)throw new Error(`${name} 必须是 ${min}–${max} 的整数`);
@@ -94,7 +94,7 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
   return {version:3,seed,width,height,mainRoadWidth,minBlock,maxBlock,special,specialMin,specialMax,touching,tiles,roads,blocks,buildings,openSpaces,camp,goal,stats:{special:buildings.filter(b=>b.special).length,joined,buildings:buildings.length,openSpaces:openSpaces.length,occupied,coverage:occupied/(width*height)}};
 }
 
-// 道路和开放场地可通行；未来修缮只改街区状态，不改变这个判断。
+// 仅检查生成时的道路和空地连通；运行时通行由 model.js 的地块内容决定。
 export function walkableDistances(map,start=map.camp){
   const {width,height,tiles}=map,distances=new Int32Array(width*height).fill(-1);
   const passable=id=>tiles[id]==='road'||tiles[id]==='open';

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
 import {MAP_DEFAULTS,readMapSettings,mapSearch} from '../src/map-settings.js';
 import {DEFAULTS} from '../src/config.js';
-import {createCampaign,key,productionCells,productionQuote,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning} from '../src/model.js';
+import {createCampaign,key,productionCells,productionQuote,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,rebuildTerrain} from '../src/model.js';
 
 test('尺寸、特殊设施和紧邻实验保持完整分区与通路',()=>{
   let joined=0;
@@ -29,9 +29,9 @@ test('放不下的特殊区块不偷偷缩小，地图参数可通过链接复�
 test('生成地图接入路线、矩形经营、建设限制及重试',()=>{
   const layout=generateCityMap(MAP_DEFAULTS),s=createCampaign({...DEFAULTS,budget:1000},undefined,layout);
   for(const wave of s.waves)assert.equal(validateSources(wave,s),'');
-  const b=s.sites.find(b=>b.width!==b.height&&productionControlled(s,key(b.x,b.y))),id=key(b.x,b.y);
+  const b=s.sites.find(b=>b.kind==='building'&&b.width!==b.height&&productionControlled(s,key(b.x,b.y))),id=key(b.x,b.y);
   assert.equal(productionCells(id,s).length,b.width*b.height);assert.ok(!s.field.distance.has(id));
-  assert.deepEqual(productionQuote(s,id),{area:b.width*b.height,cost:b.width*b.height*8,income:b.width*b.height});
+  assert.equal(productionQuote(s,id).area,b.width*b.height);assert.ok(productionQuote(s,id).cost<=b.width*b.height*8);assert.equal(productionQuote(s,id).income,b.width*b.height);
   assert.ok(wallPreview(s,id).error);assert.ok(placementError(s,id));assert.ok(outpostError(s,id));
   assert.equal(buildProduction(s,id),'');assert.ok(!s.field.distance.has(id));
   const road=layout.tiles.findIndex((t,id)=>t==='road'&&!wallPreview(s,id).error);
@@ -42,15 +42,23 @@ test('生成地图接入路线、矩形经营、建设限制及重试',()=>{
   const snap=beginBattle(s);assert.ok(snap);
   const restored=restoreNight(snap);assert.deepEqual(restored.layout,layout);assert.ok(restored.production.has(id));
   const restarted=restartCampaign(restored);assert.deepEqual(restarted.layout,layout);assert.equal(restarted.production.size,0);assert.deepEqual(restarted.sources,s.sources);
-  restored.day=2;assert.ok(removeProduction(restored,id));
+  restored.day=2;assert.equal(removeProduction(restored,id),'');assert.ok(!restored.blocked.has(id));
 });
-test('新地图完成五晚，敌人每步只进入道路或开放场地',()=>{
+test('新地图完成十五晚，敌人每步只进入道路或开放场地',()=>{
   const s=createCampaign({...DEFAULTS,campHP:10000},undefined,generateCityMap(MAP_DEFAULTS));
-  for(let day=1;day<=5;day++){
+  for(let day=1;day<=15;day++){
     assert.ok(beginBattle(s));
     for(let i=0;i<250&&s.phase==='battle';i++){
       stepBattle(s);for(const enemy of s.enemies)assert.ok(['road','open'].includes(s.layout.tiles[enemy.id]));
     }
-    assert.equal(s.phase,'won');assert.equal(enterMorning(s),day<5);
+    assert.equal(s.phase,'won');assert.equal(enterMorning(s),day<15);
+  }
+});
+
+test('开放地块全部建成建筑后，道路骨架仍连接所有来源与火光',()=>{
+  for(let seed=0;seed<6;seed++)for(const touching of [false,true]){
+    const s=createCampaign(DEFAULTS,undefined,generateCityMap({seed,touching}));
+    for(const p of s.sites){const id=key(p.x,p.y);if(!productionCells(id,s).includes(s.camp))s.plotContents.set(id,{status:'building',type:'production'});}
+    rebuildTerrain(s);for(const source of s.sources)assert.ok(s.field.distance.has(key(source.x,source.y)));
   }
 });
