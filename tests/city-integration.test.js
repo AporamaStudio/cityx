@@ -34,7 +34,8 @@ test('生成地图接入路线、矩形经营、建设限制及重试',()=>{
   assert.ok(wallPreview(s,id).error);assert.ok(placementError(s,id));assert.ok(outpostError(s,id));
   assert.equal(buildProduction(s,id),'');assert.ok(!s.field.distance.has(id));
   const road=layout.tiles.findIndex((t,id)=>t==='road'&&!wallPreview(s,id).error);
-  assert.equal(changeWall(s,road),'');assert.equal(buildTower(s,road,'A'),'');
+  assert.equal(changeWall(s,road),'');assert.ok(placementError(s,road));
+  const tower=layout.tiles.findIndex((t,id)=>t==='road'&&!placementError(s,id));assert.equal(buildTower(s,tower,'A'),'');
   const post=layout.tiles.findIndex((t,id)=>t==='open'&&!outpostError(s,id));
   assert.equal(buildOutpost(s,post),'');
   const snap=beginBattle(s);assert.ok(snap);
