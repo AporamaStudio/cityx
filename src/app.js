@@ -1,5 +1,5 @@
-import { SIZE, DEFAULTS, PRODUCTION_SITES } from './config.js?v=19';
-import { demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=19';
+import { SIZE, DEFAULTS, PRODUCTION_SITES } from './config.js?v=20';
+import { demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=20';
 const $ = id => document.getElementById(id);
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createCampaign(), tool = 'wall', hover = null, dragging = null;
@@ -13,7 +13,7 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let placementFx = null, playbackSpeed = 1, recentGain = 0, gainUntil = 0, dawnAt = 0, receiptUntil = 0;
 let nightMix = 0;
 // 只对环境配色插值，敌人、路线、血条等决策信息不经过压暗滤镜。
-const terrainColors={groundA:[[88,99,88],[21,32,49]],groundB:[[94,105,94],[25,37,54]],grid:[[114,125,112],[43,58,77]],wall:[[130,137,124],[69,82,101]],builtWall:[[138,157,133],[83,116,119]]};
+const terrainColors={groundA:[[88,99,88],[21,32,49]],groundB:[[94,105,94],[25,37,54]],grid:[[114,125,112],[43,58,77]],wall:[[130,137,124],[69,82,101]]};
 function terrainColor(name){
   const [day,night]=terrainColors[name];return `rgb(${day.map((v,i)=>Math.round(v+(night[i]-v)*nightMix)).join(',')})`;
 }
@@ -104,10 +104,10 @@ function draw() {
     ctx.fillRect(x, y, 1, 1);
     if ($('heat').checked && power) { ctx.fillStyle = `rgba(99,211,166,${Math.min(.6,.17 + power * .045)})`; ctx.fillRect(x, y, 1, 1); }
     if (state.walls.has(id)) {
-      ctx.fillStyle = state.playerWalls.has(id) ? palette.builtWall : palette.wall; ctx.fillRect(x + .05, y + .05, .9, .9);
+      ctx.fillStyle = palette.wall; ctx.fillRect(x + .05, y + .05, .9, .9);
       ctx.fillStyle='#0c171c77';ctx.fillRect(x+.05,y+.78,.9,.17);
-      ctx.fillStyle=state.playerWalls.has(id)?'#a2b9aa':'#728187';ctx.fillRect(x+.05,y+.05,.9,.10);
-      ctx.strokeStyle = state.playerWalls.has(id) ? '#b3d0ac' : '#5a6569'; ctx.lineWidth = .045; ctx.beginPath(); ctx.moveTo(x + .15, y + .8); ctx.lineTo(x + .8, y + .15); ctx.stroke();
+      ctx.fillStyle='#93a197';ctx.fillRect(x+.05,y+.05,.9,.10);
+      ctx.strokeStyle = '#81918b'; ctx.lineWidth = .045; ctx.beginPath(); ctx.moveTo(x + .15, y + .8); ctx.lineTo(x + .8, y + .15); ctx.stroke();
     }
     if(postGhost&&inControl(previewState,id)&&!inControl(state,id)){ctx.fillStyle='#f0d18b66';ctx.fillRect(x,y,1,1);}
     if(state.lostControl.has(id)){ctx.fillStyle='#dc686638';ctx.fillRect(x,y,1,1);}
@@ -313,6 +313,12 @@ function draw() {
 }
 function update() {
   fire = fireField({...state,params:previewParams()});
+  // 夜晚聚焦补炮；资金不足仍显示灰色炮台，区别于阶段不允许的工具。
+  const daytime=state.phase==='build';
+  for(const id of ['wall','outpost','production','repair','erase'])$(id).hidden=!daytime;
+  if(state.phase==='battle'&&!['build','long'].includes(tool))tool='build';
+  for(const id of ['wall','build','long','outpost','production','repair','erase'])$(id).classList.toggle('selected',tool===id);
+  $('toolHeading').textContent=daytime?'建设工具 · 悬停棋盘预览':'夜间补炮 · 只能架在已有墙上';
   const w=selectedWeapon();
   $('toolInfo').textContent = ['build','long'].includes(tool) ? `${weaponType()==='A'?'近防炮':'远防炮'} · ${w.cost} 资金 · ${w.shape==='square'?'方形':'菱形'}范围 ${w.range} · 火力 ${w.power}。只能架在墙上；敌人每进入一个覆盖格受 ${w.power} 伤害，停留不持续扣血。` : tool==='wall' ? `每格墙 ${state.params.wallCost} 资金。墙阻挡敌人并改变寻路，也能架炮；悬停看新路线，不能彻底封路。` : `当天新建全额退款，旧设施可清除但不退款；有炮先拆炮。固定墙不可拆；防守中不可拆除。`;
   if(tool==='outpost')$('toolInfo').textContent=`前哨 ${state.params.outpostCost} 资金 · HP ${state.params.outpostHP} · 范围 ${state.params.outpostRadius}。建于已有控制区空地；无攻击能力，会成为目标。`;
