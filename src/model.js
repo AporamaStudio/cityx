@@ -42,19 +42,29 @@ export function coverage(id, range = 1, shape = 'diamond') {
 }
 
 // 新一轮保留已应用参数、玩家墙和炮台；集合复制避免重试修改旧布局。
-export function createState(sources = DEFAULTS.sources, towers = new Map(), playerWalls = new Set(), params = DEFAULTS, outposts = new Map()) {
-  const fixedWalls = makeWalls(), walls = new Set([...fixedWalls, ...playerWalls]);
-  const camp = key(...DEFAULTS.camp), field = routeField(camp, walls);
+export function createState(sources = DEFAULTS.sources, towers = new Map(), playerWalls = new Set(), params = DEFAULTS, outposts = new Map(), layout = null) {
+  const fixedWalls = layout?new Set():makeWalls(), blocked=new Set(layout?layout.tiles.flatMap((t,id)=>t==='block'?[id]:[]):[]), walls = new Set([...fixedWalls, ...blocked, ...playerWalls]);
+  const camp = layout?key(layout.camp.x,layout.camp.y):key(...DEFAULTS.camp), field = routeField(camp, walls);
   const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p,hp:params.outpostHP,max:params.outpostHP}])), production:new Map(), economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1, lostControl:new Set(),
-    fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
+    layout, blocked, sites:layout?layout.buildings:PRODUCTION_SITES, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
     hp: params.campHP, enemies: [], events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
   rebuildFields(state);return state;
 }
 
 // 只保留一局实验和一次战前快照；无存档、回放或通用关卡框架。
-export function createCampaign(params=DEFAULTS, waves=WAVES) {
-  const state=createState(waves[0],new Map(),new Set(),params);
+export function createCampaign(params=DEFAULTS, waves=WAVES, layout=null) {
+  if(layout&&(layout.width!==SIZE||layout.height!==SIZE))throw new Error('当前战斗地图须为 30×30；大地图仍可在布局预览实验。');
+  if(layout&&waves===WAVES){
+    // 出怪节奏独立于地图，只把三个方向的出生位置吸附到北部可通行道路。
+    const used=new Set(),anchors=[5,25,15].map(x=>{
+      const cells=layout.tiles.flatMap((t,id)=>t==='road'&&Math.floor(id/SIZE)<8?[id]:[]).filter(id=>!used.has(id)&&id!==key(layout.camp.x,layout.camp.y));
+      cells.sort((a,b)=>Math.abs(a%SIZE-x)+Math.floor(a/SIZE)-Math.abs(b%SIZE-x)-Math.floor(b/SIZE));
+      used.add(cells[0]);return xy(cells[0]);
+    });
+    waves=waves.map(w=>w.map((source,i)=>({...source,x:anchors[i%anchors.length][0],y:anchors[i%anchors.length][1]})));
+  }
+  const state=createState(waves[0],new Map(),new Set(),params,new Map(),layout);
   state.waves=structuredClone(waves).map(sources=>sources.map(s=>({...s,target:s.target??-2})));
   state.sources=state.waves[0];state.lastNight=null;
   return state;
@@ -74,7 +84,7 @@ export function beginBattle(state) {
 export const restoreNight=snapshot=>structuredClone(snapshot);
 export function restartCampaign(state) {
   // 整局重来保留已应用的实验参数和波次，已拆掉的前哨目标恢复自动。
-  return createCampaign(state.params,(state.waves??WAVES).map(w=>w.map(s=>({...s,target:(s.target??-2)>=0?-2:s.target}))));
+  return createCampaign(state.params,(state.waves??WAVES).map(w=>w.map(s=>({...s,target:(s.target??-2)>=0?-2:s.target}))),state.layout);
 }
 
 export function fireField(state) {
@@ -126,7 +136,8 @@ export function outpostError(state,id,repair=false) {
     return funds(state)<quote.cost?`资金不足，修复需要 ${quote.cost} 钱（${quote.missing} HP）。`:'';
   }
   if(!inControl(state,id))return '前哨必须建在已有控制范围内。';
-  if(productionSite(id)||state.walls.has(id)||old||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '前哨需要未占用的空地。';
+  if(state.layout&&state.layout.tiles[id]!=='open')return '前哨只能建在绿色开放场地。';
+  if(productionSite(id,state)||state.walls.has(id)||old||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '前哨需要未占用的空地。';
   if(!state.field.distance.has(id))return '前哨须与火光连通，不能建在封闭区域。';
   return funds(state)<state.params.outpostCost?'资金不足，无法建造前哨。':'';
 }
@@ -143,7 +154,7 @@ export function removeOutpost(state,id) {
   if(state.phase!=='build')return '只能在建设阶段拆除前哨。';
   if(!state.outposts.has(id))return '这里没有前哨。';
   const posts=new Map(state.outposts);posts.delete(id);const candidate={...state,outposts:posts};
-  if([...state.playerWalls,...state.towers.keys(),...posts.keys(),...[...state.production.keys()].flatMap(productionCells)].some(cell=>inControl(state,cell)&&!inControl(candidate,cell)))return '其他设施依赖此前哨的控制范围，请先拆除外围设施。';
+  if([...state.playerWalls,...state.towers.keys(),...posts.keys(),...[...state.production.keys()].flatMap(id=>productionCells(id,state))].some(cell=>inControl(state,cell)&&!inControl(candidate,cell)))return '其他设施依赖此前哨的控制范围，请先拆除外围设施。';
   if(reservedSources(state).some(s=>s.target===id))return '敌源指定了此前哨，请先修改目标配置。';
   retainDemolitionCost(state,demolitionQuote(state,id));
   state.outposts=posts;rebuildFields(state);return '';
@@ -161,6 +172,7 @@ export function placementError(state, id, type = 'A') {
   if (!['build','battle'].includes(state.phase)) return '本晚已结束，请进入次日或重试。';
   if (!Number.isInteger(id) || id < 0 || id >= SIZE * SIZE) return '请选择地图内的格子。';
   if (!inControl(state,id)) return '超出控制范围，不能架设炮台。';
+  if(state.blocked?.has(id))return '建筑街区不能架炮，请在道路或空场建墙。';
   if (!state.walls.has(id)) return '炮台只能架设在墙上，请先建墙或选择固定墙。';
   if (state.towers.has(id)) return state.phase==='battle'?'该格已有武器，防守中不能拆除。':'该格已有武器，可用拆除工具撤销。';
   if (!state.params.weapons[type]) return '未知武器。';
@@ -176,7 +188,7 @@ export function wallPreview(state, id, remove = false) {
   else if (remove && state.towers.has(id)) error = '请先拆除墙上的炮台。';
   else if (remove && !state.playerWalls.has(id)) error = '固定墙不能拆除。';
   else if (!remove && !inControl(state,id)) error = '超出控制范围，不能建墙。';
-  else if (!remove && productionSite(id)) error = '生产地点保留用于恢复经营，不能建墙。';
+  else if (!remove && productionSite(id,state)) error = '生产地点保留用于恢复经营，不能建墙。';
   else if (!remove && state.outposts.has(id)) error = '不能覆盖前哨或废墟。';
   else if (!remove && state.walls.has(id)) error = '这里已经有墙。';
   else if (!remove && (id === state.camp || reservedSources(state).some(s=>key(s.x,s.y)===id))) error = '不能覆盖篝火或敌人源头。';
@@ -208,7 +220,7 @@ export function validateParams(params, state, checkLayout = true) {
   }
   if (!integer(params.largeProductionCost,1,1000)||!integer(params.largeProductionIncome,1,1000)) return '大街区费用和收入须为 1–1000 整数。';
   if (!integer(params.productionCost,1,1000)||!integer(params.productionIncome,1,1000)) return '生产恢复费用和每晚收入须为 1–1000 整数。';
-  if (checkLayout && [...state.playerWalls,...state.towers.keys(),...[...state.production.keys()].flatMap(productionCells)].some(id=>!inControl({...state,params},id,params.controlRadius))) return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
+  if (checkLayout && [...state.playerWalls,...state.towers.keys(),...[...state.production.keys()].flatMap(id=>productionCells(id,state))].some(id=>!inControl({...state,params},id,params.controlRadius))) return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
   if (checkLayout && funds({...state,params}) < 0) return '按新价格计算，现有布局超出预算（含经营与前哨）。请提高资金，或取消预览后拆除设施。';
   return '';
 }
@@ -220,7 +232,7 @@ export function validateSources(sources, state) {
     const s = sources[i], id = key(s.x, s.y), prefix = `源头 ${i + 1}：`;
     if (!['x','y','hp','count','first','interval'].every(k=>Number.isInteger(s[k])) || !Number.isInteger(s.target??-2)) return prefix + '请填写整数。';
     if (!inside(s.x, s.y)) return prefix + '坐标应为 0–29。';
-    if (productionSite(id) || state.walls.has(id) || id === state.camp || state.towers.has(id) || state.outposts.has(id)) return prefix + '与障碍、控制站、生产地点或武器冲突。';
+    if (productionSite(id,state) || state.walls.has(id) || id === state.camp || state.towers.has(id) || state.outposts.has(id)) return prefix + '与障碍、控制站、生产地点或武器冲突。';
     if(![-2,-1].includes(s.target??-2)&&!state.outposts.has(s.target))return prefix+'指定前哨不存在。';
     if (seen.has(id)) return prefix + '位置不能重复。';
     if (!state.field.distance.has(id)) return prefix + '无法到达篝火。';
@@ -288,34 +300,35 @@ export function stepBattle(state) {
 
 // 经营与控制共用地图；白天预估下一晚，防守中按当晚失控记录扣除。
 // 任一格映射到同一街区；状态仅按左上角存一次，收益不按格重复。
-export const productionSite=id=>PRODUCTION_SITES.find(p=>{const [x,y]=xy(id);return x>=p.x&&x<p.x+p.size&&y>=p.y&&y<p.y+p.size;});
-export const productionId=id=>{const p=productionSite(id);return p?key(p.x,p.y):null;};
-export function productionCells(id) {
-  const p=productionSite(id);return p?Array.from({length:p.size*p.size},(_,i)=>key(p.x+i%p.size,p.y+Math.floor(i/p.size))):[];
+export const productionSite=(id,state)=>id==null?undefined:(state?.sites??PRODUCTION_SITES).find(p=>{const [x,y]=xy(id);return x>=p.x&&x<p.x+(p.width??p.size)&&y>=p.y&&y<p.y+(p.height??p.size);});
+export const productionId=(id,state)=>{const p=productionSite(id,state);return p?key(p.x,p.y):null;};
+export function productionCells(id,state) {
+  const p=productionSite(id,state);return p?Array.from({length:(p.width??p.size)*(p.height??p.size)},(_,i)=>key(p.x+i%(p.width??p.size),p.y+Math.floor(i/(p.width??p.size)))):[];
 }
 export function productionQuote(state,id) {
-  const p=productionSite(id),large=p?.size===3;
+  const p=productionSite(id,state),large=p&&((p.width??p.size)*(p.height??p.size)>4);
   return {cost:large?state.params.largeProductionCost:state.params.productionCost,income:large?state.params.largeProductionIncome:state.params.productionIncome};
 }
-export const productionControlled=(state,id)=>productionCells(id).length>0&&productionCells(id).every(cell=>inControl(state,cell));
-export const productionActive=(state,id)=>productionControlled(state,id)&&(state.phase==='build'||productionCells(id).every(cell=>incomeEligible(state,cell)));
+export const productionControlled=(state,id)=>productionCells(id,state).length>0&&productionCells(id,state).every(cell=>inControl(state,cell));
+export const productionActive=(state,id)=>productionControlled(state,id)&&(state.phase==='build'||productionCells(id,state).every(cell=>incomeEligible(state,cell)));
 export const expectedIncome=state=>[...state.production.keys()].filter(id=>productionActive(state,id)).reduce((sum,id)=>sum+productionQuote(state,id).income,0);
 export function productionError(state,id) {
   if(state.phase!=='build')return '只能在建设阶段恢复生产。';
-  if(!productionSite(id))return '请选择地图上标有 ◇ 的固定生产地点。';
-  if(state.production.has(productionId(id)))return '该地点已经恢复生产。';
-  const missing=productionCells(id).filter(cell=>!inControl(state,cell)).length;
+  if(!productionSite(id,state))return '请选择地图上标有 ◇ 的固定生产地点。';
+  if(state.production.has(productionId(id,state)))return '该地点已经恢复生产。';
+  const missing=productionCells(id,state).filter(cell=>!inControl(state,cell)).length;
   if(missing)return `街区还缺 ${missing} 格控制；需完整覆盖才能恢复。`;
   return funds(state)<productionQuote(state,id).cost?'资金不足，无法恢复生产。':'';
 }
 export function buildProduction(state,id) {
   const error=productionError(state,id);if(error)return error;
-  state.production.set(productionId(id),{day:state.day});return '';
+  state.production.set(productionId(id,state),{day:state.day});return '';
 }
 export function removeProduction(state,id) {
   if(state.phase!=='build')return '防守中不能撤销生产设施。';
-  id=productionId(id);const p=state.production.get(id);
+  id=productionId(id,state);const p=state.production.get(id);
   if(!p)return '这里没有已恢复的生产设施。';
+  if(state.layout&&p.day!==state.day)return '建筑街区暂不清除；只能撤销当天修缮。';
   retainDemolitionCost(state,demolitionQuote(state,id));
   state.production.delete(id);return '';
 }
@@ -346,7 +359,7 @@ export function battleRoutes(state) {
 
 // 今天的建设可以撤销；跨天拆除保留原投资支出，防止删掉设施凭空退钱。
 export function demolitionQuote(state,id) {
-  const production=state.production.get(productionId(id)),tower=state.towers.get(id),post=state.outposts.get(id);
+  const production=state.production.get(productionId(id,state)),tower=state.towers.get(id),post=state.outposts.get(id);
   let cost=0,day=1,type='';
   if(production){type='production';cost=productionQuote(state,id).cost;day=production.day??1;}
   else if(tower){type='tower';cost=state.params.weapons[tower].cost;day=state.towerDays.get(id)??1;}
