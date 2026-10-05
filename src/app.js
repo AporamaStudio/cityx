@@ -1,5 +1,5 @@
-import { SIZE, DEFAULTS, PRODUCTION_SITES } from './config.js?v=18';
-import { demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=18';
+import { SIZE, DEFAULTS, PRODUCTION_SITES } from './config.js?v=19';
+import { demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, incomeEligible, key, xy, inside, createState, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, pathFrom, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, rebuildFields, fieldFor, sourceTarget, liveTarget, enemyKey, repairQuote, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=19';
 const $ = id => document.getElementById(id);
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createCampaign(), tool = 'wall', hover = null, dragging = null;
@@ -11,6 +11,12 @@ let motion = null, impactAge = 1000, incoming = new Map();
 const MOVE_MS = 160, IMPACT_MS = 220;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let placementFx = null, playbackSpeed = 1, recentGain = 0, gainUntil = 0, dawnAt = 0, receiptUntil = 0;
+let nightMix = 0;
+// 只对环境配色插值，敌人、路线、血条等决策信息不经过压暗滤镜。
+const terrainColors={groundA:[[88,99,88],[21,32,49]],groundB:[[94,105,94],[25,37,54]],grid:[[114,125,112],[43,58,77]],wall:[[130,137,124],[69,82,101]],builtWall:[[138,157,133],[83,116,119]]};
+function terrainColor(name){
+  const [day,night]=terrainColors[name];return `rgb(${day.map((v,i)=>Math.round(v+(night[i]-v)*nightMix)).join(',')})`;
+}
 const colors = ['#df9989', '#a6a1e9', '#d5bd79', '#78bcd3'];
 const notify = message => { $('notice').textContent = message; };
 const weaponType = () => tool === 'long' ? 'B' : 'A';
@@ -48,6 +54,7 @@ function draw() {
   ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   ctx.clearRect(0, 0, width, height);
   const size = base * zoom;
+  const palette=Object.fromEntries(Object.keys(terrainColors).map(name=>[name,terrainColor(name)]));
   const controlState={...state,params:previewParams()};
   const controlRadius = controlState.params.controlRadius;
   const wallEdit = hover !== null && state.phase === 'build' && (tool==='wall'||(tool==='erase'&&!state.towers.has(hover)&&!state.production.has(productionId(hover))));
@@ -93,11 +100,11 @@ function draw() {
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
   for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
     const id = key(x, y), power = fire.get(id) || 0;
-    ctx.fillStyle = (x + y) % 2 ? '#1b2a2d' : '#1e2d30';
+    ctx.fillStyle = (x + y) % 2 ? palette.groundA : palette.groundB;
     ctx.fillRect(x, y, 1, 1);
     if ($('heat').checked && power) { ctx.fillStyle = `rgba(99,211,166,${Math.min(.6,.17 + power * .045)})`; ctx.fillRect(x, y, 1, 1); }
     if (state.walls.has(id)) {
-      ctx.fillStyle = state.playerWalls.has(id) ? '#617e72' : '#455055'; ctx.fillRect(x + .05, y + .05, .9, .9);
+      ctx.fillStyle = state.playerWalls.has(id) ? palette.builtWall : palette.wall; ctx.fillRect(x + .05, y + .05, .9, .9);
       ctx.fillStyle='#0c171c77';ctx.fillRect(x+.05,y+.78,.9,.17);
       ctx.fillStyle=state.playerWalls.has(id)?'#a2b9aa':'#728187';ctx.fillRect(x+.05,y+.05,.9,.10);
       ctx.strokeStyle = state.playerWalls.has(id) ? '#b3d0ac' : '#5a6569'; ctx.lineWidth = .045; ctx.beginPath(); ctx.moveTo(x + .15, y + .8); ctx.lineTo(x + .8, y + .15); ctx.stroke();
@@ -116,7 +123,19 @@ function draw() {
       }
       ctx.stroke();ctx.setLineDash([]);
     }
-    ctx.strokeStyle = '#2d3e43'; ctx.lineWidth = .025; ctx.strokeRect(x, y, 1, 1);
+    ctx.strokeStyle = palette.grid; ctx.lineWidth = .025; ctx.strokeRect(x, y, 1, 1);
+  }
+  // 灯光只代表存活设施与生产状态，不表示敌人无法进入的安全区。
+  const lamp=(x,y,r,color)=>{
+    const light=ctx.createRadialGradient(x,y,.05,x,y,r);
+    light.addColorStop(0,color);light.addColorStop(1,'#00000000');ctx.fillStyle=light;ctx.fillRect(x-r,y-r,r*2,r*2);
+  };
+  if(nightMix>0){
+    ctx.save();ctx.globalAlpha=nightMix;
+    if(state.hp>0){const [x,y]=xy(state.camp);lamp(x+.5,y+.5,3,'#ffbe6855');}
+    for(const [id,p] of state.outposts)if(p.hp>0){const [x,y]=xy(id);lamp(x+.5,y+.5,1.7,'#9bddf344');}
+    for(const p of PRODUCTION_SITES)if(state.production.has(key(p.x,p.y))&&productionActive(state,key(p.x,p.y)))lamp(p.x+p.size/2,p.y+p.size/2,p.size,'#f4d68b33');
+    ctx.restore();
   }
   const actualNight=state.phase==='battle'&&Number($('forecastDay').value)===state.day-1;
   const displayedRoutes=actualNight?battleRoutes(state):viewedSources().map((source,index)=>({path:sourcePath(source),index,future:false}));
@@ -160,6 +179,10 @@ function draw() {
     ctx.fillStyle=selected?(active?'#527e59':built?'#80594e':'#655f3d'):active?'#91c99a99':built?'#a46f6088':'#766d4a77';ctx.fillRect(x+.08,y+.08,n-.16,n-.16);
     ctx.strokeStyle=selected?'#fff0ae':productionControlled(previewState,id)?'#f5d789':'#a29670';ctx.lineWidth=selected?.12:.06;ctx.strokeRect(x+.08,y+.08,n-.16,n-.16);
     if(selected)for(const cell of productionCells(id))if(!inControl(previewState,cell)){const [cx,cy]=xy(cell);ctx.fillStyle='#ed665877';ctx.fillRect(cx,cy,1,1);}
+    if(active&&nightMix>0){
+      ctx.save();ctx.globalAlpha=nightMix;ctx.fillStyle='#ffe4a1';
+      for(let i=0;i<n;i++){ctx.fillRect(x+.18+i,y+.18,.18,.18);ctx.fillRect(x+.18+i,y+n-.36,.18,.18);}ctx.restore();
+    }
     // 街区标签在屏幕空间绘制，缩小棋盘时仍保持可读。
   }
   for (const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])]) {
@@ -170,7 +193,9 @@ function draw() {
   for(const [id,p] of previewState.outposts){
     const [x,y]=xy(id);ctx.save();if(postGhost&&id===hover)ctx.globalAlpha=.5;
     ctx.fillStyle=p.hp>0?'#8ecbe5':'#85645b';ctx.fillRect(x+.16,y+.3,.68,.6);
-    ctx.fillRect(x+.45,y+.05,.08,.5);ctx.fillRect(x+.53,y+.05,.32,.22);ctx.restore();
+    ctx.fillRect(x+.45,y+.05,.08,.5);ctx.fillRect(x+.53,y+.05,.32,.22);
+    if(p.hp>0&&nightMix>0){ctx.fillStyle=`rgba(255,233,163,${nightMix})`;ctx.fillRect(x+.3,y+.48,.14,.18);ctx.fillRect(x+.57,y+.48,.14,.18);}
+    ctx.restore();
   }
   // 敌源共用红色切角轮廓；细色条仅对应路线，不暗示不同敌种。
   const drawSource=(source,index,futureDay=null)=>{
@@ -302,6 +327,8 @@ function update() {
   $('spawned').textContent = `${state.spawned} / ${state.sources.reduce((n,s)=>n+s.count,0)}`;
   const active = state.phase === 'battle', build = state.phase === 'build';
   document.body.dataset.phase=state.phase;
+  document.body.dataset.time=build?'day':'night';
+  $('daylightLabel').textContent=build?'☀ 白天 · 建设时间':state.phase==='won'?'☾ 守住了':state.phase==='lost'?'☾ 火光熄灭':paused?'☾ 夜晚 · 已暂停':'☾ 夜晚 · 防守时间';
   $('phaseTitle').textContent=build?'白天 · 建设':active?(paused?'夜晚 · 已暂停':'夜晚 · 防守'):state.phase==='won'?'守住了':'火光熄灭';
   $('phaseHint').textContent=build?'墙改变路线 · 炮台架在墙上 · 蓝色边界内可建设':active?'每进一格结算伤害 · 可暂停补炮 · 不能造墙或拆除':state.phase==='won'?(campaignComplete(state)?'五晚实验完成，可重试当晚或整局重来。':'守住了，即将自动进入白天。经营收入已到账。'):'重试当晚可回到开战前，重新布防。';
   $('phase').textContent = `第 ${state.day} / ${state.waves.length} 天 · `+(build?'白天':active?(paused?'夜晚 · 暂停':'夜晚'):campaignComplete(state)?'全部夜晚守住了':state.phase==='won'?'当晚守住了':'火光熄灭');
@@ -595,6 +622,11 @@ $('step').onclick=()=>{if(state.phase!=='battle'||!paused)return;if(motion){moti
 function frame(now){
   const elapsed=Math.min(now-last,100);last=now;
   const dt=elapsed*playbackSpeed;
+  const targetMix=state.phase==='build'?0:1;
+  if(nightMix!==targetMix){
+    const shift=reducedMotion.matches?1:elapsed/600;
+    nightMix=targetMix>nightMix?Math.min(targetMix,nightMix+shift):Math.max(targetMix,nightMix-shift);draw();
+  }
   if(dawnAt&&now>=dawnAt)finishDawn();
   if(receiptUntil&&now>=receiptUntil){receiptUntil=0;$('economyReceipt').hidden=true;}
   if(gainUntil&&now>=gainUntil){gainUntil=0;recentGain=0;$('moneyGain').textContent='';}
