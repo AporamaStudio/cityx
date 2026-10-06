@@ -1,15 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DEFAULTS} from '../src/config.js';
+import {DEFAULTS,SIZE} from '../src/config.js';
 import {key,createCampaign,plotContent,productionQuote,productionCells,buildProduction,removeProduction,clearPlot,buildOutpost,outpostAt,removeOutpost,inControl,funds,buildTower,removeTower,changeWall,beginBattle,stepBattle,enterMorning,restoreNight,restartCampaign,validateParams,repairQuote} from '../src/model.js';
 
 // 地块正好横跨原路线，验证建设后绕行而不禁建；街道仍可放可破坏防线。
 function make(kind='open') {
-  const plot={x:15,y:22,width:2,height:2,kind},tiles=Array(900).fill('road');
+  const plot={x:15,y:22,width:2,height:2,kind},tiles=Array(SIZE*SIZE).fill('road');
   for(let y=22;y<24;y++)for(let x=15;x<17;x++)tiles[key(x,y)]=kind==='open'?'open':'block';
-  const layout={width:30,height:30,camp:{x:15,y:25},blocks:[plot],buildings:kind==='open'?[]:[plot],tiles};
+  const layout={width:SIZE,height:SIZE,camp:{x:15,y:25},blocks:[plot],buildings:kind==='open'?[]:[plot],tiles};
   const wave=[{x:15,y:20,hp:6,count:1,first:1,interval:2}];
-  return createCampaign({...DEFAULTS,budget:1000},[wave,wave],layout);
+  const s=createCampaign({...DEFAULTS,budget:1000},Array(5).fill(wave),layout);s.day=3;return s;
 }
 const run=s=>{for(let i=0;i<200&&s.phase==='battle';i++)stepBattle(s);assert.notEqual(s.phase,'battle');};
 
@@ -29,7 +29,7 @@ test('路线上的空地可建前哨，敌人绕建筑仍抵达火光，前哨�
 test('建筑封住狭窄出口时允许退回道路，不因保留路线前缀而卡住',()=>{
   const map=structuredClone(make().layout);
   for(const x of [14,16]){map.blocks.push({x,y:20,width:1,height:2,kind:'building'});for(const y of [20,21])map.tiles[key(x,y)]='block';}
-  const wave=[{x:15,y:19,hp:6,count:1,first:1,interval:2}],s=createCampaign({...DEFAULTS,budget:1000},[wave],map);
+  const wave=[{x:15,y:19,hp:6,count:1,first:1,interval:2}],s=createCampaign({...DEFAULTS,budget:1000},[wave],map);s.day=3;
   assert.ok(s.attacks[0].path.includes(key(15,21)));assert.equal(buildOutpost(s,key(15,22)),'');
   assert.equal(s.attacks[0].path[0],key(15,19));assert.equal(s.attacks[0].path.at(-1),s.camp);
   assert.ok(s.attacks[0].path.every(id=>!s.blocked.has(id)));assert.equal(new Set(s.attacks[0].path).size,s.attacks[0].path.length);
@@ -39,7 +39,7 @@ test('建筑封住狭窄出口时允许退回道路，不因保留路线前缀�
 test('建筑绕行仍经过可破坏墙，不用附近空路避开墙或炮塔火力',()=>{
   const s=make();buildOutpost(s,key(15,22));const wall=s.attacks[0].path[3],original=structuredClone(s.attacks);
   assert.equal(changeWall(s,wall),'');s.wallHealth.get(wall).hp=2;
-  const [x,y]=[wall%30,Math.floor(wall/30)],tower=key(x-1,y);assert.equal(buildTower(s,tower,'B'),'');
+  const [x,y]=[wall%SIZE,Math.floor(wall/SIZE)],tower=key(x-1,y);assert.equal(buildTower(s,tower,'B'),'');
   s.params.weapons.B.power=1;beginBattle(s);
   let hit=false;for(let i=0;i<30&&s.phase==='battle';i++){stepBattle(s);if(s.events.some(e=>e.type==='wallHit'))hit=true;}
   assert.ok(hit);assert.deepEqual(s.attacks,original);assert.ok(s.outposts.has(key(15,22)));
@@ -74,10 +74,10 @@ test('前哨仅需驻扎格受控，整块未受控也可扩张；禁止道路�
 
 test('前哨拆除检查控制依赖，旧建筑不退款，跨格操作不重复扣费',()=>{
   const s=make(),id=key(15,22);s.params.controlRadius=5;buildOutpost(s,id);const tower=key(15,16);assert.equal(buildTower(s,tower,'A'),'');
-  assert.match(removeOutpost(s,key(16,23)),/依赖/);removeTower(s,tower);s.day=2;
+  assert.match(removeOutpost(s,key(16,23)),/依赖/);removeTower(s,tower);s.day=4;
   const before=funds(s);assert.equal(clearPlot(s,key(16,23)),'');assert.equal(funds(s),before);assert.equal(plotContent(s,id).status,'empty');
   assert.equal(buildProduction(s,key(16,23)),'');const invested=funds(s);assert.ok(buildProduction(s,id));assert.equal(funds(s),invested);
-  s.day=3;assert.equal(removeProduction(s,id),'');assert.equal(funds(s),invested);
+  s.day=5;assert.equal(removeProduction(s,id),'');assert.equal(funds(s),invested);
 });
 
 test('重试保留清理、换建与绕行，整局重来恢复原废墟；拆除不主动换最短路线',()=>{
@@ -97,4 +97,26 @@ test('面积经营报价支持矩形与更大地块，小地块快回款，大�
   for(let i=1;i<sizes.length;i++){assert.ok(sizes[i].cost>sizes[i-1].cost);assert.ok(sizes[i].income>sizes[i-1].income);}
   assert.ok(sizes.every(q=>q.income/q.area<=2));assert.ok(quote(2,2).cost/quote(2,2).income<quote(4,4).cost/quote(4,4).income);
   assert.ok(quote(6,6).income/36>quote(4,4).income/16);assert.equal(quote(20,20).cost/quote(20,20).income,8);
+});
+
+
+test('当天临时建筑撤销后恢复原始路径，同时保留其他建筑造成的必要绕行',()=>{
+  const layout=structuredClone(make().layout),second={x:15,y:24,width:2,height:1,kind:'open'};
+  layout.blocks.push(second);
+  const wave=[{x:15,y:20,hp:6,count:1,first:1,interval:2}];
+  const s=createCampaign({...DEFAULTS,budget:1000},[wave],layout);s.day=3;
+  const original=[...s.attacks[0].path],cash=funds(s),a=key(15,22),b=key(15,24);
+  assert.equal(buildProduction(s,a),'');assert.notDeepEqual(s.attacks[0].path,original);
+  assert.equal(removeProduction(s,a),'');assert.deepEqual(s.attacks[0].path,original);assert.equal(funds(s),cash);
+  assert.equal(buildProduction(s,b),'');const onlyB=[...s.attacks[0].path];
+  assert.equal(buildProduction(s,a),'');assert.equal(removeProduction(s,a),'');
+  assert.deepEqual(s.attacks[0].path,onlyB);assert.ok(s.attacks[0].path.every(id=>!s.blocked.has(id)));
+  assert.equal(removeProduction(s,b),'');assert.deepEqual(s.attacks[0].path,original);
+});
+
+test('第一天只防守，第二天经营与清理，第三天开放前哨',()=>{
+  const s=make('building'),id=key(15,22);s.day=1;
+  assert.match(buildProduction(s,id),/2/);assert.match(clearPlot(s,id),/2/);assert.match(buildOutpost(s,id),/3/);
+  s.day=2;assert.equal(buildProduction(s,id),'');assert.equal(removeProduction(s,id),'');assert.match(buildOutpost(s,id),/3/);
+  s.day=3;assert.equal(buildOutpost(s,id),'');
 });

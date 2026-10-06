@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=24';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=25';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -53,17 +53,17 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
     hp: params.campHP, enemies: [], events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
   state.plotContents=new Map(state.sites.map(p=>[key(p.x,p.y),{status:p.kind==='open'?'empty':'ruin',type:p.kind==='open'?null:'production'}]));
   for(const [id,p] of state.outposts){p.plotId??=productionId(id,state);state.plotContents.set(p.plotId,{status:'building',type:'outpost'});}
-  rebuildTerrain(state);lockAttacks(state);return state;
+  initializeExploration(state);rebuildTerrain(state);lockAttacks(state);return state;
 }
 
 // 只保留一局实验和一次战前快照；无存档、回放或通用关卡框架。
 export function createCampaign(params=DEFAULTS, waves=WAVES, layout=null) {
-  if(layout&&(layout.width!==SIZE||layout.height!==SIZE))throw new Error('当前战斗地图须为 30×30；大地图仍可在布局预览实验。');
+  if(layout&&(layout.width!==SIZE||layout.height!==SIZE))throw new Error('当前战斗地图须为 60×60；其他尺寸可在布局预览实验。');
   if(layout&&waves===WAVES){
-    // 出怪节奏独立于地图，只把三个方向的出生位置吸附到北部可通行道路。
-    const used=new Set(),anchors=[5,25,15].map(x=>{
-      const cells=layout.tiles.flatMap((t,id)=>t==='road'&&Math.floor(id/SIZE)<8?[id]:[]).filter(id=>!used.has(id)&&id!==key(layout.camp.x,layout.camp.y));
-      cells.sort((a,b)=>Math.abs(a%SIZE-x)+Math.floor(a/SIZE)-Math.abs(b%SIZE-x)-Math.floor(b/SIZE));
+    // 出怪节奏独立于地图，暂将出生位置吸附到初始可见区北缘道路；正式敌源坐标待地图确认。
+    const used=new Set(),anchors=[layout.camp.x-10,layout.camp.x+10,layout.camp.x].map(x=>{
+      const cells=layout.tiles.flatMap((t,id)=>t==='road'&&Math.floor(id/SIZE)>=SIZE-30&&Math.floor(id/SIZE)<SIZE-24?[id]:[]).filter(id=>!used.has(id)&&id!==key(layout.camp.x,layout.camp.y));
+      cells.sort((a,b)=>Math.abs(a%SIZE-x)+Math.abs(Math.floor(a/SIZE)-(SIZE-30))-Math.abs(b%SIZE-x)-Math.abs(Math.floor(b/SIZE)-(SIZE-30)));
       used.add(cells[0]);return xy(cells[0]);
     });
     waves=waves.map(w=>w.map((source,i)=>({...source,x:anchors[i%anchors.length][0],y:anchors[i%anchors.length][1]})));
@@ -120,6 +120,7 @@ export function rebuildTerrain(state) {
   rebuildFields(state);
   // 每次从当天原始题目计算必要绕行，避免临时建造再退款留下免费绕行。
   for(const attack of state.attacks)attack.path=repairPath(state,attack.originalPath??attack.path);
+  revealControl(state);
 }
 export function rebuildFields(state) {
   state.field=routeField(state.camp,state.terrainWalls);
@@ -192,12 +193,15 @@ export function outpostAt(state,id) {
 export function plotBuildError(state,id) {
   const cells=productionCells(id,state);
   if(!cells.length)return '请选择地块，建筑不能建在道路上。';
+  if(productionSite(id,state)?.role==='hospital')return '医院为收复目标，占领机制待实现，不能清理或换建。';
+  if(!isExplored(state,id))return '该地块尚未探索。';
   if(cells.includes(state.camp))return '火光所在地块保留，不能清理或换建。';
   if(cells.some(cell=>reservedSources(state).some(s=>key(s.x,s.y)===cell)))return '不能覆盖敌人来源。';
   if(cells.some(cell=>state.playerWalls.has(cell)||state.towers.has(cell)))return '请先拆除地块上的墙或炮塔，再建设整块建筑。';
   return '';
 }
 export function outpostError(state,id) {
+  if(state.day<3)return '第 3 天开放前哨与探索扩张。';
   if(state.phase!=='build')return '防守中不能建设前哨。';
   if(!inControl(state,id))return '前哨驻扎位置必须在已有控制范围内。';
   const error=plotBuildError(state,id);if(error)return error;
@@ -232,6 +236,7 @@ export function enterMorning(state) {
 export function placementError(state, id, type = 'A') {
   if (!['build','battle'].includes(state.phase)) return '本晚已结束，请进入次日或重试。';
   if (!Number.isInteger(id) || id < 0 || id >= SIZE * SIZE) return '请选择地图内的格子。';
+  if(!isExplored(state,id))return '该位置尚未探索。';
   if (!inControl(state,id)) return '超出控制范围，不能架设炮台。';
   if(state.walls.has(id)||state.playerWalls.has(id)||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '炮塔独立建于未占用道路或开放场地，不能与墙、建筑或目标重叠。';
   if(state.phase==='battle'&&state.enemies.some(e=>e.id===id))return '不能在敌人占据的格子上补炮。';
@@ -247,6 +252,7 @@ export function wallPreview(state, id, remove = false) {
   if (state.phase !== 'build') error = '战斗期间不能修改墙。';
   else if (!Number.isInteger(id) || id < 0 || id >= SIZE * SIZE) error = '请选择地图内的格子。';
   else if (remove && !state.playerWalls.has(id)) error = '固定墙不能拆除。';
+  else if (!remove && !isExplored(state,id)) error = '该位置尚未探索。';
   else if (!remove && !inControl(state,id)) error = '超出控制范围，不能建墙。';
   else if (!remove && state.blocked.has(id)) error = '建筑或废墟占地，需先清理为空地。';
 
@@ -291,7 +297,7 @@ export function validateSources(sources, state) {
   for (let i = 0; i < sources.length; i++) {
     const s = sources[i], id = key(s.x, s.y), prefix = `源头 ${i + 1}：`;
     if (!['x','y','hp','count','first','interval'].every(k=>Number.isInteger(s[k])) || !Number.isInteger(s.target??-2)) return prefix + '请填写整数。';
-    if (!inside(s.x, s.y)) return prefix + '坐标应为 0–29。';
+    if (!inside(s.x, s.y)) return prefix + `坐标应为 0–${SIZE-1}。`;
     if (state.walls.has(id) || id === state.camp || state.towers.has(id)) return prefix + '与障碍、控制站、生产地点或武器冲突。';
     if(![-2,-1].includes(s.target??-2))return prefix+'当前只攻击火光，前哨不可受击。';
     if (seen.has(id)) return prefix + '位置不能重复。';
@@ -402,6 +408,7 @@ export const productionActive=(state,id)=>productionControlled(state,id);
 export const expectedIncome=state=>[...state.production.keys()].filter(id=>productionActive(state,id)).reduce((sum,id)=>sum+productionQuote(state,id).income,0);
 export function productionError(state,id) {
   if(state.phase!=='build')return '只能在建设阶段恢复生产。';
+  if(state.day<2)return '第 2 天开放经营与地块清理。';
   const error=plotBuildError(state,id);if(error)return error;
   if(plotContent(state,id).type==='outpost')return '该地块已有前哨，请先拆除。';
   if(state.production.has(productionId(id,state)))return '该地点已经恢复生产。';
@@ -424,6 +431,7 @@ export function removeProduction(state,id) {
 // 清理废墟免费且即时完成；拆除建筑按现有当天退款/旧投资保留处理。
 export function clearPlot(state,id) {
   if(state.phase!=='build')return '防守中不能清理地块。';
+  if(state.day<2)return '第 2 天开放经营与地块清理。';
   if(!inControl(state,id))return '请在已有控制范围内清理地块。';
   const error=plotBuildError(state,id);if(error)return error;
   const content=plotContent(state,id);
@@ -475,4 +483,21 @@ export function removeTower(state,id) {
   if(state.phase!=='build')return '防守中不能拆除炮台。';
   if(!state.towers.has(id))return '这里没有炮台。';
   retainDemolitionCost(state,demolitionQuote(state,id));state.towers.delete(id);state.towerDays.delete(id);state.towerHealth.delete(id);return '';
+}
+
+
+// 迷雾只隐藏未探索信息；探索过的格子不会因拆前哨重新变黑。
+export function initialView(state){
+  const [cx,cy]=xy(state.camp);
+  return {x:Math.max(0,Math.min(SIZE-30,cx-15)),y:Math.max(0,Math.min(SIZE-30,cy-27)),width:30,height:30};
+}
+function initializeExploration(state){
+  const view=initialView(state);state.explored=new Set();
+  if(!state.layout){for(let id=0;id<SIZE*SIZE;id++)state.explored.add(id);return;}
+  for(let y=view.y;y<view.y+30;y++)for(let x=view.x;x<view.x+30;x++)state.explored.add(key(x,y));
+}
+export const isExplored=(state,id)=>!state.explored||state.explored.has(id);
+export function revealControl(state){
+  if(!state.explored)return;
+  for(let id=0;id<SIZE*SIZE;id++)if(inControl(state,id))state.explored.add(id);
 }

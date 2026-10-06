@@ -1,17 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DEFAULTS} from '../src/config.js';
+import {DEFAULTS,SIZE} from '../src/config.js';
 import {key,createCampaign,beginBattle,stepBattle,enterMorning,lockAttacks,forecastAttacks,battleRoutes,changeWall,buildTower,buildOutpost,buildProduction,removeOutpost,repairFacility,repairQuote,fireField,funds,restoreNight,restartCampaign,validateParams} from '../src/model.js';
 
 // 简单道路夹具只隔离本轮防线规则；生成城市与矩形经营由集成测试覆盖。
-const layout=()=>({width:30,height:30,camp:{x:15,y:25},tiles:Array(900).fill('road'),buildings:[]});
+const layout=()=>({width:SIZE,height:SIZE,camp:{x:15,y:25},tiles:Array(SIZE*SIZE).fill('road'),buildings:[]});
 const make=(hp=40,count=1,first=1,interval=3)=>createCampaign({...DEFAULTS,budget:1000},Array.from({length:5},()=>[{x:15,y:20,hp,count,first,interval,target:-2}]),layout());
 const step=(s,n)=>{for(let i=0;i<n;i++)stepBattle(s);};
 
 test('造墙、造塔、前哨及经营均不改变已锁定来源、目标、路线',()=>{
   const map=layout();map.tiles[key(17,24)]='open';map.blocks=[{x:17,y:24,width:1,height:1,kind:'open'},{x:19,y:24,width:2,height:2,kind:'building'}];map.buildings=[{x:19,y:24,width:2,height:2,kind:'building'}];
   for(const id of [key(19,24),key(20,24),key(19,25),key(20,25)])map.tiles[id]='block';
-  const s=createCampaign({...DEFAULTS,budget:1000},undefined,map),original=structuredClone(s.attacks);
+  const s=createCampaign({...DEFAULTS,budget:1000},undefined,map),original=structuredClone(s.attacks);s.day=3;
   assert.equal(changeWall(s,key(15,22)),'');assert.equal(buildTower(s,key(14,24),'B'),'');
   assert.equal(buildOutpost(s,key(17,24)),'');assert.equal(buildProduction(s,key(20,25)),'');
   assert.deepEqual(s.attacks,original);assert.deepEqual(forecastAttacks(s),original);

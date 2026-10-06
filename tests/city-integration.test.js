@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
 import {MAP_DEFAULTS,readMapSettings,mapSearch} from '../src/map-settings.js';
 import {DEFAULTS} from '../src/config.js';
-import {createCampaign,key,productionCells,productionQuote,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,rebuildTerrain} from '../src/model.js';
+import {createCampaign,key,productionCells,productionQuote,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,rebuildTerrain,inControl,isExplored,removeOutpost,clearPlot,plotContent} from '../src/model.js';
 
 test('尺寸、特殊设施和紧邻实验保持完整分区与通路',()=>{
   let joined=0;
@@ -22,12 +22,13 @@ test('尺寸、特殊设施和紧邻实验保持完整分区与通路',()=>{
 test('放不下的特殊区块不偷偷缩小，地图参数可通过链接复现',()=>{
   const settings={...MAP_DEFAULTS,minBlock:3,maxBlock:6,special:true,specialMin:30,specialMax:30,touching:true};
   assert.deepEqual(readMapSettings('?'+mapSearch(settings)),settings);
-  assert.equal(generateCityMap(settings).stats.special,0);
+  assert.equal(generateCityMap({...settings,width:30,height:30}).stats.special,0);
   assert.equal(generateCityMap({...settings,width:100,height:100}).stats.special,1);
   assert.throws(()=>generateCityMap({minBlock:6,maxBlock:3}));
 });
 test('生成地图接入路线、矩形经营、建设限制及重试',()=>{
   const layout=generateCityMap(MAP_DEFAULTS),s=createCampaign({...DEFAULTS,budget:1000},undefined,layout);
+  s.day=3;
   for(const wave of s.waves)assert.equal(validateSources(wave,s),'');
   const b=s.sites.find(b=>b.kind==='building'&&b.width!==b.height&&productionControlled(s,key(b.x,b.y))),id=key(b.x,b.y);
   assert.equal(productionCells(id,s).length,b.width*b.height);assert.ok(!s.field.distance.has(id));
@@ -57,8 +58,48 @@ test('新地图完成十五晚，敌人每步只进入道路或开放场地',()=
 
 test('开放地块全部建成建筑后，道路骨架仍连接所有来源与火光',()=>{
   for(let seed=0;seed<6;seed++)for(const touching of [false,true]){
-    const s=createCampaign(DEFAULTS,undefined,generateCityMap({seed,touching}));
+    const s=createCampaign(DEFAULTS,undefined,generateCityMap({...MAP_DEFAULTS,seed,touching}));
     for(const p of s.sites){const id=key(p.x,p.y);if(!productionCells(id,s).includes(s.camp))s.plotContents.set(id,{status:'building',type:'production'});}
     rebuildTerrain(s);for(const source of s.sources)assert.ok(s.field.distance.has(key(source.x,source.y)));
+  }
+});
+
+
+test('起点只揭示 30×30，前哨探索保留，重开恢复迷雾',()=>{
+  const s=createCampaign({...DEFAULTS,budget:1000},undefined,generateCityMap(MAP_DEFAULTS));
+  assert.equal(s.explored.size,900);assert.equal(isExplored(s,key(30,0)),false);s.day=3;
+  let changed=false;
+  // 连续向外建设前哨；初始 30×30 比火光控制区更大，第一座前哨未必触及迷雾。
+  for(let round=0;round<12&&!changed;round++){
+    for(let i=0;i<3600;i++)if(inControl(s,i)&&plotContent(s,i)?.status==='ruin')clearPlot(s,i);
+    const candidates=Array.from({length:3600},(_,i)=>i).filter(i=>!outpostError(s,i));
+    candidates.sort((a,b)=>Math.floor(a/60)-Math.floor(b/60));
+    assert.ok(candidates.length);const id=candidates[0],before=s.explored.size;
+    assert.equal(buildOutpost(s,id),'');
+    if(s.explored.size>before){const explored=new Set(s.explored);assert.equal(removeOutpost(s,id),'');assert.deepEqual(s.explored,explored);changed=true;}
+  }
+  assert.ok(changed);assert.equal(restartCampaign(s).explored.size,900);
+});
+
+test('不同 seed 起步保证受控的廉价 2×2 废墟，包括普通尺寸 3–6 的例外',()=>{
+  for(let seed=0;seed<12;seed++){
+    const layout=generateCityMap({...MAP_DEFAULTS,seed,minBlock:3,maxBlock:6}),s=createCampaign(DEFAULTS,undefined,layout);
+    const b=s.sites.find(p=>p.role==='starter');assert.ok(b);assert.equal(b.width,2);assert.equal(b.height,2);
+    const id=key(b.x,b.y);assert.ok(productionControlled(s,id));assert.equal(productionQuote(s,id).cost,20);
+    s.day=2;assert.equal(buildProduction(s,id),'');
+  }
+});
+
+
+test('医院固定左上 10×12，不重叠且路网保持连通，不能清理换建',()=>{
+  for(let seed=0;seed<8;seed++){
+    const map=generateCityMap({...MAP_DEFAULTS,seed,touching:true}),hospital=map.blocks.find(b=>b.role==='hospital');
+    assert.deepEqual([hospital.x,hospital.y,hospital.width,hospital.height],[1,1,10,12]);
+    const seen=new Set();for(const b of map.blocks)for(let y=b.y;y<b.y+b.height;y++)for(let x=b.x;x<b.x+b.width;x++){const id=key(x,y);assert.ok(!seen.has(id));seen.add(id);}
+    const distances=walkableDistances(map);map.tiles.forEach((t,i)=>assert.equal(distances[i]>=0,t!=='block'));
+    const s=createCampaign({...DEFAULTS,controlRadius:30},undefined,map);s.day=3;s.explored=new Set(Array.from({length:3600},(_,i)=>i));
+    // 把控制锚点临时设在医院旁，验证不是因距离而碰巧禁建。
+    s.camp=key(0,8);const id=key(1,1);
+    assert.match(clearPlot(s,id),/医院/);assert.match(buildProduction(s,id),/医院/);assert.match(buildOutpost(s,id),/医院/);
   }
 });

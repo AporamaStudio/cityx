@@ -1,9 +1,10 @@
 // 先划地块与道路，再给出初始内容；战斗中的清理与换建保存在独立运行状态。
-export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2,minBlock=2,maxBlock=5,special=false,specialMin=10,specialMax=30,touching=false}={}) {
+export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2,minBlock=2,maxBlock=5,special=false,specialMin=10,specialMax=30,touching=false,starterPlot=false,hospital=false}={}) {
   for(const [name,value,min,max] of [['width',width,20,240],['height',height,20,240],['mainRoadWidth',mainRoadWidth,2,3],['minBlock',minBlock,2,8],['maxBlock',maxBlock,2,8],['specialMin',specialMin,10,30],['specialMax',specialMax,10,30]]) {
     if(!Number.isInteger(value)||value<min||value>max)throw new Error(`${name} 必须是 ${min}–${max} 的整数`);
   }
   if(minBlock>maxBlock||specialMin>specialMax)throw new Error('最小边长不能超过最大边长');
+  if(hospital&&(width<26||height<26))throw new Error('医院地图至少需要 26×26 格');
   seed=String(seed);
   let hash=2166136261;
   for(const c of seed){hash^=c.codePointAt(0);hash=Math.imul(hash,16777619);}
@@ -49,12 +50,17 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
   while(y<height-1){
     const remaining=height-1-y;let h=Math.min(int(7,10),remaining);
     if(remaining-h<minBlock+2)h=remaining;
-    if(special&&!specialPlaced&&y===1&&width>=specialMin+minBlock+mainRoadWidth+3&&height>=specialMin+minBlock+4)h=int(specialMin,Math.min(specialMax,height-minBlock-4));
+    if(special&&!specialPlaced&&(!hospital||y>1)&&width>=specialMin+minBlock+mainRoadWidth+3&&remaining>=specialMin+minBlock+3)h=int(specialMin,Math.min(specialMax,remaining-minBlock-3));
     let spine=Math.floor((width-mainRoadWidth)/2)+int(-2,2);
-    if(special&&!specialPlaced&&y===1&&h>=specialMin)spine=Math.max(spine,specialMin+1);
+    if(special&&!specialPlaced&&(!hospital||y>1)&&h>=specialMin)spine=Math.max(spine,specialMin+1);
+    if(hospital&&y===1){h=12;spine=Math.max(spine,12);}
     bands.push({y,height:h,spine});
     road({x:spine,y,width:mainRoadWidth,height:h},mainRoadWidth===3?'highway':'main');
-    if(special&&!specialPlaced&&h>=specialMin&&spine-1>=specialMin){
+    if(hospital&&y===1){
+      // 医院是固定目标地块，四周留路；不参与普通区块尺寸与随机特殊设施抽样。
+      const b=addBlock({x:1,y:1,width:10,height:12},'building');b.special=true;b.role='hospital';b.name='医院';
+      parcels({x:12,y,width:spine-12,height:h});
+    }else if(special&&!specialPlaced&&h>=specialMin&&spine-1>=specialMin){
       const w=int(specialMin,Math.min(specialMax,spine-1)),b=addBlock({x:1,y,width:w,height:h},'building');b.special=true;b.name='大型设施';specialPlaced=true;
       parcels({x:w+2,y,width:spine-w-2,height:h});
     }else parcels({x:1,y,width:spine-1,height:h});
@@ -84,6 +90,16 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
     if(tiles.some((t,id)=>t!=='block'&&d[id]<0)){paint(stripe,'road');continue;}
     a.width++;a.joined=true;b.joined=true;joined++;
   }
+  // 起步教学地块固定为 2×2 小废墟；它是普通尺寸实验之外的明确例外。
+  if(starterPlot){
+    const candidates=blocks.filter(b=>!b.role&&!b.special&&b.width>=2&&b.height>=2);
+    candidates.sort((a,b)=>Math.abs(a.x-camp.x)+Math.abs(a.y-camp.y)-Math.abs(b.x-camp.x)-Math.abs(b.y-camp.y));
+    const b=candidates[0];
+    if(!b)throw new Error('无法预留起步废墟');
+    paint(b,'road');
+    b.x=Math.max(b.x,Math.min(camp.x,b.x+b.width-2));b.y=Math.max(b.y,Math.min(camp.y,b.y+b.height-2));
+    b.width=2;b.height=2;b.kind='building';b.state='ruin';b.role='starter';paint(b,'block');
+  }
   // 按最终地形记录道路，包含边缘余量，去掉被合拢的道路段。
   const roadKinds=new Map();
   for(const r of roads)if(r.kind!=='street')for(let cy=r.y;cy<r.y+r.height;cy++)for(let cx=r.x;cx<r.x+r.width;cx++)roadKinds.set(cy*width+cx,r.kind);
@@ -91,7 +107,7 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
   for(let cy=0;cy<height;cy++)for(let cx=0;cx<width;cx++)if(tiles[cy*width+cx]==='road')roads.push({x:cx,y:cy,width:1,height:1,kind:roadKinds.get(cy*width+cx)||'street'});
   const buildings=blocks.filter(b=>b.kind==='building'),openSpaces=blocks.filter(b=>b.kind==='open');
   const occupied=tiles.filter(t=>t==='block').length;
-  return {version:3,seed,width,height,mainRoadWidth,minBlock,maxBlock,special,specialMin,specialMax,touching,tiles,roads,blocks,buildings,openSpaces,camp,goal,stats:{special:buildings.filter(b=>b.special).length,joined,buildings:buildings.length,openSpaces:openSpaces.length,occupied,coverage:occupied/(width*height)}};
+  return {version:5,seed,width,height,mainRoadWidth,minBlock,maxBlock,special,specialMin,specialMax,touching,starterPlot,hospital,tiles,roads,blocks,buildings,openSpaces,camp,goal,stats:{hospital:buildings.filter(b=>b.role==='hospital').length,special:buildings.filter(b=>b.special&&b.role!=='hospital').length,joined,buildings:buildings.length,openSpaces:openSpaces.length,occupied,coverage:occupied/(width*height)}};
 }
 
 // 仅检查生成时的道路和空地连通；运行时通行由 model.js 的地块内容决定。
