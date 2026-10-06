@@ -345,14 +345,7 @@ function draw() {
     ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.lineWidth=4;ctx.strokeStyle='#142024';
     const ty=sy-7-(reducedMotion.matches?0:t*18);ctx.strokeText(fx.text,sx+fx.size*size/2,ty);ctx.fillStyle=fx.color;ctx.fillText(fx.text,sx+fx.size*size/2,ty);ctx.restore();
   }
-  // 篝火血量最后绘制，固定屏幕字号，避免缩放后难以辨认或被敌群遮挡。
-  const campX=panX+(cx+.5)*size, campY=panY+cy*size-25;
-  ctx.fillStyle='#11191cee';ctx.fillRect(campX-39,campY,78,23);
-  ctx.font='600 11px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#ffe0b7';
-  ctx.fillText(`HP ${Math.max(0,state.hp)} / ${state.params.campHP}`,campX,campY+8);
-  ctx.fillStyle='#553a32';ctx.fillRect(campX-27,campY+17,54,4);
-  ctx.fillStyle='#ffc17c';ctx.fillRect(campX-27,campY+17,54*Math.max(0,state.hp)/state.params.campHP,4);
-  ctx.textBaseline='alphabetic';
+  // 地图只显示篝火图标；耐久统一由右侧火光卡展示。
   // 坐标标记帮助修改源头；屏幕字号不随棋盘缩小。
   ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillStyle='#81999c';
   for(let i=0;i<SIZE;i+=5){ctx.fillText(i,panX+(i+.5)*size,panY-8);ctx.fillText(i,panX-14,panY+(i+.65)*size);}
@@ -400,6 +393,7 @@ function update() {
   const remaining=state.enemies.reduce((sum,enemy)=>sum+enemy.members,0);
   const resolved=Math.max(0,state.spawned-remaining),progress=total?Math.min(100,Math.floor(resolved/total*100)):0;
   $('nightProgress').hidden=build;
+  $('nightProgressLabel').textContent=`第 ${state.day} 晚进度`;
   $('nightProgressText').textContent=state.phase==='lost'?`${progress}% · 防守失败`:state.phase==='won'?'100% · 守住了':`${progress}%`;
   $('nightProgressBar').setAttribute('aria-valuenow',String(progress));
   $('nightProgressFill').style.width=`${progress}%`;
@@ -442,17 +436,28 @@ function updateNightReport(){
   $('reportEconomy').textContent=`+${report.economy}`;
   $('reportKills').textContent=`+${report.earned}`;
 }
+// 玩家按来源查看数量与生命；节拍、伤害等诊断数据留在来袭配置。
 function updateForecast() {
+  const selectable=$('allowForecastSelection').checked;
+  $('forecastDay').hidden=!selectable;
+  if(!selectable)$('forecastDay').value=String(state.day-1);
   const night=Number($('forecastDay').value)+1, sources=viewedSources();
-  $('forecastTitle').textContent=`第 ${night} 晚${night===state.day?' · 来源/目标已锁定，建筑挡路可绕行':' · 暂定路线预告'} · ${sources.reduce((sum,s)=>sum+s.count,0)} 块`;
+  $('forecastTitle').textContent=`共 ${sources.reduce((sum,s)=>sum+s.count,0)} 个敌群`;
   $('forecastList').replaceChildren(...sources.map((s,i)=>{
-    const row=document.createElement('li'),name='火光';
-    const rule='固定目标';
+    const row=document.createElement('li'),name=document.createElement('div'),blocks=document.createElement('div');
     row.style.setProperty('--source-color',colors[i%colors.length]);
-    row.textContent=`${i+1} · ${visibleCell(key(s.x,s.y))?`(${s.x},${s.y})`:'未探索来源'} · ${s.count} 块 × ${s.hp} HP · 拆墙/塔 ${state.params.enemyPower}/块/拍 · 击杀 ${state.params.killReward} 钱/块 · 首拍 ${s.first} / 间隔 ${s.interval} · ${rule} → ${name}`;return row;
+    name.className='forecast-source';name.textContent=`敌源 ${i+1}`;
+    blocks.className='forecast-blocks';blocks.setAttribute('aria-label',`${s.count} 个敌群，每个 ${s.hp} HP`);
+    for(let n=0;n<s.count;n++){
+      const block=document.createElement('span');block.className='forecast-enemy';block.textContent=s.hp;block.setAttribute('aria-hidden','true');blocks.append(block);
+    }
+    row.append(name,blocks);return row;
   }));
+  $('forecastDebug').textContent=`第 ${night} 晚 · ${night===state.day?'来源与火光目标已锁定':'暂定预告'}\n`+sources.map((s,i)=>`源头 ${i+1} · (${s.x},${s.y}) · ${s.count} 块 × ${s.hp} HP · 拆墙/塔 ${state.params.enemyPower}/块/拍 · 击杀 ${state.params.killReward} 钱/块 · 首拍 ${s.first} / 间隔 ${s.interval} · 固定目标 → 火光`).join('\n');
 }
 $('forecastDay').onchange=()=>{updateForecast();draw();};
+// 关闭跨晚预览时立即回到当晚，避免地图残留其他晚的路线。
+$('allowForecastSelection').onchange=()=>{updateForecast();draw();};
 
 function sourceEditor(sources) {
   $('sources').replaceChildren();

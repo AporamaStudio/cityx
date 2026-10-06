@@ -85,3 +85,5 @@ header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320
 @media(max-width:900px){.tips-panel{max-height:none;margin-top:12px}}
 
 .tool-section{margin-top:14px}.tool-section h2{margin:0 0 7px;font-size:12px;font-weight:650;color:#b5c8c5}.report-economy strong,.report-kills>span:last-child{display:flex;align-items:center;gap:5px}.tool-section:first-of-type{margin-top:0}
+
+.forecast-source{font-weight:650;color:var(--source-color);margin-bottom:7px}.forecast-blocks{display:flex;flex-wrap:wrap;gap:6px}.forecast-enemy{display:grid;place-items:center;min-width:30px;height:30px;padding:0 4px;border:1px solid var(--source-color);border-radius:4px;background:#823f3f;color:#fff2df;font-weight:750;font-size:14px;font-variant-numeric:tabular-nums}#forecastDebug{white-space:pre-wrap;font:11px/1.7 system-ui;color:var(--muted)}
