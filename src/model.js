@@ -118,8 +118,8 @@ export function rebuildTerrain(state) {
   state.terrainWalls=new Set([...state.fixedWalls,...state.blocked]);
   state.walls=new Set([...state.terrainWalls,...[...state.playerWalls].filter(id=>state.wallHealth.get(id)?.hp>0)]);
   rebuildFields(state);
-  // 仅建筑新阻断已有路径时补一段绕行，清理不主动把整个题目重算成最短路。
-  for(const attack of state.attacks)attack.path=repairPath(state,attack.path);
+  // 每次从当天原始题目计算必要绕行，避免临时建造再退款留下免费绕行。
+  for(const attack of state.attacks)attack.path=repairPath(state,attack.originalPath??attack.path);
 }
 export function rebuildFields(state) {
   state.field=routeField(state.camp,state.terrainWalls);
@@ -155,7 +155,7 @@ export function forecastAttacks(state,night=state.day) {
 }
 // 来源、目标与初始路线在白天开始锁定；前哨不进入目标池。
 export function lockAttacks(state) {
-  state.attacks=state.sources.map((source,index)=>({...structuredClone(source),index,target:state.camp,path:pathFrom(key(source.x,source.y),state.field)}));
+  state.attacks=state.sources.map((source,index)=>{const path=pathFrom(key(source.x,source.y),state.field);return {...structuredClone(source),index,target:state.camp,originalPath:[...path],path};});
 }
 export const enemyKey=(enemy)=>`${enemy.id}:${enemy.target}`;
 // 火光、墙与塔按实际缺失 HP 报价；一次修满，前哨无需维修。
