@@ -105,7 +105,7 @@ function draw() {
     const quote=productionQuote(state,hover),content=plotContent(state,hover);
     const summary=`${hoveredSite.width??hoveredSite.size}×${hoveredSite.height??hoveredSite.size} 地块 · ${quote.area} 格 · ${content.status==='empty'?'空地':content.status==='ruin'?'生产废墟':content.type==='outpost'?'前哨建筑':'生产建筑'}。`;
     if(hoveredSite.role==='hospital')$('placementInfo').textContent='医院 · 10×12 · 收复目标。占领机制待实现，不可清理或换建。';
-    else if(tool==='production')$('placementInfo').textContent=summary+`生产费用 ${quote.cost} 钱 · 每晚 +${quote.income} · 正常生产 ${Math.ceil(quote.cost/quote.income)} 晚回本。`+(productionError(state,hover)||'点击修缮或新建整块。');
+    else if(tool==='production')$('placementInfo').textContent=summary+`生产费用 ${quote.cost} 钱 · 每天 +${quote.income}（守住当晚后结算） · 正常生产 ${Math.ceil(quote.cost/quote.income)} 晚回本。`+(productionError(state,hover)||'点击修缮或新建整块。');
     else $('placementInfo').textContent=summary+($('placementInfo').textContent||'选择生产、前哨或拆除 / 清理工具。');
   }
 
@@ -300,6 +300,27 @@ function draw() {
     if(p.role!=='hospital'&&!built&&productionId(hover,state)!==id&&!productionControlled(state,id))continue;
     const content=plotContent(state,id),post=content.type==='outpost';
     if(cells.includes(state.camp))continue;
+    if(content.status==='ruin'&&p.role!=='hospital'){
+      const quote=productionQuote(state,id),cost=`−${quote.cost}`,income=`+${quote.income}`;
+      ctx.save();ctx.font='600 11px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
+      const w=Math.max(ctx.measureText(cost).width+33,ctx.measureText(income).width+36);let left=x-w/2;
+      // 小街区紧邻火光时将报价挪到血条右侧，用短线保留地块对应关系。
+      const hpX=panX+(cx+.5)*size,hpY=panY+cy*size-25;
+      if(y+18>hpY&&y-18<hpY+23&&left<hpX+39&&left+w>hpX-39){
+        left=hpX+43;ctx.strokeStyle='#b8afa0';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(left,y);ctx.stroke();
+      }
+      ctx.fillStyle='#142024f2';ctx.fillRect(left,y-18,w,36);
+      // 破损屋顶、裂缝和残墙表示废墟；图标与费用同排，避免额外占一列。
+      ctx.fillStyle='#b8afa0';ctx.beginPath();ctx.moveTo(left+4,y-3);ctx.lineTo(left+4,y-14);ctx.lineTo(left+8,y-14);ctx.lineTo(left+8,y-10);ctx.lineTo(left+11,y-12);ctx.lineTo(left+14,y-9);ctx.lineTo(left+14,y-3);ctx.closePath();ctx.fill();
+      ctx.strokeStyle='#142024';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left+10,y-10);ctx.lineTo(left+8,y-7);ctx.lineTo(left+11,y-5);ctx.stroke();
+      const row=(text,cy,color,suffix='')=>{
+        const start=left+(suffix?5:18);ctx.fillStyle=color;ctx.fillText(text,start,cy);const cx=start+ctx.measureText(text).width+7;
+        ctx.fillStyle='#f3c557';ctx.beginPath();ctx.arc(cx,cy,4.5,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff0ac';ctx.lineWidth=1;ctx.beginPath();ctx.arc(cx,cy,3,0,Math.PI*2);ctx.stroke();
+        ctx.strokeStyle='#9b671b';ctx.beginPath();ctx.moveTo(cx,cy-2);ctx.lineTo(cx,cy+2);ctx.stroke();
+        if(suffix){ctx.fillStyle=color;ctx.fillText(suffix,cx+7,cy);}
+      };
+      row(cost,y-8,funds(state)>=quote.cost?'#f5df9c':'#f3a49c');row(income,y+8,'#bff5ce','/天');ctx.restore();continue;
+    }
     const title=p.role==='hospital'?'医院 · 10×12':post?'前哨':built?(active?'生产中':'已停产'):content.status==='empty'?'空地':'生产废墟';
     ctx.font='600 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
     const w=Math.max(ctx.measureText(title).width+8,48);
