@@ -89,9 +89,9 @@ test('重试保留清理、换建与绕行，整局重来恢复原废墟；拆�
 });
 
 test('面积经营报价支持矩形与更大地块，小地块快回款，大地块密度有上限',()=>{
-  const quote=(width,height)=>productionQuote({params:DEFAULTS,sites:[{x:0,y:0,width,height}]},0);
+  const quote=(width,height)=>productionQuote({params:{...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1},sites:[{x:0,y:0,width,height}]},0);
   assert.deepEqual(quote(2,2),{area:4,cost:20,income:4});assert.deepEqual(quote(4,4),{area:16,cost:128,income:16});
-  assert.deepEqual(quote(5,5),{area:25,cost:304,income:38});assert.deepEqual(quote(6,6),{area:36,cost:512,income:64});
+  assert.deepEqual(quote(5,5),{area:25,cost:304,income:38});assert.deepEqual(quote(6,6),{area:36,cost:512,income:65});
   assert.deepEqual(quote(2,6),quote(3,4));
   const sizes=[2,3,4,5,6,8,12,20].map(n=>quote(n,n));
   for(let i=1;i<sizes.length;i++){assert.ok(sizes[i].cost>sizes[i-1].cost);assert.ok(sizes[i].income>sizes[i-1].income);}

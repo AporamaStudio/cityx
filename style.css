@@ -69,3 +69,19 @@ body[data-phase="won"] .arena{border-color:#85d1ad}body[data-phase="lost"] .aren
 /* 日期是主要进度信息；通过当前工具和目标引导，不预告解锁时间表。 */
 header #phase{margin-left:auto;flex-shrink:0;font-size:22px;font-weight:800;padding:9px 16px;border-radius:10px;white-space:nowrap}.brand{white-space:nowrap}.wallet>div{display:flex;align-items:center;gap:8px}#notice:empty{display:none}.morning-card{font-size:15px}.mapbar{justify-content:flex-end}
 @media(max-width:900px){header{height:auto;min-height:80px;flex-wrap:wrap;gap:10px;padding:12px 14px}header #phase{font-size:20px}.objective{order:3;flex-basis:100%;max-width:none}}
+
+/* 目标统一放顶栏，地图工具浮在右下角，不再挤占画布高度。 */
+header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320px,1.4fr);gap:20px}header #phase{margin:0;font-size:22px}.daily-objective{color:#f2dfb0;font-size:15px;line-height:1.5}.objective{max-width:none}.objective strong{font-size:12px}.objective small{font-size:10px}
+.map-tools{position:absolute;right:12px;bottom:12px;z-index:2;padding:8px;border:1px solid #59716d;border-radius:8px;background:#17272bed;box-shadow:0 3px 12px #0003}.maplegend{bottom:68px;right:auto;max-width:calc(100% - 24px)}
+.progress-heading{display:flex;justify-content:space-between;color:#c5dded;margin-bottom:8px}.night-progress-track{height:8px;background:#34434e;border-radius:5px;overflow:hidden}.night-progress-track i{display:block;width:0;height:100%;background:#9cd7ec;transition:width .2s}#nightProgress small{display:block;margin-top:7px;color:var(--muted);font-size:10px;line-height:1.5}
+@media(max-width:900px){header{display:grid;grid-template-columns:auto auto minmax(0,1fr);height:auto;gap:10px;min-height:0}.brand{font-size:21px}header #phase{font-size:19px;padding:7px 10px}.objective{order:0;grid-column:1/-1}.daily-objective{font-size:13px}.map-tools{gap:6px;right:8px;bottom:8px;padding:6px}.maplegend{bottom:62px}}
+@media(max-width:420px){header{grid-template-columns:auto auto}.daily-objective{grid-column:1/-1}.map-tools{gap:4px}.map-tools button{padding:7px}.map-tools label{font-size:11px}}
+
+/* 反馈留在左下，图例跟随右下视图工具；太阳/月亮明确表达当前昼夜。 */
+.tips-panel{margin-top:auto;max-height:48%;overflow:auto}.tips-panel #cellInfo{display:block;color:var(--muted);font-size:11px;line-height:1.6;margin:10px 0}.tips-panel #result:empty{display:none}.tips-panel details{margin-top:12px}.tips-panel #toolInfo{margin-top:0;padding-top:0;border-top:0}.tips-panel #notice{margin-bottom:10px}
+.map-tools{display:flex;flex-direction:column;align-items:flex-end;max-width:calc(100% - 24px);gap:8px}.map-tools .maplegend{position:static;max-width:100%;margin:0;padding:0;border:0;background:none;justify-content:flex-end;font-size:10px;gap:5px 10px}.map-tools .viewtools{flex-wrap:wrap;justify-content:flex-end}
+.time-icon{position:absolute;top:12px;left:12px;z-index:1;width:46px;height:46px;padding:7px;border:1px solid #dbce9a;border-radius:50%;background:#5e715ae8;pointer-events:none}.time-icon svg{display:block;width:100%;height:100%}.moon-icon{display:none!important}body[data-time="night"] .time-icon{background:#223a54e8;border-color:#6885a7}body[data-time="night"] .sun-icon{display:none}body[data-time="night"] .moon-icon{display:block!important}
+.camp-title h1{display:flex;align-items:center;gap:6px}#campIcon{width:30px;height:30px;display:inline-block}body[data-time="day"] #viewport{background-color:#718074}body[data-time="night"] #viewport{background-color:#25333e}
+@media(max-width:900px){.tips-panel{max-height:none;margin-top:12px}}
+
+.tool-section{margin-top:14px}.tool-section h2{margin:0 0 7px;font-size:12px;font-weight:650;color:#b5c8c5}.report-economy strong,.report-kills>span:last-child{display:flex;align-items:center;gap:5px}.tool-section:first-of-type{margin-top:0}

@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=25';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=29';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -193,9 +193,9 @@ export function outpostAt(state,id) {
 export function plotBuildError(state,id) {
   const cells=productionCells(id,state);
   if(!cells.length)return '请选择地块，建筑不能建在道路上。';
-  if(productionSite(id,state)?.role==='hospital')return '医院为收复目标，占领机制待实现，不能清理或换建。';
+  if(productionSite(id,state)?.role==='hospital')return '医院为收复目标，占领机制待实现，不能拆除或换建。';
   if(!isExplored(state,id))return '该地块尚未探索。';
-  if(cells.includes(state.camp))return '火光所在地块保留，不能清理或换建。';
+  if(cells.includes(state.camp))return '火光所在地块保留，不能拆除或换建。';
   if(cells.some(cell=>reservedSources(state).some(s=>key(s.x,s.y)===cell)))return '不能覆盖敌人来源。';
   if(cells.some(cell=>state.playerWalls.has(cell)||state.towers.has(cell)))return '请先拆除地块上的墙或炮塔，再建设整块建筑。';
   return '';
@@ -205,7 +205,7 @@ export function outpostError(state,id) {
   if(state.phase!=='build')return '防守中不能建设前哨。';
   if(!inControl(state,id))return '前哨驻扎位置必须在已有控制范围内。';
   const error=plotBuildError(state,id);if(error)return error;
-  if(plotContent(state,id).status!=='empty')return '前哨需要整块空地，请先清理废墟或旧建筑。';
+  if(plotContent(state,id).status!=='empty')return '前哨需要整块空地，请先拆除废墟或旧建筑。';
   const cells=new Set(productionCells(id,state));
   if(![...cells].some(cell=>{const [x,y]=xy(cell);return [[x-1,y],[x+1,y],[x,y-1],[x,y+1]].some(([nx,ny])=>inside(nx,ny)&&!cells.has(key(nx,ny))&&state.field.distance.has(key(nx,ny)));}))return '地块须临接可达道路或空地。';
   return funds(state)<state.params.outpostCost?'资金不足，无法建造前哨。':'';
@@ -284,7 +284,7 @@ export function validateParams(params, state, checkLayout = true) {
     const w=params.weapons[type];
     if (!w || !['square','diamond'].includes(w.shape) || !integer(w.range,1,8) || !integer(w.power,1,99) || !integer(w.cost,1,1000)||!integer(w.hp,1,10000)) return `武器 ${type}：范围 1–8、火力 1–99、价格 1–1000、耐久 1–10000，均为整数。`;
   }
-  if (!integer(params.productionCostPerCell,1,1000)||!integer(params.productionIncomePerCell,1,1000)) return '每格生产恢复费用和每格每晚收入须为 1–1000 整数。';
+  if (!integer(params.productionCostPerCell,1,1000)||!(Number.isFinite(params.productionIncomePerCell)&&params.productionIncomePerCell>=0&&params.productionIncomePerCell<=1000)) return '每格生产恢复费用须为 1–1000、每格每晚收入须为 0–1000，可使用小数。';
   if (!integer(params.killReward,0,1000)) return '每个敌人击杀奖励须为 0–1000 整数。';
   if (checkLayout && [...state.playerWalls,...state.towers.keys(),...state.outposts.keys(),...[...state.production.keys()].flatMap(id=>productionCells(id,state))].some(id=>!inControl({...state,params},id,params.controlRadius))) return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
   if (checkLayout && funds({...state,params}) < 0) return '按新价格计算，现有布局超出预算（含经营与前哨）。请提高资金，或取消预览后拆除设施。';
@@ -398,9 +398,10 @@ export function productionQuote(state,id) {
   if(!area)return {area:0,cost:0,income:0};
   const {baseArea,smallCostFloor,densityGrowthArea,maxDensity}=PRODUCTION_CURVE;
   const density=area<=baseArea?1:1+(maxDensity-1)*(1-2**(-(area-baseArea)/densityGrowthArea));
-  const income=Math.round(area*state.params.productionIncomePerCell*density);
+  // 每格可用小数，整块含产出密度的最终收入统一向上取整。
+  const income=Math.ceil(area*state.params.productionIncomePerCell*density);
   const cost=area<=baseArea?Math.round(area*state.params.productionCostPerCell*(smallCostFloor+(1-smallCostFloor)*area/baseArea)):
-    Math.round(income*state.params.productionCostPerCell/state.params.productionIncomePerCell);
+    Math.round(Math.round(area*density)*state.params.productionCostPerCell);
   return {area,cost,income};
 }
 export const productionControlled=(state,id)=>productionCells(id,state).length>0&&productionCells(id,state).every(cell=>inControl(state,cell));
@@ -408,7 +409,7 @@ export const productionActive=(state,id)=>productionControlled(state,id);
 export const expectedIncome=state=>[...state.production.keys()].filter(id=>productionActive(state,id)).reduce((sum,id)=>sum+productionQuote(state,id).income,0);
 export function productionError(state,id) {
   if(state.phase!=='build')return '只能在建设阶段恢复生产。';
-  if(state.day<2)return '第 2 天开放经营与地块清理。';
+  if(state.day<2)return '第 2 天开放经营与地块拆除。';
   const error=plotBuildError(state,id);if(error)return error;
   if(plotContent(state,id).type==='outpost')return '该地块已有前哨，请先拆除。';
   if(state.production.has(productionId(id,state)))return '该地点已经恢复生产。';
@@ -430,9 +431,9 @@ export function removeProduction(state,id) {
 }
 // 清理废墟免费且即时完成；拆除建筑按现有当天退款/旧投资保留处理。
 export function clearPlot(state,id) {
-  if(state.phase!=='build')return '防守中不能清理地块。';
-  if(state.day<2)return '第 2 天开放经营与地块清理。';
-  if(!inControl(state,id))return '请在已有控制范围内清理地块。';
+  if(state.phase!=='build')return '防守中不能拆除地块。';
+  if(state.day<2)return '第 2 天开放经营与地块拆除。';
+  if(!inControl(state,id))return '请在已有控制范围内拆除地块。';
   const error=plotBuildError(state,id);if(error)return error;
   const content=plotContent(state,id);
   if(content.status==='empty')return '这里已经是空地。';

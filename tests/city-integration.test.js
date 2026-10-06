@@ -32,7 +32,7 @@ test('生成地图接入路线、矩形经营、建设限制及重试',()=>{
   for(const wave of s.waves)assert.equal(validateSources(wave,s),'');
   const b=s.sites.find(b=>b.kind==='building'&&b.width!==b.height&&productionControlled(s,key(b.x,b.y))),id=key(b.x,b.y);
   assert.equal(productionCells(id,s).length,b.width*b.height);assert.ok(!s.field.distance.has(id));
-  assert.equal(productionQuote(s,id).area,b.width*b.height);assert.ok(productionQuote(s,id).cost<=b.width*b.height*8);assert.equal(productionQuote(s,id).income,b.width*b.height);
+  assert.equal(productionQuote(s,id).area,b.width*b.height);assert.ok(productionQuote(s,id).cost<=b.width*b.height*8);assert.equal(productionQuote(s,id).income,Math.ceil(b.width*b.height*DEFAULTS.productionIncomePerCell));
   assert.ok(wallPreview(s,id).error);assert.ok(placementError(s,id));assert.ok(outpostError(s,id));
   assert.equal(buildProduction(s,id),'');assert.ok(!s.field.distance.has(id));
   const road=layout.tiles.findIndex((t,id)=>t==='road'&&!wallPreview(s,id).error);
@@ -85,7 +85,7 @@ test('不同 seed 起步保证受控的廉价 2×2 废墟，包括普通尺寸 3
   for(let seed=0;seed<12;seed++){
     const layout=generateCityMap({...MAP_DEFAULTS,seed,minBlock:3,maxBlock:6}),s=createCampaign(DEFAULTS,undefined,layout);
     const b=s.sites.find(p=>p.role==='starter');assert.ok(b);assert.equal(b.width,2);assert.equal(b.height,2);
-    const id=key(b.x,b.y);assert.ok(productionControlled(s,id));assert.equal(productionQuote(s,id).cost,20);
+    const id=key(b.x,b.y);assert.ok(productionControlled(s,id));assert.equal(productionQuote(s,id).cost,10);
     s.day=2;assert.equal(buildProduction(s,id),'');
   }
 });

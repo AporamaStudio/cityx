@@ -1,7 +1,7 @@
 // 首轮实验参数；只用于快速试玩，不代表平衡结论。
 export const SIZE = 60;
 export const DEFAULTS = {
-  productionCostPerCell: 8, productionIncomePerCell: 1, killReward: 2,
+  productionCostPerCell: 4, productionIncomePerCell: 0.5, killReward: 2,
   budget: 100, wallCost: 2, wallHP: 12, enemyPower: 1, defenseRepairPercent: 50, controlRadius: 9, campHP: 30, stepMs: 450,
   outpostCost: 25, outpostRadius: 6, campRepairCost: 1,
   weapons: {
