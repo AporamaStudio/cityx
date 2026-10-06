@@ -98,9 +98,10 @@ const {buildOutpost,removeOutpost,enterMorning,clearPlot}=await import('../src/m
 test('合并群未死无收益，完全击杀按原始成员奖励且不重复发放',()=>{
   const s=createState([{x:1,y:1,hp:1,count:1,first:100,interval:1}]);s.phase='battle';
   s.field.next=new Map([[1,3],[2,3],[3,4]]);s.towers.set(3,'A');
-  s.enemies=[{id:1,hp:2,max:5,members:1,sources:[0]}, {id:2,hp:2,max:10,members:2,sources:[1]}];
-  stepBattle(s);assert.equal(s.earned,0);assert.equal(s.enemies[0].hp,2);assert.equal(s.enemies[0].members,3);
+  s.enemies=[{id:1,hp:2,max:5,members:1,sources:[0],origins:['0:0']}, {id:2,hp:2,max:10,members:2,sources:[1],origins:['1:0','1:1']}];
+  stepBattle(s);assert.equal(s.earned,0);assert.equal(s.enemies[0].hp,2);assert.equal(s.enemies[0].members,3);assert.equal(s.enemyOutcomes.size,0);
   stepBattle(s);assert.equal(s.earned,6);assert.equal(s.enemies.length,0);assert.equal(funds(s),96);
+  assert.deepEqual([...s.enemyOutcomes],[['0:0','killed'],['1:0','killed'],['1:1','killed']]);
   assert.equal(s.events.find(e=>e.type==='kill').members,3);assert.equal(s.removed,3);
   stepBattle(s);assert.equal(s.earned,6);
 });
@@ -295,4 +296,14 @@ test('每格收入减半保留小数，整块最终收入向上取整',async()=>
   assert.deepEqual(quote(2,2),{area:4,cost:10,income:2});
   assert.equal(quote(3,3).income,5);
   assert.deepEqual(quote(5,5),{area:25,cost:152,income:19});
+});
+
+test('敌群预告区分出生批次和抵达结果，重试清空结果',async()=>{
+  const {beginBattle,restoreNight}=await import('../src/model.js');
+  const s=createState([{x:15,y:24,hp:2,count:2,first:1,interval:3}]);
+  const snapshot=beginBattle(s);assert.ok(snapshot);
+  stepBattle(s);assert.deepEqual(s.enemies[0].origins,['0:0']);assert.equal(s.enemyOutcomes.size,0);
+  for(let i=0;i<5;i++)stepBattle(s);
+  assert.deepEqual([...s.enemyOutcomes],[['0:0','leaked'],['0:1','leaked']]);
+  assert.equal(restoreNight(snapshot).enemyOutcomes.size,0);
 });

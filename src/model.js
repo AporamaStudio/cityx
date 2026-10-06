@@ -50,7 +50,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
     layout, blocked, terrainWalls, sites:layout?(layout.blocks??layout.buildings):PRODUCTION_SITES, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), towerHealth:new Map([...towers].map(([id,type])=>[id,{hp:params.weapons[type].hp,max:params.weapons[type].hp}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
-    hp: params.campHP, enemies: [], events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
+    hp: params.campHP, enemies: [], enemyOutcomes:new Map(), events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
   state.plotContents=new Map(state.sites.map(p=>[key(p.x,p.y),{status:p.kind==='open'?'empty':'ruin',type:p.kind==='open'?null:'production'}]));
   for(const [id,p] of state.outposts){p.plotId??=productionId(id,state);state.plotContents.set(p.plotId,{status:'building',type:'outpost'});}
   initializeExploration(state);rebuildTerrain(state);lockAttacks(state);return state;
@@ -76,7 +76,7 @@ export function createCampaign(params=DEFAULTS, waves=WAVES, layout=null) {
 export const reservedSources=state=>state.waves?.slice(state.day-1).flat()??state.sources;
 export const campaignComplete=state=>state.phase==='won'&&state.day===(state.waves?.length??1);
 function clearNight(state) {
-  state.tick=0;state.enemies=[];state.events=[];state.spawned=0;state.removed=0;
+  state.tick=0;state.enemies=[];state.enemyOutcomes=new Map();state.events=[];state.spawned=0;state.removed=0;
   state.damage=0;state.leaked=0;state.merges=0;state.nightEarned=0;state.nightEconomy=0;state.economySettled=false;state.productionReport=null;
 }
 export function beginBattle(state) {
@@ -333,7 +333,7 @@ export function stepBattle(state,actions=null) {
   for (const attack of state.attacks) {
     const age=state.tick-attack.first;
     if(age>=0&&age%attack.interval===0&&age/attack.interval<attack.count){
-      state.enemies.push({id:key(attack.x,attack.y),target:attack.target,path:[...attack.path],hp:attack.hp,max:attack.hp,members:1,sources:[attack.index]});
+      state.enemies.push({id:key(attack.x,attack.y),target:attack.target,path:[...attack.path],hp:attack.hp,max:attack.hp,members:1,sources:[attack.index],origins:[`${attack.index}:${age/attack.interval}`]});
       state.spawned++;
     }
   }
@@ -341,10 +341,12 @@ export function stepBattle(state,actions=null) {
   for(const enemy of state.enemies){
     const groupId=enemyKey(enemy);
     if(!mergeParts.has(groupId))mergeParts.set(groupId,[]);mergeParts.get(groupId).push(enemy.hp);
-    if(!groups.has(groupId))groups.set(groupId,{...enemy,sources:[...enemy.sources]});
+    if(!groups.has(groupId))groups.set(groupId,{...enemy,sources:[...enemy.sources],origins:[...(enemy.origins||[])]});
     else{
       const group=groups.get(groupId);group.hp+=enemy.hp;group.max+=enemy.max;group.members+=enemy.members;
       group.sources=[...new Set([...group.sources,...enemy.sources])];
+      // 保留每个原始敌群身份，合流后整体退场才能更新各自的预告方块。
+      group.origins.push(...(enemy.origins||[]));
       if(enemy.attackId!==undefined){group.attackId=enemy.attackId;group.attackType=enemy.attackType;}
       state.merges++;merged.add(groupId);
     }
@@ -358,10 +360,12 @@ export function stepBattle(state,actions=null) {
       // 仍按原始成员发击杀奖励；攻抵目标或撤离不发钱。
       const reward=enemy.members*state.params.killReward;
       state.earned+=reward;state.nightEarned+=reward;state.removed+=enemy.members;
+      for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'killed');
       state.events.push({type:'kill',id:enemy.id,target:enemy.target,value:reward,members:enemy.members});
     }else if(enemy.id===enemy.target){
       // 战略目标暂沿用剩余 HP 的一次性伤害；攻击完成退场，绝不换目标。
       state.hp=Math.max(0,state.hp-enemy.hp);state.leaked+=enemy.hp;
+      for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'leaked');
       state.events.push({type:'leak',id:enemy.id,value:enemy.hp});
     }else{
       if(enemy.attackId!==undefined){

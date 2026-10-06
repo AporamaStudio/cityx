@@ -1,6 +1,6 @@
 import {drawCampfire} from './icons.js';
 import { SIZE, DEFAULTS } from './config.js?v=29';
-import { initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=29';
+import { initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=32';
 import {generateCityMap} from './city-map.js?v=4';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -449,7 +449,11 @@ function updateForecast() {
     name.className='forecast-source';name.textContent=`敌源 ${i+1}`;
     blocks.className='forecast-blocks';blocks.setAttribute('aria-label',`${s.count} 个敌群，每个 ${s.hp} HP`);
     for(let n=0;n<s.count;n++){
-      const block=document.createElement('span');block.className='forecast-enemy';block.textContent=s.hp;block.setAttribute('aria-hidden','true');blocks.append(block);
+      const block=document.createElement('span'),outcome=night===state.day?state.enemyOutcomes.get(`${i}:${n}`):null;
+      block.className=`forecast-enemy${outcome?' '+outcome:''}`;
+      const hp=document.createElement('span');hp.textContent=s.hp;block.append(hp);
+      if(outcome){const mark=document.createElement('b');mark.className='forecast-outcome';mark.textContent=outcome==='killed'?'×':'↘';block.append(mark);}
+      block.setAttribute('aria-label',`敌群 ${n+1}，${s.hp} HP，${outcome==='killed'?'已消灭':outcome==='leaked'?'已抵达火光':'尚未结束进攻'}`);blocks.append(block);
     }
     row.append(name,blocks);return row;
   }));
