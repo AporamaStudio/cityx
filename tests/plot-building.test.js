@@ -72,12 +72,12 @@ test('前哨仅需驻扎格受控，整块未受控也可扩张；禁止道路�
   const home=createCampaign(DEFAULTS,undefined,map);assert.ok(buildOutpost(home,home.camp));assert.ok(buildProduction(home,home.camp));assert.ok(clearPlot(home,home.camp));
 });
 
-test('前哨拆除检查控制依赖，旧建筑不退款，跨格操作不重复扣费',()=>{
+test('前哨拆除检查控制依赖，旧建筑也按比例退款，跨格操作不重复扣费',()=>{
   const s=make(),id=key(15,22);s.params.controlRadius=5;buildOutpost(s,id);const tower=key(15,16);assert.equal(buildTower(s,tower,'A'),'');
   assert.match(removeOutpost(s,key(16,23)),/依赖/);removeTower(s,tower);s.day=4;
-  const before=funds(s);assert.equal(clearPlot(s,key(16,23)),'');assert.equal(funds(s),before);assert.equal(plotContent(s,id).status,'empty');
+  const before=funds(s);assert.equal(clearPlot(s,key(16,23)),'');assert.equal(funds(s),before+12);assert.equal(plotContent(s,id).status,'empty');
   assert.equal(buildProduction(s,key(16,23)),'');const invested=funds(s);assert.ok(buildProduction(s,id));assert.equal(funds(s),invested);
-  s.day=5;assert.equal(removeProduction(s,id),'');assert.equal(funds(s),invested);
+  s.day=5;const refund=Math.floor(productionQuote(s,id).cost/2);assert.equal(removeProduction(s,id),'');assert.equal(funds(s),invested+refund);
 });
 
 test('重试保留清理、换建与绕行，整局重来恢复原废墟；拆除不主动换最短路线',()=>{
@@ -107,7 +107,7 @@ test('当天临时建筑撤销后恢复原始路径，同时保留其他建筑�
   const s=createCampaign({...DEFAULTS,budget:1000},[wave],layout);s.day=3;
   const original=[...s.attacks[0].path],cash=funds(s),a=key(15,22),b=key(15,24);
   assert.equal(buildProduction(s,a),'');assert.notDeepEqual(s.attacks[0].path,original);
-  assert.equal(removeProduction(s,a),'');assert.deepEqual(s.attacks[0].path,original);assert.equal(funds(s),cash);
+  assert.equal(removeProduction(s,a),'');assert.deepEqual(s.attacks[0].path,original);assert.equal(funds(s),cash-5);
   assert.equal(buildProduction(s,b),'');const onlyB=[...s.attacks[0].path];
   assert.equal(buildProduction(s,a),'');assert.equal(removeProduction(s,a),'');
   assert.deepEqual(s.attacks[0].path,onlyB);assert.ok(s.attacks[0].path.every(id=>!s.blocked.has(id)));

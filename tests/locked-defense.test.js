@@ -66,7 +66,7 @@ test('破墙投资不会自动退款；原址维修与拆返不刷新建造日�
   const s=make(),wall=key(15,22);changeWall(s,wall);beginBattle(s);step(s,14);
   assert.equal(funds(s),998);s.phase='won';enterMorning(s);assert.equal(repairQuote(s,wall).cost,1);
   const locked=structuredClone(s.attacks);assert.equal(repairFacility(s,wall),'');assert.equal(s.wallHealth.get(wall).hp,12);assert.ok(s.walls.has(wall));assert.deepEqual(s.attacks,locked);
-  assert.equal(changeWall(s,wall,true),'');assert.equal(funds(s),997);
+  assert.equal(changeWall(s,wall,true),'');assert.equal(funds(s),998);
 });
 
 test('前哨退池后非法战略目标被拒绝，墙塔参数仍校验',()=>{

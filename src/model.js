@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=29';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=33';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -279,6 +279,7 @@ export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
   if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';
+  if(!integer(params.demolitionRefundPercent,0,100))return '拆除返还比例须为 0–100 整数。';
   if(!integer(params.outpostCost,1,1000)||!integer(params.outpostRadius,1,30)||!integer(params.campRepairCost,1,1000))return '前哨价格 1–1000、半径 1–30；火光每 HP 修复单价 1–1000。';
   for (const type of ['A','B']) {
     const w=params.weapons[type];
@@ -468,7 +469,7 @@ export function battleRoutes(state) {
   return routes;
 }
 
-// 今天的建设可以撤销；跨天拆除保留原投资支出，防止删掉设施凭空退钱。
+// 拆除统一按配置比例返还，零头向下取整；未返还部分保留为沉没支出。
 export function demolitionQuote(state,id) {
   const production=state.production.get(productionId(id,state)),tower=state.towers.get(id),post=state.outposts.get(outpostAt(state,id));
   let cost=0,day=1,type='';
@@ -477,7 +478,7 @@ export function demolitionQuote(state,id) {
   else if(post){type='outpost';cost=state.params.outpostCost;day=post.day??1;}
   else if(state.playerWalls.has(id)){type='wall';cost=state.params.wallCost;day=state.wallDays.get(id)??1;}
   else if(plotContent(state,id).status==='ruin'){type='ruin';day=0;}
-  return {type,cost,day,refund:day===state.day?cost:0};
+  return {type,cost,day,refund:Math.floor(cost*state.params.demolitionRefundPercent/100)};
 }
 function retainDemolitionCost(state,quote){state.demolitionSpent+=quote.cost-quote.refund;}
 export function buildTower(state,id,type) {
