@@ -1,6 +1,6 @@
 import {drawBlockTexture} from './city-textures.js?v=3';
 import {readMapSettings,mapSearch} from './map-settings.js';
-import {generateCityMap,walkableDistances} from './city-map.js?v=5';
+import {generateCityMap,walkableDistances} from './city-map.js?v=6';
 const $=id=>document.getElementById(id),canvas=$('map'),ctx=canvas.getContext('2d'),viewport=$('viewport');
 let appliedSettings,map,lookup=[],scale=16,panX=0,panY=0,hover=-1,drag=null,width=0,height=0;
 // 地图可视化只依赖生成数据，点击不修改地形或模拟修复。
@@ -18,6 +18,7 @@ function draw(){
   }
   for(const b of map.blocks){
     const selected=b.id===hover;
+    if(b.role==='camp'){ctx.fillStyle='#ad9468';ctx.fillRect(b.x+.08,b.y+.08,b.width-.16,b.height-.16);continue;}
     if(b.kind==='open'){
       ctx.strokeStyle=selected?'#efffba':'#b9dec1';ctx.lineWidth=selected?2/scale:1/scale;ctx.setLineDash([.2,.15]);ctx.strokeRect(b.x+.1,b.y+.1,b.width-.2,b.height-.2);ctx.setLineDash([]);
       if(scale>=12){ctx.fillStyle='#d0efd0';ctx.font='.65px system-ui';ctx.textAlign='center';ctx.fillText('+',b.x+b.width/2,b.y+b.height/2+.2);}

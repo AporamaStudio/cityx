@@ -2,7 +2,7 @@ import {drawRoadTexture,drawBlockTexture} from './city-textures.js?v=3';
 import {drawCampfire} from './icons.js';
 import { SIZE, DEFAULTS } from './config.js?v=40';
 import { clearingLabor, clearingError, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=40';
-import {generateCityMap} from './city-map.js?v=5';
+import {generateCityMap} from './city-map.js?v=6';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
 mapSettings.width=SIZE;mapSettings.height=SIZE;
@@ -107,7 +107,8 @@ function draw() {
   if(hoveredSite){
     const quote=productionQuote(state,hover),content=plotContent(state,hover);
     const summary=`${hoveredSite.width??hoveredSite.size}×${hoveredSite.height??hoveredSite.size} 地块 · ${quote.area} 格 · ${content.status==='empty'?'空地':content.status==='ruin'?(content.type==='housing'?'住房废墟':'生产废墟'):content.type==='outpost'?'前哨建筑':content.type==='housing'?'住房':'生产建筑'}。`;
-    if(hoveredSite.role==='hospital')$('placementInfo').textContent='医院 · 10×12 · 收复目标。占领机制待实现，不可拆除或换建。';
+    if(hoveredSite.role==='camp')$('placementInfo').textContent='火光广场 · 3×3 · 篝火位于中心，保留为守护目标。';
+    else if(hoveredSite.role==='hospital')$('placementInfo').textContent='医院 · 10×12 · 收复目标。占领机制待实现，不可拆除或换建。';
     else if(tool==='production')$('placementInfo').textContent=summary+`需要 ${productionLabor(state,hover)} 人（空闲 ${population(state).free}） · 生产费用 ${quote.cost} 钱 · 每天 +${quote.income}（守住当晚后结算） · ${quote.income>0?Math.ceil(quote.cost/quote.income)+' 晚回本':'当前收入为 0，不回本'}。`+(productionError(state,hover)||'点击修缮或新建整块。');
     else $('placementInfo').textContent=summary+($('placementInfo').textContent||'选择生产、住房、前哨或拆除工具。');
   }
@@ -207,6 +208,7 @@ function draw() {
   for(const p of state.sites){
     const {x,y}=p,n=p.width??p.size,m=p.height??p.size,id=key(x,y),built=state.production.has(id),active=built&&productionActive(state,id),selected=productionId(hover,state)===id,empty=plotContent(state,id).status==='empty';
     // 悬停时把街区作为一个操作对象，盖住内部格线，避免误认为逐格恢复。
+    if(p.role==='camp'){ctx.fillStyle=nightMix>.5?'#49433a':'#ad9468';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);ctx.strokeStyle='#e8c481';ctx.lineWidth=.10;ctx.strokeRect(x+.12,y+.12,n-.24,m-.24);continue;}
     if(empty){ctx.strokeStyle=selected?'#fff0ae':'#a8d5ad';ctx.lineWidth=selected?.12:.06;ctx.setLineDash([.2,.12]);ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);ctx.setLineDash([]);continue;}
     ctx.fillStyle=selected?(active?'#527e59':built?'#80594e':'#655f3d'):active?'#527e59':built?'#80594e':nightMix>.5?'#494b42':'#81745b';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);
     ctx.strokeStyle=selected?'#fff0ae':productionControlled(previewState,id)?'#f5d789':'#a29670';ctx.lineWidth=selected?.12:.06;ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);

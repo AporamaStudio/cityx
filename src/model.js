@@ -546,7 +546,7 @@ export function removeTower(state,id) {
 // 迷雾只隐藏未探索信息；探索过的格子不会因拆前哨重新变黑。
 export function initialView(state){
   const [cx,cy]=xy(state.camp);
-  return {x:Math.max(0,Math.min(SIZE-30,cx-15)),y:Math.max(0,Math.min(SIZE-30,cy-27)),width:30,height:30};
+  return {x:Math.max(0,Math.min(SIZE-30,cx-15)),y:state.layout?SIZE-30:Math.max(0,Math.min(SIZE-30,cy-27)),width:30,height:30};
 }
 function initializeExploration(state){
   const view=initialView(state);state.explored=new Set();

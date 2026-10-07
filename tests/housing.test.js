@@ -52,3 +52,12 @@ test('清理即时生效、不改金币，占用当日人力；不足不清理�
   const snap=beginBattle(s);assert.equal(restoreNight(snap).clearingWorkers,1);
   s.waves=[[],[],[]];s.phase='won';assert.equal(enterMorning(s),true);assert.equal(population(s).free,1);
 });
+test('开局火光居于3×3广场中心，两块2×2教学废墟完整受控且不重叠',()=>{
+  for(const seed of ['cityx-01','a','b','c']){
+    const layout=generateCityMap({seed,width:60,height:60,starterPlot:true,minBlock:3,maxBlock:6}),s=createCampaign(DEFAULTS,undefined,layout);
+    const plaza=layout.blocks.find(b=>b.role==='camp');assert.deepEqual([plaza.width,plaza.height],[3,3]);
+    assert.deepEqual(layout.camp,{x:plaza.x+1,y:plaza.y+1});
+    for(const role of ['starter','starterHousing']){const b=layout.blocks.find(b=>b.role===role);assert.deepEqual([b.width,b.height],[2,2]);assert.ok(productionControlled(s,key(b.x,b.y)));}
+    const occupied=new Set();for(const b of layout.blocks)for(let y=b.y;y<b.y+b.height;y++)for(let x=b.x;x<b.x+b.width;x++){assert.ok(!occupied.has(key(x,y)));occupied.add(key(x,y));}
+  }
+});

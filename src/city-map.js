@@ -90,15 +90,22 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
     if(tiles.some((t,id)=>t!=='block'&&d[id]<0)){paint(stripe,'road');continue;}
     a.width++;a.joined=true;b.joined=true;joined++;
   }
-  // 起步教学地块固定为 2×2 小废墟；它是普通尺寸实验之外的明确例外。
+  // 教学起步区统一预留：3×3 火光广场，两侧各一块 2×2 废墟，中间留路。
   if(starterPlot){
-    const candidates=blocks.filter(b=>!b.role&&!b.special&&b.width>=2&&b.height>=2);
-    candidates.sort((a,b)=>Math.abs(a.x-camp.x)+Math.abs(a.y-camp.y)-Math.abs(b.x-camp.x)-Math.abs(b.y-camp.y));
-    const b=candidates[0];
-    if(!b)throw new Error('无法预留起步废墟');
-    paint(b,'road');
-    b.x=Math.max(b.x,Math.min(camp.x,b.x+b.width-2));b.y=Math.max(b.y,Math.min(camp.y,b.y+b.height-2));
-    b.width=2;b.height=2;b.kind='building';b.state='ruin';b.role='starter';paint(b,'block');
+    const cx=Math.max(6,Math.min(width-7,camp.x)),top=height-5;
+    const area={x:cx-5,y:top-1,width:11,height:5};
+    for(let i=blocks.length-1;i>=0;i--){
+      const b=blocks[i];
+      if(b.role==='camp'||(b.x<area.x+area.width&&b.x+b.width>area.x&&b.y<area.y+area.height&&b.y+b.height>area.y)){
+        paint(b,'road');blocks.splice(i,1);
+      }
+    }
+    paint(area,'road');
+    const plaza=addBlock({x:cx-1,y:top,width:3,height:3},'open');plaza.role='camp';plaza.special=true;plaza.name='火光广场';
+    camp.x=cx;camp.y=top+1;
+    const production=addBlock({x:cx-4,y:top,width:2,height:2},'building');production.role='starter';
+    const housing=addBlock({x:cx+3,y:top,width:2,height:2},'building');housing.role='starterHousing';
+    blocks.forEach((b,i)=>b.id=i);
   }
   // 按最终地形记录道路，包含边缘余量，去掉被合拢的道路段。
   const roadKinds=new Map();
