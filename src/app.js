@@ -102,18 +102,30 @@ function draw() {
   if(tool==='housing'&&hover!==null){const q=economyBuildQuote(state,hover,'housing');$('placementInfo').textContent=housingError(state,hover)||`住房预览 · 新增 ${q.added} 格 · 入住 +${q.residents} 人 · 花费 ${q.cost} · 剩余 ${funds(state)-q.cost}`;}
   if(tool==='production'&&hover!==null)$('placementInfo').textContent=productionError(state,hover)||`整块恢复预览 · 需要 ${productionLabor(state,hover)} 人（空闲 ${population(state).free}） · 每晚收入 +${productionQuote(state,hover).income} · 花费 ${productionQuote(state,hover).cost} · 剩余 ${funds(state)-productionQuote(state,hover).cost}`;
 
+  const refundPreview=$('refundPreview'),erasePreview=$('erasePreview');
+  refundPreview.hidden=true;erasePreview.hidden=true;$('moneyGain').hidden=false;
   if(tool==='erase'&&hover!==null&&state.phase==='build'){
     const quote=demolitionQuote(state,hover);
-    $('placementInfo').textContent=quote.type==='housing'&&housingRemovalError(state,hover)?housingRemovalError(state,hover):quote.type==='ruin'?(clearingError(state,hover)||`清理废墟 · 金币 0 · 当天占用 ${clearingLabor(state,hover)} 人，次日释放 · 即时变为空地`):!quote.type?'这里没有可拆设施；固定墙与火光不可拆。':`返还 ↩${quote.refund} 金币${['production','housing','outpost'].includes(quote.type)?' · 拆后变为空地':''}${quote.type==='outpost'?'，须先解除控制依赖':''}`;
+    const error=quote.type==='housing'?housingRemovalError(state,hover):quote.type==='ruin'?clearingError(state,hover):quote.type==='wall'?wallPreview(state,hover,true).error:'';
+    $('placementInfo').textContent=error||(!quote.type?'这里没有可拆设施。':quote.type==='ruin'?`清场占用 ${clearingLabor(state,hover)} 人，次日释放。`:quote.type==='outpost'?'拆除前哨须先解除外围控制依赖。':'');
+    if(quote.type&&!error){
+      // 预览独立于已到账提示，不改真实余额，也不覆盖战斗收入动画。
+      refundPreview.hidden=false;erasePreview.hidden=false;$('moneyGain').hidden=true;
+      refundPreview.textContent=`+${quote.refund}`;refundPreview.setAttribute('aria-label',`预计返还 ${quote.refund} 金币，余额将为 ${funds(state)+quote.refund}`);
+      if(erasePreview.dataset.refund!==String(quote.refund)){
+        erasePreview.dataset.refund=String(quote.refund);erasePreview.textContent=`↩${quote.refund}`;
+        erasePreview.append(document.querySelector('.price-coin').cloneNode(true));
+      }
+    }
   }
   const hoveredSite=hover!==null?productionSite(hover,state):null;
   if(hoveredSite){
     const quote=productionQuote(state,hover),content=plotContent(state,hover);
     const summary=`${hoveredSite.width??hoveredSite.size}×${hoveredSite.height??hoveredSite.size} 地块 · ${quote.area} 格 · ${content.status==='empty'?'空地':content.status==='ruin'?(content.type==='housing'?'住房废墟':'生产废墟'):content.type==='outpost'?'前哨建筑':content.type==='housing'?'住房':'生产建筑'}。`;
     if(hoveredSite.role==='camp')$('placementInfo').textContent='火光广场 · 3×3 · 篝火位于中心，保留为守护目标。';
-    else if(hoveredSite.role==='hospital')$('placementInfo').textContent='医院 · 10×12 · 收复目标。占领机制待实现，不可拆除或换建。';
+    else if(hoveredSite.role==='hospital')$('placementInfo').textContent='医院暂不可操作。';
     else if(tool==='production'){const q=economyBuildQuote(state,hover,'production');$('placementInfo').textContent=summary+(productionError(state,hover)||`新增 ${q.added} 格 · 用工 +${q.labor} 人 · 花费 ${q.cost} · 完成后每天 +${q.income}。`);}
-    else $('placementInfo').textContent=summary+($('placementInfo').textContent||'选择生产、住房、前哨或拆除工具。');
+    else if(tool!=='erase')$('placementInfo').textContent=summary+($('placementInfo').textContent||'选择生产、住房、前哨或拆除工具。');
   }
 
   if((weaponHover&&!previewError)||(postHover&&!postError)){const q=embeddingQuote(state,hover);$('placementInfo').textContent+=` · 清场 ${q.labor} 人 · 空闲 ${population(state).free} → ${q.freeAfter}${q.residents?` · 人口 −${q.residents}`:''}${q.incomeLoss?` · 每天收入 −${q.incomeLoss}`:''}${q.refund?` · 拆返 +${q.refund} 金币`:''}`;}
@@ -368,12 +380,16 @@ function draw() {
       };
       row(cost,y-8,funds(state)>=quote.cost?'#f5df9c':'#f3a49c');row(income,y+8,'#bff5ce','/天');ctx.restore();continue;
     }
-    const title=p.role==='hospital'?'医院 · 10×12':post?'前哨':built?(active?'生产中':'已停产'):content.status==='empty'?'空地':'生产废墟';
+    if(p.role==='hospital'){
+      ctx.save();ctx.font='700 18px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.lineWidth=4;ctx.strokeStyle='#142024';ctx.strokeText('医院',x,y);ctx.fillStyle='#fff0bc';ctx.fillText('医院',x,y);ctx.restore();continue;
+    }
+    const title=post?'前哨':built?(active?'生产中':'已停产'):content.status==='empty'?'空地':'生产废墟';
     ctx.font='600 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
     const w=Math.max(ctx.measureText(title).width+8,48);
     ctx.fillStyle='#142024ed';ctx.fillRect(x-w/2,y-14,w,30);
     ctx.fillStyle=active?'#bff5ce':built?'#ffb7a5':'#f5df9c';ctx.fillText(title,x,y-6);
-    ctx.font='10px system-ui';ctx.fillText(p.role==='hospital'?'收复目标':post?'不受击':built&&!active?'收入 0':content.status==='empty'?'可选建筑':`+${productionQuote(state,id).income}/晚`,x,y+8);
+    ctx.font='10px system-ui';ctx.fillText(post?'不受击':built&&!active?'收入 0':content.status==='empty'?'可选建筑':`+${productionQuote(state,id).income}/晚`,x,y+8);
   }
   // 建设反馈跟随地图位置；短暂边框与金额提示不参与规则结算。
   if(placementFx){

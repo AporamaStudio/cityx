@@ -97,3 +97,6 @@ header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320
 .wallet{flex-wrap:wrap;gap:10px}.wallet .resource-people{width:100%;border-top:1px solid #d3bd7940;padding-top:10px;margin:0}.population-main{display:flex;align-items:center;gap:12px}.population-main svg{width:30px;height:30px}.population-main strong{font-size:28px}.resource-people span{font-size:11px}.test-fields{display:grid;gap:8px;margin:12px 0}.test-fields label{display:grid;grid-template-columns:42px 1fr;align-items:center}.test-fields input,.test-fields select{width:100%;min-width:0}
 
 .wallet .resource-people{align-items:stretch}.population-main svg{width:38px;height:38px}.population-main strong{font-size:36px}.resource-people span{text-align:left}
+
+/* 虚线与浅色区分待发生退款和已经到账的金币。 */
+.refund-preview{display:inline-block;margin-left:6px;padding:1px 5px;border:1px dashed #b8e2c4;border-radius:4px;color:#c6f0b5;font-size:16px;font-weight:700;white-space:nowrap}.refund-preview[hidden],#erasePreview[hidden]{display:none}
