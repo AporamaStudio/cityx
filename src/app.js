@@ -1,7 +1,7 @@
 import {drawRoadTexture,drawBlockTexture} from './city-textures.js?v=3';
 import {drawCampfire} from './icons.js';
-import { SIZE, DEFAULTS } from './config.js?v=36';
-import { population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=39';
+import { SIZE, DEFAULTS } from './config.js?v=40';
+import { clearingLabor, clearingError, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=40';
 import {generateCityMap} from './city-map.js?v=5';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -101,7 +101,7 @@ function draw() {
 
   if(tool==='erase'&&hover!==null&&state.phase==='build'){
     const quote=demolitionQuote(state,hover);
-    $('placementInfo').textContent=quote.type==='housing'&&housingRemovalError(state,hover)?housingRemovalError(state,hover):quote.type==='ruin'?'拆除整块废墟 · 免费、即时变为空地 · 可换建住房、生产设施或前哨':!quote.type?'这里没有可拆设施；固定墙与火光不可拆。':`第 ${quote.day} 天建造 · 拆除 · 返还 ${quote.refund} 金币${['production','housing','outpost'].includes(quote.type)?' · 拆后变为空地':''}${quote.type==='outpost'?'，须先解除控制依赖':''}`;
+    $('placementInfo').textContent=quote.type==='housing'&&housingRemovalError(state,hover)?housingRemovalError(state,hover):quote.type==='ruin'?(clearingError(state,hover)||`清理废墟 · 金币 0 · 当天占用 ${clearingLabor(state,hover)} 人，次日释放 · 即时变为空地`):!quote.type?'这里没有可拆设施；固定墙与火光不可拆。':`第 ${quote.day} 天建造 · 拆除 · 返还 ${quote.refund} 金币${['production','housing','outpost'].includes(quote.type)?' · 拆后变为空地':''}${quote.type==='outpost'?'，须先解除控制依赖':''}`;
   }
   const hoveredSite=hover!==null?productionSite(hover,state):null;
   if(hoveredSite){
@@ -393,7 +393,7 @@ function update() {
   if(tool==='repair')$('toolInfo').textContent=`次日点击受损火光、墙或损坏炮塔修满。火光按 HP 计费；墙与塔完全损坏时，维修费为造价的 ${state.params.defenseRepairPercent}%，部分受损按缺失 HP 比例计费（向上取整）。前哨不受击，无需维修。`;
   if(tool==='housing')$('toolInfo').textContent=`住房每格 ${state.params.housingCostPerCell} 金币，每 ${state.params.housingCellsPerResident} 格入住 1 人（整块向上取整）。只能恢复住房废墟，空地可新建住房；生产废墟须先拆除才能换建；立即增加劳动力，不受攻击。人口与火光 HP 独立。`;
   if(tool==='production')$('toolInfo').textContent=`生产每 ${state.params.productionCellsPerWorker} 格占用 1 人，拆除后释放。小地块回款快，大地块持续产出高。4×4 基准费用 ${16*state.params.productionCostPerCell}、每晚 +${16*state.params.productionIncomePerCell}；悬停看实际报价与回本时间。整块受控才可修缮或新建。地块建筑不受击，挡路时敌人绕行。`;
-  if(tool==='erase')$('toolInfo').textContent=`废墟免费拆除；建筑统一返还造价的 ${state.params.demolitionRefundPercent}%，零头向下取整，不分建造日期。墙与炮塔分别拆除，前哨仍须解除外围控制依赖。`;
+  if(tool==='erase')$('toolInfo').textContent=`清理废墟不收钱，每 ${state.params.clearingCellsPerWorker} 格占用 1 人（向上取整），当天立即完成、次日释放。建筑统一返还造价的 ${state.params.demolitionRefundPercent}%，零头向下取整，不分建造日期。墙与炮塔分别拆除，前哨仍须解除外围控制依赖。`;
 
   $('morningTitle').textContent=`${state.day===1?'守住第一晚':state.day===2?'恢复生产，守住防线':'向北收复，守住火光'}`;
   updateNightReport();
@@ -401,8 +401,8 @@ function update() {
   const prices={wall:state.params.wallCost,build:state.params.weapons.A.cost,long:state.params.weapons.B.cost,outpost:state.params.outpostCost,production:'按地块报价',housing:'按地块报价',repair:'按损伤报价',erase:`-${state.params.demolitionRefundPercent}%`};
   for(const [id,price] of Object.entries(prices))$('price-'+id).textContent=String(price);
   $('budget').textContent = funds(state);
-  const people=population(state);$('population').hidden=state.day<2;
-  $('populationTotal').textContent=`人口 ${people.total}`;$('populationUse').textContent=`空闲 ${people.free} · 工作 ${people.working}`;
+  const people=population(state);$('population').hidden=false;
+  $('populationTotal').textContent=`${people.total}`;$('populationUse').textContent=`空闲 ${people.free} · 生产 ${people.working} · 清理 ${state.clearingWorkers}`;
   $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
   const active = state.phase === 'battle', build = state.phase === 'build';
   document.body.dataset.phase=state.phase;
@@ -514,7 +514,7 @@ function paramsEditor(params) {
     $('params').append(row);
   }
   fields('全局',params,'',[['budget','资金',0,10000],['wallCost','墙价',1,1000],['demolitionRefundPercent','拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙/塔伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙/塔造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campRepairCost','火光修复单价/HP',1,1000]]);
-  fields('住房与人口',params,'',[['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房每格费用',1,1000]]);
+  fields('住房与人口',params,'',[['clearingCellsPerWorker','清理每名工人承担格数',1,100],['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房每格费用',1,1000]]);
   fields('街区生产（4×4 基准）',params,'',[['productionCostPerCell','基准每格恢复费用',1,1000],['productionIncomePerCell','基准每格每晚收入',0,1000]]);
   fields('击杀收益',params,'',[['killReward','每个原始敌人金币',0,1000]]);
   fields('前哨',params,'',[['outpostCost','造价',1,1000],['outpostRadius','半径',1,30]]);
@@ -607,7 +607,7 @@ canvas.addEventListener('pointerup',e=>{
   } else if(tool==='erase'){
     const quote=demolitionQuote(state,id);
     const error=actionError=quote.type==='housing'?removeHousing(state,id):quote.type==='production'?removeProduction(state,id):quote.type==='tower'?removeTower(state,id):quote.type==='outpost'?removeOutpost(state,id):quote.type==='wall'?changeWall(state,id,true):quote.type==='ruin'?clearPlot(state,id):'这里没有可拆除的设施。';
-    notify(error||(quote.type==='ruin'?'废墟已免费拆除，整块变为空地，可建设住房、生产设施或前哨。':`已拆除设施，返还 ${quote.refund} 金币${['production','housing','outpost'].includes(quote.type)?'；地块变为空地':''}。`));
+    notify(error||(quote.type==='ruin'?'废墟已清理，金币不变；清理人员次日释放，空地可选择经营设施。':`已拆除设施，返还 ${quote.refund} 金币${['production','housing','outpost'].includes(quote.type)?'；地块变为空地':''}。`));
     if(!error&&quote.type==='outpost')sourceEditor(readSources());
   } else {
     const type=weaponType(),error=actionError=weaponPlacementError(id)||buildTower(state,id,type);

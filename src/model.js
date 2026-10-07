@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=36';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=40';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -46,7 +46,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
   const fixedWalls = layout?new Set():makeWalls(), blocked=new Set(layout?layout.tiles.flatMap((t,id)=>t==='block'?[id]:[]):[]), walls = new Set([...fixedWalls, ...blocked, ...playerWalls]);
   const terrainWalls=new Set([...fixedWalls,...blocked]);
   const camp = layout?key(layout.camp.x,layout.camp.y):key(...DEFAULTS.camp), field = routeField(camp, terrainWalls);
-  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
+  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), clearingWorkers:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
     layout, blocked, terrainWalls, sites:layout?(layout.blocks??layout.buildings):PRODUCTION_SITES, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), towerHealth:new Map([...towers].map(([id,type])=>[id,{hp:params.weapons[type].hp,max:params.weapons[type].hp}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
@@ -226,7 +226,7 @@ export function removeOutpost(state,id) {
 export function enterMorning(state) {
   if(state.phase!=='won'||state.day>=(state.waves?.length??2))return false;
   state.lastNight={day:state.day,earned:state.nightEarned,economy:state.nightEconomy,...state.productionReport,leaked:state.leaked};
-  state.day++;state.phase='build';
+  state.day++;state.phase='build';state.clearingWorkers=0;
   if(state.waves)state.sources=state.waves[state.day-1];
   clearNight(state);
   lockAttacks(state);
@@ -279,6 +279,7 @@ export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
   if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';
+  if(!integer(params.clearingCellsPerWorker,1,100))return '清理每名工人承担格数须为 1–100 整数。';
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
   if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产或增加住房。';
   if(!integer(params.demolitionRefundPercent,0,100))return '拆除返还比例须为 0–100 整数。';
@@ -417,7 +418,7 @@ export function housingQuote(state,id){
 export function population(state){
   const total=state.params.initialPopulation+[...state.housing.keys()].reduce((n,id)=>n+housingQuote(state,id).residents,0);
   const working=[...state.production.keys()].reduce((n,id)=>n+productionLabor(state,id),0);
-  return {total,working,free:total-working};
+  return {total,working,free:total-working-(state.clearingWorkers??0)};
 }
 export function housingError(state,id){
   if(state.phase!=='build'||state.day<2)return '第 2 天起可在白天建设住房。';
@@ -470,6 +471,16 @@ export function removeProduction(state,id) {
   retainDemolitionCost(state,demolitionQuote(state,id));
   state.production.delete(id);state.plotContents.set(id,{status:'empty',type:null});rebuildTerrain(state);return '';
 }
+// 清理当天立即完成，但人员当天已参与作业；次日释放，不消耗人口。
+export const clearingLabor=(state,id)=>Math.ceil(productionCells(id,state).length/state.params.clearingCellsPerWorker);
+export function clearingError(state,id){
+  if(state.phase!=='build'||state.day<2)return '第 2 天起可在白天清理废墟。';
+  const error=plotBuildError(state,id);if(error)return error;
+  if(!inControl(state,id))return '请在已有控制范围内清理废墟。';
+  if(plotContent(state,id).status!=='ruin')return '这里不是废墟。';
+  const needed=clearingLabor(state,id),free=population(state).free;
+  return free<needed?`清理需要 ${needed} 人，当前空闲 ${free} 人；次日释放。`:'';
+}
 // 清理废墟免费且即时完成；拆除建筑按现有当天退款/旧投资保留处理。
 export function clearPlot(state,id) {
   if(state.phase!=='build')return '防守中不能拆除地块。';
@@ -481,6 +492,8 @@ export function clearPlot(state,id) {
   if(content.type==='housing'&&content.status==='building')return removeHousing(state,id);
   if(content.type==='outpost')return removeOutpost(state,id);
   if(state.production.has(productionId(id,state)))return removeProduction(state,id);
+  const laborError=clearingError(state,id);if(laborError)return laborError;
+  state.clearingWorkers+=clearingLabor(state,id);
   state.plotContents.set(productionId(id,state),{status:'empty',type:null});rebuildTerrain(state);return '';
 }
 // 只在守住当晚时入账一次；失败不结算，重试由完整战前快照回滚。

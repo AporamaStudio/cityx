@@ -93,3 +93,7 @@ header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320
 .report-total{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;color:#ffe2a0;font-size:16px;font-weight:700}.report-total strong,.report-economy strong,.report-kills strong{display:flex;align-items:center;gap:5px}.report-total strong{font-size:20px}.report-economy,.report-kills{margin:7px 0 0 12px;font-size:12px;color:#c6d2d0}.report-economy strong,.report-kills strong{font-weight:600}
 
 .population{display:flex;flex-direction:column;gap:5px;margin:12px 0;color:#f4d3a2}.population strong{font-size:20px}.population span{font-size:12px;color:#bacdc6}
+
+.wallet{flex-wrap:wrap;gap:10px}.wallet .resource-people{width:100%;border-top:1px solid #d3bd7940;padding-top:10px;margin:0}.population-main{display:flex;align-items:center;gap:12px}.population-main svg{width:30px;height:30px}.population-main strong{font-size:28px}.resource-people span{font-size:11px}
+
+.wallet .resource-people{align-items:stretch}.population-main svg{width:38px;height:38px}.population-main strong{font-size:36px}.resource-people span{text-align:left}

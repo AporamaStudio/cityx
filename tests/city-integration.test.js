@@ -66,7 +66,7 @@ test('开放地块全部建成建筑后，道路骨架仍连接所有来源与�
 
 
 test('起点只揭示 30×30，前哨探索保留，重开恢复迷雾',()=>{
-  const s=createCampaign({...DEFAULTS,budget:1000},undefined,generateCityMap(MAP_DEFAULTS));
+  const s=createCampaign({...DEFAULTS,budget:1000,initialPopulation:1000},undefined,generateCityMap(MAP_DEFAULTS));
   assert.equal(s.explored.size,900);assert.equal(isExplored(s,key(30,0)),false);s.day=3;
   let changed=false;
   // 连续向外建设前哨；初始 30×30 比火光控制区更大，第一座前哨未必触及迷雾。
