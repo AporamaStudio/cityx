@@ -309,7 +309,7 @@ export function validateSources(sources, state) {
   return '';
 }
 
-// 局部接敌只处理下一格墙与贴身炮塔，不比较 DPS，也不改变战略目标。
+// 局部接敌只处理下一格挡路的墙或炮塔，不比较 DPS，也不改变战略目标。
 export function enemyAction(state,enemy) {
   let path=enemy.path||pathFrom(enemy.id,state.field);
   if(path.some(id=>state.terrainWalls.has(id))){path=repairPath(state,path.slice(Math.max(0,path.indexOf(enemy.id))));enemy.path=path;}
@@ -317,10 +317,7 @@ export function enemyAction(state,enemy) {
   const next=path[at+1]??enemy.id;
   if(state.wallHealth.get(next)?.hp>0)return {to:enemy.id,attackId:next,attackType:'wall'};
   if(state.towerHealth.get(next)?.hp>0)return {to:enemy.id,attackId:next,attackType:'tower'};
-  const [x,y]=xy(enemy.id);
-  const adjacent=[[x,y],[x-1,y],[x+1,y],[x,y-1],[x,y+1]].filter(([x,y])=>inside(x,y)).map(([x,y])=>key(x,y)).sort((a,b)=>a-b);
-  const tower=adjacent.find(id=>state.towerHealth.get(id)?.hp>0);
-  return tower===undefined?{to:next}:{to:enemy.id,attackId:tower,attackType:'tower'};
+  return {to:next};
 }
 
 // 每拍移动/撞墙、合流、持续炮火、同时结算近战；破墙后下一拍再继续原路线。

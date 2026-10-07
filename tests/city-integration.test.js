@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
 import {MAP_DEFAULTS,readMapSettings,mapSearch} from '../src/map-settings.js';
 import {DEFAULTS} from '../src/config.js';
-import {createCampaign,key,productionCells,productionQuote,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,rebuildTerrain,inControl,isExplored,removeOutpost,clearPlot,plotContent} from '../src/model.js';
+import {enemyAction,createCampaign,key,productionCells,productionQuote,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,rebuildTerrain,inControl,isExplored,removeOutpost,clearPlot,plotContent} from '../src/model.js';
 
 test('尺寸、特殊设施和紧邻实验保持完整分区与通路',()=>{
   let joined=0;
@@ -102,4 +102,14 @@ test('医院固定左上 10×12，不重叠且路网保持连通，不能清理�
     s.camp=key(0,8);const id=key(1,1);
     assert.match(clearPlot(s,id),/医院/);assert.match(buildProduction(s,id),/医院/);assert.match(buildOutpost(s,id),/医院/);
   }
+});
+
+test('默认城市43,50的近防炮不阻挡2号敌源路线，经过时不受攻击',()=>{
+  const s=createCampaign(DEFAULTS,undefined,generateCityMap(MAP_DEFAULTS)),tower=key(43,50);
+  assert.equal(buildTower(s,tower,'A'),'');const attack=s.attacks[1];
+  assert.ok(!attack.path.includes(tower));assert.ok(attack.path.includes(key(42,50)));
+  const enemy={id:key(42,50),target:s.camp,path:[...attack.path]};
+  assert.deepEqual(enemyAction(s,enemy),{to:key(41,50)});
+  beginBattle(s);for(let i=0;i<100&&s.phase==='battle';i++)stepBattle(s);
+  assert.equal(s.towerHealth.get(tower).hp,DEFAULTS.weapons.A.hp);
 });

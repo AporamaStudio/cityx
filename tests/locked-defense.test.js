@@ -34,14 +34,17 @@ test('有短绕路也直接攻击路线上的墙，攻破后下一拍进入原�
   stepBattle(s);assert.equal(s.enemies[0].id,wall);assert.deepEqual(s.attacks,plan);assert.equal(s.playerWalls.has(wall),true);
 });
 
-test('普通敌人只攻击接触到的塔，不按火力选择或改变战略目标',()=>{
+test('敌人经过路边炮塔不停下攻击，也不按火力选择目标',()=>{
   const s=make(100),near=key(14,21),far=key(17,22);buildTower(s,near,'A');buildTower(s,far,'B');s.params.weapons.B.power=9;
   const target=s.attacks[0].target;beginBattle(s);step(s,3);
-  assert.equal(s.towerHealth.get(near).hp,9);assert.equal(s.towerHealth.get(far).hp,12);assert.equal(s.enemies[0].target,target);
+  assert.equal(s.enemies[0].id,key(15,22));assert.equal(s.towerHealth.get(near).hp,10);assert.equal(s.towerHealth.get(far).hp,12);assert.equal(s.enemies[0].target,target);
 });
 
 test('炮塔损坏保留投资与占地、立即停火，次日付费维修恢复输出',()=>{
-  const s=make(100),tower=key(14,21);buildTower(s,tower,'A');const money=funds(s);beginBattle(s);step(s,12);
+  const s=make(100),tower=key(15,22);buildTower(s,tower,'A');const money=funds(s);beginBattle(s);step(s,3);
+  assert.equal(s.enemies[0].id,key(15,21));assert.equal(s.towerHealth.get(tower).hp,9);
+  step(s,9);assert.equal(s.enemies[0].id,key(15,21));
+  stepBattle(s);assert.equal(s.enemies[0].id,tower);
   assert.equal(s.towerHealth.get(tower).hp,0);assert.equal(s.towers.get(tower),'A');assert.equal(funds(s),money);assert.equal(fireField(s).size,0);
   assert.ok(repairFacility(s,tower));s.phase='won';enterMorning(s);
   const quote=repairQuote(s,tower);assert.equal(quote.cost,5);assert.equal(repairFacility(s,tower),'');assert.equal(funds(s),money-5);assert.ok(fireField(s).size>0);
@@ -55,8 +58,8 @@ test('同拍多群撞墙合流、叠加近战，不因遍历顺序提前穿墙',
 });
 
 test('重试完整还原锁定题目与墙塔 HP、夜间投资和收支，快照不污染',()=>{
-  const s=make(100),wall=key(15,22),tower=key(14,21);changeWall(s,wall);buildTower(s,tower,'A');const money=funds(s),snapshot=beginBattle(s);
-  step(s,24);assert.equal(s.towerHealth.get(tower).hp,0);assert.equal(buildTower(s,key(18,24),'B'),'');s.earned=7;
+  const s=make(100),wall=key(15,22),tower=key(15,23);changeWall(s,wall);buildTower(s,tower,'A');const money=funds(s),snapshot=beginBattle(s);
+  step(s,25);assert.equal(s.towerHealth.get(tower).hp,0);assert.equal(buildTower(s,key(18,24),'B'),'');s.earned=7;
   const retry=restoreNight(snapshot);assert.equal(retry.towerHealth.get(tower).hp,10);assert.equal(retry.wallHealth.get(wall).hp,12);assert.equal(retry.towers.size,1);assert.equal(funds(retry),money);assert.deepEqual(retry.attacks,snapshot.attacks);
   retry.wallHealth.get(wall).hp=1;assert.equal(snapshot.wallHealth.get(wall).hp,12);
   const fresh=restartCampaign(s);assert.equal(fresh.towers.size,0);assert.equal(fresh.playerWalls.size,0);assert.deepEqual(fresh.layout,s.layout);
