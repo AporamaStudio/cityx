@@ -1,9 +1,11 @@
-// 原型原创合成声音：同一主题的昼夜编曲，不下载素材，也不参与游戏结算。
-export const AUDIO_DEFAULTS={music:true,effects:true,musicVolume:.28,effectsVolume:.65};
+// 原型原创合成声音：昼夜独立编曲，不下载素材，也不参与游戏结算。
+export const AUDIO_DEFAULTS={music:true,effects:true,musicVolume:.5,effectsVolume:.5};
 const STORAGE_KEY='cityx-audio-v1';
 const frequency=note=>440*2**((note-69)/12);
 const chords=[[50,57,60,64],[46,53,57,60],[48,55,60,64],[45,52,57,60]];
 const melody=[74,null,76,77,null,72,69,null,74,null,72,69,null,67,69,null];
+const nightChords=[[38,45,50,51],[34,41,46,52],[36,43,48,49],[33,40,45,51]];
+const nightPulse=[0,0,7,0,1,0,7,5,0,0,7,0,3,1,0,-5];
 
 export function readAudioSettings(storage) {
   let saved={};try{saved=JSON.parse(storage?.getItem(STORAGE_KEY)||'{}')||{};}catch{}
@@ -39,13 +41,14 @@ export function createGameAudio(options={}) {
     if(endFrequency)osc.frequency.exponentialRampToValueAtTime(endFrequency,at+duration);
     gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(volume,at+attack);
     gain.gain.exponentialRampToValueAtTime(.0001,at+duration);
-    osc.connect(gain);gain.connect(bus);if(bus===day||bus===night)gain.connect(wet);
+    osc.connect(gain);gain.connect(bus);
     osc.onended=()=>{osc.disconnect();gain.disconnect();};osc.start(at);osc.stop(at+duration+.02);
   }
-  function rustle(bus,at,duration,volume,cutoff) {
+  function rustle(bus,at,duration,volume,cutoff,endCutoff=null,attack=.005) {
     const source=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
-    source.buffer=noise;filter.type='lowpass';filter.frequency.value=cutoff;
-    gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(volume,at+.005);
+    source.buffer=noise;source.loop=duration>.5;filter.type='lowpass';filter.frequency.setValueAtTime(cutoff,at);
+    if(endCutoff)filter.frequency.exponentialRampToValueAtTime(endCutoff,at+duration);
+    gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(volume,at+attack);
     gain.gain.exponentialRampToValueAtTime(.0001,at+duration);
     source.connect(filter);filter.connect(gain);gain.connect(bus);
     source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect();};source.start(at);source.stop(at+duration+.02);
@@ -58,6 +61,8 @@ export function createGameAudio(options={}) {
     const reverb=ctx.createConvolver(),impulse=ctx.createBuffer(2,Math.floor(ctx.sampleRate*1.6),ctx.sampleRate);
     for(let c=0;c<2;c++){const data=impulse.getChannelData(c);for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*(1-i/data.length)**3*.32;}
     reverb.buffer=impulse;wet=ctx.createGain();wet.gain.value=.18;wet.connect(reverb);reverb.connect(music);
+    // 混响也经过昼夜总线，白天长音不会从湿声通道继续盖住夜晚。
+    day.connect(wet);night.connect(wet);
     noise=ctx.createBuffer(1,Math.floor(ctx.sampleRate*.5),ctx.sampleRate);
     const data=noise.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
     master.gain.value=hidden?0:1;music.gain.value=settings.music?settings.musicVolume:0;effects.gain.value=settings.effects?settings.effectsVolume:0;
@@ -68,16 +73,24 @@ export function createGameAudio(options={}) {
     if(!ctx||ctx.state!=='running'||hidden||!settings.music||settings.musicVolume===0||mode==='silent')return;
     if(nextBeat<ctx.currentTime-.2)nextBeat=ctx.currentTime+.05;
     while(nextBeat<ctx.currentTime+.18){
-      const tense=mode==='night',bus=tense?night:day,seconds=60/(tense?92:72),chord=chords[Math.floor(beat/8)%chords.length];
-      if(beat%8===0)for(const note of chord)tone(bus,note,nextBeat,seconds*7.7,.055,'sine',.3);
-      if(beat%2===0)tone(bus,chord[(beat/2)%4]+12,nextBeat,seconds*2.2,tense?.055:.09,'triangle',.018);
-      const lead=melody[Math.floor(beat/2)%melody.length];
-      if(beat%2===0&&lead!==null)tone(bus,lead,nextBeat,seconds*2.5,tense?.025:.055,'sine',.04);
-      if(tense&&!paused){
-        tone(bus,chord[0]-12,nextBeat,seconds*.65,.15,'sine',.025);
-        tone(bus,chord[0],nextBeat+seconds/2,seconds*.32,.045,'triangle',.015);
-        if(beat%2===0)tone(bus,38,nextBeat,.2,.075,'sine',.005,38);
-        if(beat%2===1)rustle(bus,nextBeat,.11,.014,1500);
+      const tense=mode==='night',bus=tense?night:day,seconds=60/(tense?108:72);
+      if(tense){
+        // 夜晚取消白天的舒缓旋律，低音与半音紧张和声铺底，短促动机持续推进。
+        const chord=nightChords[Math.floor(beat/8)%nightChords.length];
+        if(beat%8===0)for(const note of chord)tone(bus,note,nextBeat,seconds*7.7,.08,'triangle',.25);
+        if(!paused){
+          tone(bus,chord[0],nextBeat,seconds*.7,.25,'sine',.009);
+          for(let i=0;i<4;i++)tone(bus,chord[0]+12+nightPulse[(beat*4+i)%nightPulse.length],nextBeat+i*seconds/4,seconds*.23,i===0?.13:.085,'triangle',.006);
+          tone(bus,38,nextBeat,.17,.18,'sine',.003,32);
+          rustle(bus,nextBeat+seconds/2,.06,.05,2800);
+          if(beat%2===1)rustle(bus,nextBeat,.14,.085,1200);
+        }
+      }else{
+        const chord=chords[Math.floor(beat/8)%chords.length];
+        if(beat%8===0)for(const note of chord)tone(bus,note,nextBeat,seconds*7.7,.055,'sine',.3);
+        if(beat%2===0)tone(bus,chord[(beat/2)%4]+12,nextBeat,seconds*2.2,.09,'triangle',.018);
+        const lead=melody[Math.floor(beat/2)%melody.length];
+        if(beat%2===0&&lead!==null)tone(bus,lead,nextBeat,seconds*2.5,.055,'sine',.04);
       }
       nextBeat+=seconds;beat++;
     }
@@ -103,7 +116,7 @@ export function createGameAudio(options={}) {
     syncLevels();startClock();
   }
   function setScene(phase,isPaused=false) {
-    const next=phase==='build'?'day':phase==='lost'?'silent':'night';
+    const next=phase==='build'?'day':['won','lost'].includes(phase)?'silent':'night';
     if(next!==mode){mode=next;beat=0;nextBeat=(ctx?.currentTime??0)+.06;}
     paused=isPaused;syncLevels();startClock();
   }
@@ -130,8 +143,17 @@ export function createGameAudio(options={}) {
       rustle(effects,at,.18,.09,900);tone(effects,50,at,.12,.1,'triangle',.01,90);
     }else if(name==='hurt'){
       tone(effects,40,at,.3,.22,'sine',.006,35);rustle(effects,at,.17,.08,650);
-    }else if(name==='won'){
-      [62,69,74].forEach((note,i)=>tone(effects,note,at+i*.14,.55,.095,'sine',.02));
+    }else if(name==='sunset'){
+      // 落日：空气下沉、低音扫落，收尾是一声远处的闷响。
+      rustle(effects,at,1.3,.13,2500,180,.2);
+      tone(effects,62,at,1.65,.18,'sine',.06,55);
+      tone(effects,50,at+.15,1.5,.12,'triangle',.1,38);
+      tone(effects,38,at+.55,.75,.2,'sine',.01,32);
+    }else if(name==='dawn'){
+      // 天亮：暖色大和弦缓慢展开，避开短音阶提示音的“消息通知”轮廓。
+      [50,57,62,66,69].forEach((note,i)=>tone(effects,note,at+i*.025,2.7+i*.1,.085,'sine',.42));
+      tone(effects,74,at+.3,2.8,.035,'triangle',.6);
+      rustle(effects,at+.15,1.7,.035,600,1800,.5);
     }else if(name==='lost'){
       [50,45,38].forEach((note,i)=>tone(effects,note,at+i*.16,.65,.11,'triangle',.025));
     }

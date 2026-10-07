@@ -1,7 +1,7 @@
 import {drawFog} from './fog.js';
 import {drawRoadTexture,drawBlockTexture} from './city-textures.js?v=3';
 import {drawCampfire} from './icons.js';
-import {createGameAudio} from './audio.js?v=1';
+import {createGameAudio} from './audio.js?v=3';
 import { SIZE, DEFAULTS } from './config.js?v=45';
 import { contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=45';
 import {generateCityMap} from './city-map.js?v=6';
@@ -765,7 +765,7 @@ function advance() {
   }
   messages = messages.slice(0,8); $('log').replaceChildren(...messages.map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
   if(state.phase==='won'){
-    sound.play('won');
+    if(campaignComplete(state))sound.play('dawn');
     if(state.nightEconomy>0)sound.play('coin',.38);
     // 经营单独说明来源，不与最后一次击杀的括号金额相加，也不重复发钱。
     if(state.nightEconomy>0)pulse($('budget'),'#ffe1a0');
@@ -782,6 +782,7 @@ function advance() {
 function finishDawn(){
   dawnAt=0;
   if(!enterMorning(state))return;
+  sound.play('dawn');
   preparation=null;paused=false;timer=0;motion=null;impactAge=1000;incoming.clear();
   explainedMerge=false;$('mergeNotice').hidden=true;$('forecastDay').value=String(state.day-1);sourceEditor(state.sources);
   notify('');
@@ -797,6 +798,7 @@ $('start').onclick=()=>{
   if(JSON.stringify(readSources())!==JSON.stringify(state.sources)){ $('configError').textContent='来袭配置有未应用修改，请先应用配置。';$('settings').open=true;notify('请先应用来袭配置，确保预览与实际波次一致。');return; }
   const error=validateSources(state.sources,state);if(error){notify(error);return;}
   preparation=beginBattle(state);if(!preparation)return;
+  sound.play('sunset');
   receiptUntil=0;$('economyReceipt').hidden=true;recentGain=0;gainUntil=0;$('moneyGain').textContent='';
   $('forecastDay').value=String(state.day-1);paused=false;timer=0;last=performance.now();$('settings').open=false;notify('敌人正在接近。击杀自动获得资金；可暂停补炮，不能造墙或拆除。');update();
 };
