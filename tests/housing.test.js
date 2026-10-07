@@ -2,7 +2,7 @@ import {generateCityMap} from '../src/city-map.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS} from '../src/config.js';
-import {createState,key,population,housingQuote,buildHousing,removeHousing,buildProduction,removeProduction,productionError,funds,demolitionQuote,beginBattle,restoreNight,restartCampaign,validateParams,clearPlot,plotContent,clearingLabor,createCampaign,enterMorning,productionControlled} from '../src/model.js';
+import {createState,key,population,housingQuote,buildHousing,removeHousing,buildProduction,removeProduction,productionError,funds,demolitionQuote,beginBattle,restoreNight,restartCampaign,validateParams,clearPlot,plotContent,clearingLabor,applyTestScenario,createCampaign,enterMorning,productionControlled} from '../src/model.js';
 const home=key(11,24),factory=key(19,26);
 function setup(initialPopulation=0){const s=createState(undefined,undefined,undefined,{...DEFAULTS,controlRadius:30,budget:1000,initialPopulation});s.plotContents.set(home,{status:'ruin',type:'housing'});s.day=2;return s;}
 test('住房当天入住，人口独立于 HP；生产占用、拆除释放劳动力',()=>{
@@ -51,6 +51,13 @@ test('清理即时生效、不改金币，占用当日人力；不足不清理�
   assert.match(clearPlot(s,factory),/需要 1 人/);assert.equal(plotContent(s,factory).status,'ruin');
   const snap=beginBattle(s);assert.equal(restoreNight(snap).clearingWorkers,1);
   s.waves=[[],[],[]];s.phase='won';assert.equal(enterMorning(s),true);assert.equal(population(s).free,1);
+});
+test('测试台设定的是当前资源，保留布局且不伪造经营收入，生产依赖不足则拒绝',()=>{
+  const s=createCampaign({...DEFAULTS,controlRadius:30});s.day=2;buildProduction(s,factory);
+  assert.equal(applyTestScenario(s,8,1234,20),'');assert.equal(s.day,8);assert.equal(s.phase,'build');
+  assert.equal(funds(s),1234);assert.equal(population(s).total,20);assert.equal(s.production.size,1);assert.equal(s.economyEarned,0);
+  assert.match(applyTestScenario(s,1,1,0),/生产需要/);assert.equal(s.day,8);assert.equal(funds(s),1234);
+  assert.equal(applyTestScenario(s,2,500,10),'');assert.equal(funds(s),500);assert.equal(population(s).total,10);
 });
 test('开局火光居于3×3广场中心，两块2×2教学废墟完整受控且不重叠',()=>{
   for(const seed of ['cityx-01','a','b','c']){

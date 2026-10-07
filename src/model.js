@@ -46,7 +46,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
   const fixedWalls = layout?new Set():makeWalls(), blocked=new Set(layout?layout.tiles.flatMap((t,id)=>t==='block'?[id]:[]):[]), walls = new Set([...fixedWalls, ...blocked, ...playerWalls]);
   const terrainWalls=new Set([...fixedWalls,...blocked]);
   const camp = layout?key(layout.camp.x,layout.camp.y):key(...DEFAULTS.camp), field = routeField(camp, terrainWalls);
-  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), clearingWorkers:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
+  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), clearingWorkers:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
     layout, blocked, terrainWalls, sites:layout?(layout.blocks??layout.buildings):PRODUCTION_SITES, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), towerHealth:new Map([...towers].map(([id,type])=>[id,{hp:params.weapons[type].hp,max:params.weapons[type].hp}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
@@ -100,7 +100,7 @@ export function fireField(state) {
   }
   return fire;
 }
-export const funds = state => state.params.budget + state.earned + state.economyEarned - [...state.production.keys()].reduce((sum,id)=>sum+productionQuote(state,id).cost,0) - [...state.housing.keys()].reduce((sum,id)=>sum+housingQuote(state,id).cost,0) - state.outposts.size*state.params.outpostCost - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
+export const funds = state => state.params.budget + (state.debugGold??0) + state.earned + state.economyEarned - [...state.production.keys()].reduce((sum,id)=>sum+productionQuote(state,id).cost,0) - [...state.housing.keys()].reduce((sum,id)=>sum+housingQuote(state,id).cost,0) - state.outposts.size*state.params.outpostCost - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
 // 控制范围取火光与前哨覆盖的并集；地块内前哨不受击、不失守。
 export function inStationRange(id, center, radius) {
   const [x,y]=xy(id),[cx,cy]=xy(center),dx=Math.abs(x-cx),dy=Math.abs(y-cy),cut=Math.min(2,radius);
@@ -416,7 +416,7 @@ export function housingQuote(state,id){
   return {cost:area*state.params.housingCostPerCell,residents:Math.ceil(area/state.params.housingCellsPerResident)};
 }
 export function population(state){
-  const total=state.params.initialPopulation+[...state.housing.keys()].reduce((n,id)=>n+housingQuote(state,id).residents,0);
+  const total=state.params.initialPopulation+(state.debugPopulation??0)+[...state.housing.keys()].reduce((n,id)=>n+housingQuote(state,id).residents,0);
   const working=[...state.production.keys()].reduce((n,id)=>n+productionLabor(state,id),0);
   return {total,working,free:total-working-(state.clearingWorkers??0)};
 }
@@ -557,4 +557,16 @@ export const isExplored=(state,id)=>!state.explored||state.explored.has(id);
 export function revealControl(state){
   if(!state.explored)return;
   for(let id=0;id<SIZE*SIZE;id++)if(inControl(state,id))state.explored.add(id);
+}
+
+// 测试台仅跳转到指定白天，不模拟略过的夜晚、不发奖励；独立偏移不污染收入账单。
+export function applyTestScenario(state,day,gold,people){
+  if(!Number.isInteger(day)||day<1||day>(state.waves?.length??1))return '请选择现有波次范围内的日期。';
+  if(![gold,people].every(n=>Number.isInteger(n)&&n>=0&&n<=1000000))return '金币与人口须为 0–1000000 整数。';
+  const workers=population(state).working;if(people<workers)return `现有生产需要 ${workers} 人，不能设为更低人口。`;
+  const sources=structuredClone(state.waves[day-1]),candidate={...state,sources};
+  const error=validateSources(sources,candidate);if(error)return error;
+  state.debugGold+=gold-funds(state);state.debugPopulation+=people-population(state).total;
+  state.day=day;state.phase='build';state.clearingWorkers=0;state.hp=Math.max(1,state.hp);
+  state.sources=sources;state.lastNight=null;clearNight(state);lockAttacks(state);return '';
 }
