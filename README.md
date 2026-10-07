@@ -42,7 +42,13 @@ python3 -m http.server 8099 --bind 127.0.0.1
 
 滚轮缩放、拖动平移、“起点”返回起步区域、“全图”查看整幅地图与迷雾。顶部“调整地图（新局）”进入 `map-preview.html`；seed、普通街区边长、特殊区块与紧邻开关可分享。主游戏目前支持 60×60，其他尺寸只预览；改变布局开始新局。
 
-开发入口：`src/model.js` 为锁定进攻与结算，`src/app.js` 为画面和交互，`src/city-map.js` 为布局，`src/config.js` 为战斗数值，`src/map-settings.js` 为地图参数。当前机制见 [GDD](docs/GDD.md)，本轮实现边界见 [锁定进攻](docs/locked-defense.md)，地块设计见 [地块经营与前哨](docs/plot-economy-and-outposts.md)，浏览器检查见 [verification](docs/verification.md)。
+## 声音
+
+页首「声音」提供独立音乐／音效开关与音量，白天和夜晚随时可调，浏览器本地记住选择；重试和调参不改变声音偏好。首次默认都开，音乐 28%、音效 65%，首次点击或按键后才播放。页面切到后台自动静音，回来后恢复；夜晚仍按原规则保持暂停。
+
+本轮采用原创 Web Audio 合成配乐：白天稀疏旋律、柔和铺底，夜晚同主题加入低音与脉冲，平滑切换；暂停收起节奏，音乐不随 2×/4×加速。建设成功、击杀与实际金币入账分别有音效，密集击杀合并反馈；经营到账与拆除退款也播放金币声。声音独立于金币结算、迷雾和减少动态效果设置，不下载外部音频。当前编曲用于试玩，听感仍可换。
+
+开发入口：`src/model.js` 为锁定进攻与结算，`src/app.js` 为画面和交互，`src/audio.js` 为声音与原创合成编曲，`src/city-map.js` 为布局，`src/config.js` 为战斗数值，`src/map-settings.js` 为地图参数。当前机制见 [GDD](docs/GDD.md)，本轮实现边界见 [锁定进攻](docs/locked-defense.md)，地块设计见 [地块经营与前哨](docs/plot-economy-and-outposts.md)，浏览器检查见 [verification](docs/verification.md)。
 
 安装 Node.js 后执行 `npm test`（使用内置测试模块，无第三方依赖）。第一天纯塔防，第二天经营，第三天前哨；早晨显示解锁提示。完整引导继续迭代；平衡、扩张动机与好玩需实际试玩，技术检查不代表好玩。
 

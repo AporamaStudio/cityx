@@ -1,6 +1,7 @@
 import {drawFog} from './fog.js';
 import {drawRoadTexture,drawBlockTexture} from './city-textures.js?v=3';
 import {drawCampfire} from './icons.js';
+import {createGameAudio} from './audio.js?v=1';
 import { SIZE, DEFAULTS } from './config.js?v=45';
 import { contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=45';
 import {generateCityMap} from './city-map.js?v=6';
@@ -9,6 +10,28 @@ const mapSettings=readMapSettings(location.search);
 mapSettings.width=SIZE;mapSettings.height=SIZE;
 const cityLayout=generateCityMap(mapSettings);
 const $ = id => document.getElementById(id);
+const sound=createGameAudio();
+// 玩家声音偏好独立于实验参数和战前快照，重试不会重新打开已关闭的声音。
+function updateAudioControls(){
+  const prefs=sound.settings;
+  $('musicEnabled').checked=prefs.music;$('effectsEnabled').checked=prefs.effects;
+  $('musicVolume').value=Math.round(prefs.musicVolume*100);$('effectsVolume').value=Math.round(prefs.effectsVolume*100);
+  $('musicVolume').disabled=!prefs.music;$('effectsVolume').disabled=!prefs.effects;
+  $('audioSummary').textContent=prefs.music||prefs.effects?'声音':'声音 · 已静音';
+}
+for(const [id,name] of [['musicEnabled','music'],['effectsEnabled','effects']])$(id).onchange=()=>{
+  sound.configure({[name]:$(id).checked});sound.unlock();updateAudioControls();
+  if(name==='effects'&&$(id).checked)sound.play('coin');
+};
+for(const [id,name] of [['musicVolume','musicVolume'],['effectsVolume','effectsVolume']])$(id).oninput=()=>{
+  sound.configure({[name]:Number($(id).value)/100});updateAudioControls();
+};
+const unlockAudio=()=>sound.unlock();
+document.addEventListener('pointerdown',unlockAudio,{capture:true});
+document.addEventListener('keydown',unlockAudio,{capture:true});
+document.addEventListener('click',event=>{if(!$('audioSettings').contains(event.target))$('audioSettings').open=false;});
+document.addEventListener('keydown',event=>{if(event.key==='Escape')$('audioSettings').open=false;});
+sound.setHidden(document.hidden);updateAudioControls();
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createCampaign(DEFAULTS,undefined,cityLayout), tool = 'wall', hover = null, dragging = null;
 let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0;
@@ -418,6 +441,7 @@ function draw() {
   } else $('cellInfo').textContent = '单击建造 · 拖动平移 · 滚轮缩放 · 悬停看生命';
 }
 function update() {
+  sound.setScene(state.phase,paused);
   sight=visionField(state);revealControl(state);
   fire = fireField({...state,params:previewParams()});
   // 夜晚聚焦补炮；资金不足仍显示灰色炮台，区别于阶段不允许的工具。
@@ -668,6 +692,8 @@ canvas.addEventListener('pointerup',e=>{
   }
   if(!actionError){
     const delta=funds(state)-beforeFunds,site=['production','housing'].includes(tool)||(tool==='erase'&&['production','housing','outpost','ruin'].includes(erasedType))?productionSite(id,state):null;
+    sound.play(tool==='erase'?'clear':tool==='repair'?'repair':'build');
+    if(delta>0)sound.play('coin',.12);
     const names={wall:'墙已建造',build:'近防炮就位',long:'远防炮就位',outpost:'控制区扩张',housing:`入住 +${population(state).total-beforePeople} 人`,production:'生产已恢复',repair:'已修满',erase:'已拆除'};
     placementFx={id:site?key(site.x,site.y):id,size:site?.width||site?.size||1,height:site?.height||site?.size||1,start:performance.now(),color:delta<0?'#ffe1a0':'#aef2ce',text:`${names[tool]}${delta?` ${delta>0?'+':''}${delta} 金币`:''}`};
     pulse($('budget'),delta<0?'#ffe1a0':'#bff5ce');
@@ -721,6 +747,10 @@ function showCoins(id, amount) {
 function advance() {
   stepBattle(state,motion?.actions);
   motion=null;impactAge=0;timer=0;sight=visionField(state);
+  const kills=state.events.filter(event=>event.type==='kill');
+  if(kills.some(event=>currentlyVisible(event.id)))sound.play('kill');
+  if(kills.some(event=>event.value>0))sound.play('coin',.1);
+  if(state.events.some(event=>event.type==='leak'))sound.play('hurt');
   for (const event of state.events) {
     const [x,y] = xy(event.id);
     const defenseText={wallHit:`墙 (${x},${y}) 受到 ${event.value} 点伤害`,towerHit:`炮塔 (${x},${y}) 受到 ${event.value} 点伤害`,wallLost:`墙 (${x},${y}) 被攻破，敌人将沿原路线推进`,towerLost:`炮塔 (${x},${y}) 损坏停火，次日可维修`};
@@ -735,6 +765,8 @@ function advance() {
   }
   messages = messages.slice(0,8); $('log').replaceChildren(...messages.map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
   if(state.phase==='won'){
+    sound.play('won');
+    if(state.nightEconomy>0)sound.play('coin',.38);
     // 经营单独说明来源，不与最后一次击杀的括号金额相加，也不重复发钱。
     if(state.nightEconomy>0)pulse($('budget'),'#ffe1a0');
     dawnAt=campaignComplete(state)?0:performance.now()+900;
@@ -742,6 +774,7 @@ function advance() {
   if (state.phase === 'won') notify(campaignComplete(state)?'全部夜晚守住了！可重试最后一晚或整局重来。':`第 ${state.day} 晚守住了。进入次日建设、修复并准备下一晚。`);
   if (state.phase === 'lost') notify('火光熄灭。检查破墙位置、炮塔受损与持续火力覆盖，可重试当晚。');
   if(state.phase==='lost')$('testControls').open=true;
+  if(state.phase==='lost')sound.play('lost');
   update();
   if(state.phase==='won')document.querySelector('.build-sidebar').scrollTop=0;
 }
@@ -800,5 +833,5 @@ function frame(now){
   }
   requestAnimationFrame(frame);
 }
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.phase==='battle'){paused=true;if(motion)motion.singleStep=false;timer=0;update();}});
+document.addEventListener('visibilitychange',()=>{sound.setHidden(document.hidden);if(document.hidden&&state.phase==='battle'){paused=true;if(motion)motion.singleStep=false;timer=0;update();}});
 requestAnimationFrame(frame);
