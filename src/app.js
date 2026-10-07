@@ -1,3 +1,4 @@
+import {drawRoadTexture,drawBlockTexture} from './city-textures.js?v=1';
 import {drawCampfire} from './icons.js';
 import { SIZE, DEFAULTS } from './config.js?v=36';
 import { population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=36';
@@ -105,10 +106,10 @@ function draw() {
   const hoveredSite=hover!==null?productionSite(hover,state):null;
   if(hoveredSite){
     const quote=productionQuote(state,hover),content=plotContent(state,hover);
-    const summary=`${hoveredSite.width??hoveredSite.size}×${hoveredSite.height??hoveredSite.size} 地块 · ${quote.area} 格 · ${content.status==='empty'?'空地':content.status==='ruin'?'生产废墟':content.type==='outpost'?'前哨建筑':content.type==='housing'?'住房':'生产建筑'}。`;
+    const summary=`${hoveredSite.width??hoveredSite.size}×${hoveredSite.height??hoveredSite.size} 地块 · ${quote.area} 格 · ${content.status==='empty'?'空地':content.status==='ruin'?'废墟':content.type==='outpost'?'前哨建筑':content.type==='housing'?'住房':'生产建筑'}。`;
     if(hoveredSite.role==='hospital')$('placementInfo').textContent='医院 · 10×12 · 收复目标。占领机制待实现，不可拆除或换建。';
     else if(tool==='production')$('placementInfo').textContent=summary+`需要 ${productionLabor(state,hover)} 人（空闲 ${population(state).free}） · 生产费用 ${quote.cost} 钱 · 每天 +${quote.income}（守住当晚后结算） · ${quote.income>0?Math.ceil(quote.cost/quote.income)+' 晚回本':'当前收入为 0，不回本'}。`+(productionError(state,hover)||'点击修缮或新建整块。');
-    else $('placementInfo').textContent=summary+($('placementInfo').textContent||'选择生产、前哨或拆除工具。');
+    else $('placementInfo').textContent=summary+($('placementInfo').textContent||'选择生产、住房、前哨或拆除工具。');
   }
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
@@ -120,9 +121,9 @@ function draw() {
     const id = key(x, y), power = fire.get(id) || 0;
     ctx.fillStyle = (x + y) % 2 ? palette.groundA : palette.groundB;
     ctx.fillRect(x, y, 1, 1);
-    if ($('heat').checked && power) { ctx.fillStyle = `rgba(99,211,166,${Math.min(.6,.17 + power * .045)})`; ctx.fillRect(x, y, 1, 1); }
-    if(state.layout?.tiles[id]==='road'){ctx.fillStyle=nightMix>.5?'#293c4d':'#7d8888';ctx.fillRect(x,y,1,1);}
+    if(state.layout?.tiles[id]==='road')drawRoadTexture(ctx,state.layout,x,y,nightMix);
     if(productionSite(id,state)&&plotContent(state,id).status==='empty'){ctx.fillStyle=nightMix>.5?'#2c4841':'#77967b';ctx.fillRect(x,y,1,1);}
+    if ($('heat').checked && power) { ctx.fillStyle = `rgba(99,211,166,${Math.min(.6,.17 + power * .045)})`; ctx.fillRect(x, y, 1, 1); }
     if (state.walls.has(id)&&!state.blocked.has(id)) {
       ctx.fillStyle = palette.wall; ctx.fillRect(x + .05, y + .05, .9, .9);
       ctx.fillStyle='#0c171c77';ctx.fillRect(x+.05,y+.78,.9,.17);
@@ -201,10 +202,8 @@ function draw() {
     if(empty){ctx.strokeStyle=selected?'#fff0ae':'#a8d5ad';ctx.lineWidth=selected?.12:.06;ctx.setLineDash([.2,.12]);ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);ctx.setLineDash([]);continue;}
     ctx.fillStyle=selected?(active?'#527e59':built?'#80594e':'#655f3d'):active?'#527e59':built?'#80594e':nightMix>.5?'#494b42':'#81745b';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);
     ctx.strokeStyle=selected?'#fff0ae':productionControlled(previewState,id)?'#f5d789':'#a29670';ctx.lineWidth=selected?.12:.06;ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);
-    // 街区内多栋建筑仅用于表现；矩形整体仍是单次修缮对象。
-    ctx.fillStyle=active?'#81af85':nightMix>.5?'#666854':'#a39270';
-    for(let ry=0;ry<m-1;ry+=2)for(let rx=0;rx<n-1;rx+=2)ctx.fillRect(x+rx+.3,y+ry+.3,Math.min(1.25,n-rx-.6),Math.min(1.25,m-ry-.6));
-    if(plotContent(state,id).type==='housing'){ctx.fillStyle=nightMix>.5?'#77594f':'#c09274';ctx.fillRect(x+.2,y+.2,n-.4,m-.4);ctx.fillStyle=nightMix>.5?'#ffde92':'#4a6869';for(let ry=.5;ry<m-.3;ry++)for(let rx=.5;rx<n-.3;rx++)ctx.fillRect(x+rx,y+ry,.25,.3);}
+    // 同一整块用材质区分废墟、生产和居住，日夜分别取缓存贴图。
+    drawBlockTexture(ctx,p,plotContent(state,id).status==='ruin'?'ruin':plotContent(state,id).type,nightMix);
     if(p.role==='hospital'){ctx.fillStyle='#cbd7cb';ctx.fillRect(x+3,y+3,4,6);ctx.fillStyle='#478b80';ctx.fillRect(x+4.5,y+4,1,4);ctx.fillRect(x+3.5,y+5.5,3,1);}
     if(p.special){ctx.strokeStyle='#d5b5fc';ctx.lineWidth=.12;ctx.strokeRect(x+.16,y+.16,n-.32,m-.32);}
     if(selected)for(const cell of productionCells(id,state))if(!inControl(previewState,cell)){const [cx,cy]=xy(cell);ctx.fillStyle='#ed665877';ctx.fillRect(cx,cy,1,1);}
@@ -304,9 +303,10 @@ function draw() {
     const content=plotContent(state,id),post=content.type==='outpost';
     if(cells.includes(state.camp))continue;
     if(content.type==='housing'||(tool==='housing'&&!built&&!post&&p.role!=='hospital')){
-      const q=housingQuote(state,id),text=content.type==='housing'?`⌂ ${q.residents} 人`:`−${q.cost} 金币 · +${q.residents} 人`;
+      const q=housingQuote(state,id),builtHome=content.type==='housing',text=builtHome?`⌂ ${q.residents} 人`:`−${q.cost}    · +${q.residents} 人`;
       ctx.font='600 11px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
-      const w=ctx.measureText(text).width+12;ctx.fillStyle='#142024f2';ctx.fillRect(x-w/2,y-12,w,24);ctx.fillStyle='#f4d3a2';ctx.fillText(text,x,y);continue;
+      const w=ctx.measureText(text).width+12;ctx.fillStyle='#142024f2';ctx.fillRect(x-w/2,y-12,w,24);ctx.fillStyle='#f4d3a2';ctx.fillText(text,x,y);
+      if(!builtHome){const coinX=x-ctx.measureText(text).width/2+ctx.measureText(`−${q.cost}`).width+7;ctx.fillStyle='#f3c557';ctx.beginPath();ctx.arc(coinX,y,4,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff0ac';ctx.lineWidth=1;ctx.stroke();}continue;
     }
     if(built){
       const text=`+${active?productionQuote(state,id).income:0}`;
