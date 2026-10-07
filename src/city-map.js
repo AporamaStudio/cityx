@@ -105,6 +105,8 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
   for(const r of roads)if(r.kind!=='street')for(let cy=r.y;cy<r.y+r.height;cy++)for(let cx=r.x;cx<r.x+r.width;cx++)roadKinds.set(cy*width+cx,r.kind);
   roads.length=0;
   for(let cy=0;cy<height;cy++)for(let cx=0;cx<width;cx++)if(tiles[cy*width+cx]==='road')roads.push({x:cx,y:cy,width:1,height:1,kind:roadKinds.get(cy*width+cx)||'street'});
+  // 在几何完成后分配原用途，避免改变既有 seed 的街道布局；起步生产点保留。
+  for(const b of blocks)if(b.kind==='building')b.ruinType=b.role==='hospital'?'hospital':b.role==='starter'?'production':b.role==='starterHousing'?'housing':random()<.35?'housing':'production';
   const buildings=blocks.filter(b=>b.kind==='building'),openSpaces=blocks.filter(b=>b.kind==='open');
   const occupied=tiles.filter(t=>t==='block').length;
   return {version:5,seed,width,height,mainRoadWidth,minBlock,maxBlock,special,specialMin,specialMax,touching,starterPlot,hospital,tiles,roads,blocks,buildings,openSpaces,camp,goal,stats:{hospital:buildings.filter(b=>b.role==='hospital').length,special:buildings.filter(b=>b.special&&b.role!=='hospital').length,joined,buildings:buildings.length,openSpaces:openSpaces.length,occupied,coverage:occupied/(width*height)}};

@@ -1,9 +1,10 @@
+import {generateCityMap} from '../src/city-map.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS} from '../src/config.js';
-import {createState,key,population,housingQuote,buildHousing,removeHousing,buildProduction,removeProduction,productionError,funds,demolitionQuote,beginBattle,restoreNight,restartCampaign,validateParams} from '../src/model.js';
+import {createState,key,population,housingQuote,buildHousing,removeHousing,buildProduction,removeProduction,productionError,funds,demolitionQuote,beginBattle,restoreNight,restartCampaign,validateParams,clearPlot,plotContent} from '../src/model.js';
 const home=key(11,24),factory=key(19,26);
-function setup(initialPopulation=0){const s=createState(undefined,undefined,undefined,{...DEFAULTS,controlRadius:30,budget:1000,initialPopulation});s.day=2;return s;}
+function setup(initialPopulation=0){const s=createState(undefined,undefined,undefined,{...DEFAULTS,controlRadius:30,budget:1000,initialPopulation});s.plotContents.set(home,{status:'ruin',type:'housing'});s.day=2;return s;}
 test('住房当天入住，人口独立于 HP；生产占用、拆除释放劳动力',()=>{
   const s=setup();assert.match(productionError(s,factory),/劳动力不足/);
   assert.equal(buildHousing(s,home),'');assert.deepEqual(housingQuote(s,home),{cost:16,residents:2});
@@ -25,4 +26,21 @@ test('重试保留人口投资，重开清空住房；参数调整不能产生�
   const snap=beginBattle(s);assert.ok(snap);const copy=restoreNight(snap);assert.deepEqual(population(copy),population(s));
   copy.housing.clear();assert.equal(s.housing.size,1);assert.equal(restartCampaign(s).housing.size,0);
   assert.match(validateParams({...s.params,housingCellsPerResident:100,productionCellsPerWorker:1},s),/劳动力不足/);
+});
+
+test('废墟只能恢复原用途，拆为空地后可自由换建',()=>{
+  const s=setup(6),before=funds(s);
+  assert.match(buildHousing(s,factory),/生产废墟/);assert.match(buildProduction(s,home),/住房废墟/);
+  assert.equal(funds(s),before);assert.equal(s.housing.size,0);assert.equal(s.production.size,0);
+  assert.equal(clearPlot(s,factory),'');assert.equal(plotContent(s,factory).type,null);
+  assert.equal(buildHousing(s,factory),'');assert.equal(clearPlot(s,home),'');assert.equal(buildProduction(s,home),'');
+});
+
+test('seed 固定两类废墟，起步保留生产；重开还原用途',()=>{
+  const layout=generateCityMap({seed:'cityx-01',width:60,height:60,starterPlot:true});
+  assert.ok(layout.buildings.some(b=>b.ruinType==='housing'));
+  assert.equal(layout.buildings.find(b=>b.role==='starter').ruinType,'production');
+  const s=createState(undefined,undefined,undefined,DEFAULTS,undefined,layout),h=layout.buildings.find(b=>b.ruinType==='housing'),id=key(h.x,h.y);
+  assert.equal(plotContent(s,id).type,'housing');s.plotContents.set(id,{status:'empty',type:null});
+  assert.equal(plotContent(restartCampaign(s),id).type,'housing');
 });

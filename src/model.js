@@ -51,7 +51,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), towerHealth:new Map([...towers].map(([id,type])=>[id,{hp:params.weapons[type].hp,max:params.weapons[type].hp}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
     hp: params.campHP, enemies: [], enemyOutcomes:new Map(), events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
-  state.plotContents=new Map(state.sites.map(p=>[key(p.x,p.y),{status:p.kind==='open'?'empty':'ruin',type:p.kind==='open'?null:'production'}]));
+  state.plotContents=new Map(state.sites.map(p=>[key(p.x,p.y),{status:p.kind==='open'?'empty':'ruin',type:p.kind==='open'?null:(p.ruinType??'production')}]));
   for(const [id,p] of state.outposts){p.plotId??=productionId(id,state);state.plotContents.set(p.plotId,{status:'building',type:'outpost'});}
   initializeExploration(state);rebuildTerrain(state);lockAttacks(state);return state;
 }
@@ -423,6 +423,7 @@ export function housingError(state,id){
   if(state.phase!=='build'||state.day<2)return '第 2 天起可在白天建设住房。';
   const error=plotBuildError(state,id);if(error)return error;
   if(plotContent(state,id).status==='building')return '该街区已有设施，请先拆除。';
+  if(plotContent(state,id).status==='ruin'&&plotContent(state,id).type!=='housing')return '生产废墟只能恢复生产；如需换建住房，请先拆成空地。';
   if(!productionControlled(state,id))return '住房整块都需要在控制范围内。';
   return funds(state)<housingQuote(state,id).cost?'资金不足，无法建设住房。':'';
 }
@@ -448,6 +449,7 @@ export function productionError(state,id) {
   if(state.phase!=='build')return '只能在建设阶段恢复生产。';
   if(state.day<2)return '第 2 天开放经营与地块拆除。';
   const error=plotBuildError(state,id);if(error)return error;
+  if(plotContent(state,id).status==='ruin'&&plotContent(state,id).type==='housing')return '住房废墟只能恢复住房；如需换建生产，请先拆成空地。';
   if(['outpost','housing'].includes(plotContent(state,id).type))return '该地块已有其他设施，请先拆除。';
   if(state.production.has(productionId(id,state)))return '该地点已经恢复生产。';
   const missing=productionCells(id,state).filter(cell=>!inControl(state,cell)).length;
@@ -476,7 +478,7 @@ export function clearPlot(state,id) {
   const error=plotBuildError(state,id);if(error)return error;
   const content=plotContent(state,id);
   if(content.status==='empty')return '这里已经是空地。';
-  if(content.type==='housing')return removeHousing(state,id);
+  if(content.type==='housing'&&content.status==='building')return removeHousing(state,id);
   if(content.type==='outpost')return removeOutpost(state,id);
   if(state.production.has(productionId(id,state)))return removeProduction(state,id);
   state.plotContents.set(productionId(id,state),{status:'empty',type:null});rebuildTerrain(state);return '';

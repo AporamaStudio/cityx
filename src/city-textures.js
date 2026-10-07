@@ -57,8 +57,8 @@ export function drawRoadTexture(ctx,layout,x,y,mix){
 export function drawBlockTexture(ctx,p,kind,mix){
   const w=p.width??p.size,h=p.height??p.size,variant=(p.x*7+p.y*13)%4;
   layers(ctx,p.x+.1,p.y+.1,w-.2,h-.2,mix,time=>texture(`block:${kind}:${w}:${h}:${variant}:${time}`,w,h,g=>{
-    const c=palettes[time],night=time==='night';
-    g.fillStyle=kind==='ruin'?c.ruin:c.yard;g.fillRect(0,0,w,h);
+    const c=palettes[time],night=time==='night',ruin=kind.endsWith('ruin'),homeRuin=kind==='housing-ruin';
+    g.fillStyle=ruin?(homeRuin?(night?'#514948':'#927d6b'):c.ruin):c.yard;g.fillRect(0,0,w,h);
     // 院落砾石和铺装纹理固定于地块，不逐帧随机闪动。
     g.fillStyle=night?'#b1ccd00b':'#fff5d812';
     for(let i=0;i<w*h*3;i++)g.fillRect(((i*37+variant*9)%(w*31))/32,((i*19+variant*3)%(h*31))/32,.06,.035);
@@ -83,7 +83,13 @@ export function drawBlockTexture(ctx,p,kind,mix){
         for(let sx=.15;sx<bw-.1;sx+=.4)g.fillRect(x+sx,y+bh-.16,.20,.10);
       }else{
         // 屋顶缺口、贯穿裂缝及散落砖块，让废墟不再像完好建筑。
-        g.fillStyle=c.roof;g.beginPath();g.moveTo(x,y);g.lineTo(x+bw*.56,y);g.lineTo(x+bw*.48,y+bh*.27);g.lineTo(x+bw*.77,y+bh*.19);g.lineTo(x+bw,y+.12);g.lineTo(x+bw,y+bh);g.lineTo(x,y+bh);g.closePath();g.fill();
+        g.fillStyle=homeRuin?(night?'#82706a':'#bc9076'):c.roof;g.beginPath();g.moveTo(x,y);g.lineTo(x+bw*.56,y);g.lineTo(x+bw*.48,y+bh*.27);g.lineTo(x+bw*.77,y+bh*.19);g.lineTo(x+bw,y+.12);g.lineTo(x+bw,y+bh);g.lineTo(x,y+bh);g.closePath();g.fill();
+        // 原用途保留轮廓：住宅废墟有折顶和暗窗，生产废墟保留厂房屋面条纹。
+        g.strokeStyle=homeRuin?(night?'#a08b78':'#e0b690'):(night?'#8a9391':'#c9c4ad');g.lineWidth=.07;
+        g.beginPath();
+        if(homeRuin){g.moveTo(x,y+.3);g.lineTo(x+bw*.5,y+.06);g.lineTo(x+bw,y+.3);}
+        else for(let sx=.2;sx<bw-.1;sx+=.3){g.moveTo(x+sx,y+.1);g.lineTo(x+sx,y+bh-.1);}
+        g.stroke();
         g.strokeStyle=c.crack;g.lineWidth=.08;g.beginPath();g.moveTo(x+bw*.48,y+bh*.27);g.lineTo(x+bw*.36,y+bh*.53);g.lineTo(x+bw*.61,y+bh*.69);g.lineTo(x+bw*.52,y+bh);g.stroke();
         g.fillStyle=c.crack;g.fillRect(x+.12,y+bh-.35,.28,.19);g.fillStyle=c.roof;
         g.fillRect(x+bw-.05,y+bh+.06,.18,.12);g.fillRect(x-.14,y+bh*.4,.12,.17);

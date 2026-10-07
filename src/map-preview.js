@@ -1,5 +1,6 @@
+import {drawBlockTexture} from './city-textures.js?v=3';
 import {readMapSettings,mapSearch} from './map-settings.js';
-import {generateCityMap,walkableDistances} from './city-map.js?v=4';
+import {generateCityMap,walkableDistances} from './city-map.js?v=5';
 const $=id=>document.getElementById(id),canvas=$('map'),ctx=canvas.getContext('2d'),viewport=$('viewport');
 let appliedSettings,map,lookup=[],scale=16,panX=0,panY=0,hover=-1,drag=null,width=0,height=0;
 // 地图可视化只依赖生成数据，点击不修改地形或模拟修复。
@@ -25,18 +26,15 @@ function draw(){
     ctx.fillStyle=selected?'#c4ac7c':'#81745b';ctx.fillRect(b.x+.05,b.y+.05,b.width-.1,b.height-.1);
     ctx.fillStyle='#554f43';ctx.fillRect(b.x+.05,b.y+b.height-.25,b.width-.1,.2);
     ctx.strokeStyle=selected?'#fff0a9':b.special?'#d5b5fc':'#c5b28a';ctx.lineWidth=selected?2/scale:1/scale;ctx.strokeRect(b.x+.08,b.y+.08,b.width-.16,b.height-.16);
-    // 内部屋顶只是建筑群表现，不产生额外可操作地块或通路。
-    ctx.fillStyle='#a39270';
-    for(let ry=0;ry<Math.max(1,b.height-1);ry+=2)for(let rx=0;rx<Math.max(1,b.width-1);rx+=2)ctx.fillRect(b.x+rx+.3,b.y+ry+.3,Math.min(1.25,b.width-rx-.6),Math.min(1.25,b.height-ry-.6));
-    // 短裂纹表示废弃，保持街区占地边界干净。
-    ctx.strokeStyle='#c2b38a66';ctx.lineWidth=1/scale;ctx.beginPath();ctx.moveTo(b.x+b.width*.35,b.y+.2);ctx.lineTo(b.x+b.width*.5,b.y+b.height*.5);ctx.lineTo(b.x+b.width*.4,b.y+b.height-.2);ctx.stroke();
+    // 预览与实战共用废墟用途和外观。
+    drawBlockTexture(ctx,b,`${b.ruinType}-ruin`,0);
   }
   for(const [p,color] of [[map.camp,'#ffd182'],[map.goal,'#9ee4ec']]){ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(p.x+.5,p.y);ctx.lineTo(p.x+1,p.y+.5);ctx.lineTo(p.x+.5,p.y+1);ctx.lineTo(p.x,p.y+.5);ctx.closePath();ctx.fill();}
   ctx.restore();
   ctx.font='600 11px system-ui';ctx.textAlign='center';
   for(const [p,text,color] of [[map.camp,'起点','#ffe1a6'],[map.goal,'远端目标','#b9f4ff']]){const x=panX+(p.x+.5)*scale,y=panY+(p.y+.5)*scale;ctx.fillStyle='#132322ee';ctx.fillRect(x-30,y-27,60,18);ctx.fillStyle=color;ctx.fillText(text,x,y-14);}
   for(const b of map.blocks.filter(b=>b.role==='hospital')){ctx.fillStyle='#dbefeb';ctx.fillText('医院 · 10×12',panX+(b.x+b.width/2)*scale,panY+(b.y+b.height/2)*scale);}
-  if(hover>=0){const b=map.blocks[hover],x=panX+(b.x+b.width/2)*scale,y=panY+b.y*scale;ctx.fillStyle='#132322ee';ctx.fillRect(x-38,y-23,76,19);ctx.fillStyle='#ffe3a1';ctx.fillText(`${b.width} × ${b.height} ${b.kind==='open'?'空地':b.role==='hospital'?'医院':b.special?'特殊':'街区'}`,x,y-9);}
+  if(hover>=0){const b=map.blocks[hover],x=panX+(b.x+b.width/2)*scale,y=panY+b.y*scale;ctx.fillStyle='#132322ee';ctx.fillRect(x-38,y-23,76,19);ctx.fillStyle='#ffe3a1';ctx.fillText(`${b.width} × ${b.height} ${b.kind==='open'?'空地':b.role==='hospital'?'医院':b.ruinType==='housing'?'住房废墟':'生产废墟'}`,x,y-9);}
 }
 function generate(){
   try{
