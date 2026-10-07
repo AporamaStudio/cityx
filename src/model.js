@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=40';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=41';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -70,7 +70,7 @@ export function createCampaign(params=DEFAULTS, waves=WAVES, layout=null) {
   }
   const state=createState(waves[0],new Map(),new Set(),params,new Map(),layout);
   state.waves=structuredClone(waves).map(sources=>sources.map(s=>({...s,target:s.target??-2})));
-  state.sources=state.waves[0];state.lastNight=null;lockAttacks(state);
+  state.sources=state.waves[0];state.lastNight=null;lockAttacks(state);revealControl(state);
   return state;
 }
 export const reservedSources=state=>state.waves?.slice(state.day-1).flat()??state.sources;
@@ -228,6 +228,7 @@ export function enterMorning(state) {
   state.lastNight={day:state.day,earned:state.nightEarned,economy:state.nightEconomy,...state.productionReport,leaked:state.leaked};
   state.day++;state.phase='build';state.clearingWorkers=0;
   if(state.waves)state.sources=state.waves[state.day-1];
+  revealControl(state);
   clearNight(state);
   lockAttacks(state);
   // 进入白天保留建筑内容、防线损伤和资金，再生成下一晚进攻。
@@ -279,6 +280,8 @@ export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
   if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';
+  if(!integer(params.campSight,0,30)||!integer(params.outpostSight,0,30)||!integer(params.sourceRevealSize,1,5))return '外围视野须为 0–30 整数，敌源揭示边长须为 1–5 整数。';
+  if(!['daySightMultiplier','nightSightMultiplier','eventSightMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=3))return '视野倍率须为 0–3，可使用小数。';
   if(!integer(params.clearingCellsPerWorker,1,100))return '清理每名工人承担格数须为 1–100 整数。';
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
   if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产或增加住房。';
@@ -534,7 +537,7 @@ export function demolitionQuote(state,id) {
 function retainDemolitionCost(state,quote){state.demolitionSpent+=quote.cost-quote.refund;}
 export function buildTower(state,id,type) {
   const error=placementError(state,id,type);if(error)return error;
-  state.towers.set(id,type);state.towerDays.set(id,state.day);state.towerHealth.set(id,{hp:state.params.weapons[type].hp,max:state.params.weapons[type].hp});return '';
+  state.towers.set(id,type);state.towerDays.set(id,state.day);state.towerHealth.set(id,{hp:state.params.weapons[type].hp,max:state.params.weapons[type].hp});revealControl(state);return '';
 }
 export function removeTower(state,id) {
   if(state.phase!=='build')return '防守中不能拆除炮台。';
@@ -548,15 +551,35 @@ export function initialView(state){
   const [cx,cy]=xy(state.camp);
   return {x:Math.max(0,Math.min(SIZE-30,cx-15)),y:state.layout?SIZE-30:Math.max(0,Math.min(SIZE-30,cy-27)),width:30,height:30};
 }
+// 视野与建设权限独立：昼夜只缩放控制区外缘，塔的射程和敌源揭示不受倍率影响。
+export function visionField(state,phase=state.phase){
+  const seen=new Set(),p=state.params,multiplier=(phase==='build'?p.daySightMultiplier:p.nightSightMultiplier)*p.eventSightMultiplier;
+  const station=(center,radius,extra)=>{
+    const [cx,cy]=xy(center),extent=extra*multiplier,inner=Math.max(0,radius-2),outer=Math.ceil(radius+extent);
+    for(let y=Math.max(0,cy-outer);y<=Math.min(SIZE-1,cy+outer);y++)for(let x=Math.max(0,cx-outer);x<=Math.min(SIZE-1,cx+outer);x++){
+      const id=key(x,y),dx=Math.max(0,Math.abs(x-cx)-inner),dy=Math.max(0,Math.abs(y-cy)-inner);
+      if(inStationRange(id,center,radius)||(extent>0&&Math.hypot(dx,dy)<=extent+2))seen.add(id);
+    }
+  };
+  if(state.hp>0)station(state.camp,p.controlRadius,p.campSight);
+  for(const id of state.outposts.keys())station(id,p.outpostRadius,p.outpostSight);
+  for(const [id,type] of state.towers)if(state.towerHealth.get(id)?.hp!==0)
+    for(const cell of coverage(id,p.weapons[type].range,p.weapons[type].shape))seen.add(cell);
+  const size=p.sourceRevealSize,offset=Math.floor((size-1)/2);
+  for(const source of state.waves?.flat()??state.sources)for(let dy=0;dy<size;dy++)for(let dx=0;dx<size;dx++){
+    const x=source.x-offset+dx,y=source.y-offset+dy;if(inside(x,y))seen.add(key(x,y));
+  }
+  return seen;
+}
 function initializeExploration(state){
-  const view=initialView(state);state.explored=new Set();
-  if(!state.layout){for(let id=0;id<SIZE*SIZE;id++)state.explored.add(id);return;}
-  for(let y=view.y;y<view.y+30;y++)for(let x=view.x;x<view.x+30;x++)state.explored.add(key(x,y));
+  state.explored=new Set();
+  // 旧的无布局规则测试保留已知地形；生成城市不再预先揭示矩形区域。
+  if(!state.layout)for(let id=0;id<SIZE*SIZE;id++)state.explored.add(id);
 }
 export const isExplored=(state,id)=>!state.explored||state.explored.has(id);
 export function revealControl(state){
   if(!state.explored)return;
-  for(let id=0;id<SIZE*SIZE;id++)if(inControl(state,id))state.explored.add(id);
+  for(const id of visionField(state))state.explored.add(id);
 }
 
 // 测试台仅跳转到指定白天，不模拟略过的夜晚、不发奖励；独立偏移不污染收入账单。
@@ -568,5 +591,5 @@ export function applyTestScenario(state,day,gold,people){
   const error=validateSources(sources,candidate);if(error)return error;
   state.debugGold+=gold-funds(state);state.debugPopulation+=people-population(state).total;
   state.day=day;state.phase='build';state.clearingWorkers=0;state.hp=Math.max(1,state.hp);
-  state.sources=sources;state.lastNight=null;clearNight(state);lockAttacks(state);return '';
+  state.sources=sources;state.lastNight=null;clearNight(state);lockAttacks(state);revealControl(state);return '';
 }

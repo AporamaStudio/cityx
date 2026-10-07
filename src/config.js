@@ -1,6 +1,7 @@
 // 首轮实验参数；只用于快速试玩，不代表平衡结论。
 export const SIZE = 60;
 export const DEFAULTS = {
+  campSight: 4, outpostSight: 6, daySightMultiplier: 1, nightSightMultiplier: 0.5, eventSightMultiplier: 1, sourceRevealSize: 3,
   clearingCellsPerWorker: 4,
   initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 4,
   productionCostPerCell: 4, productionIncomePerCell: 0.5, killReward: 2,

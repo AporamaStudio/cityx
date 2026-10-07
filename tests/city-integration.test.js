@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
 import {MAP_DEFAULTS,readMapSettings,mapSearch} from '../src/map-settings.js';
 import {DEFAULTS} from '../src/config.js';
-import {enemyAction,createCampaign,key,productionCells,productionQuote,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,rebuildTerrain,inControl,isExplored,removeOutpost,clearPlot,plotContent} from '../src/model.js';
+import {visionField,enemyAction,createCampaign,key,productionCells,productionQuote,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,rebuildTerrain,inControl,isExplored,removeOutpost,clearPlot,plotContent} from '../src/model.js';
 
 test('尺寸、特殊设施和紧邻实验保持完整分区与通路',()=>{
   let joined=0;
@@ -65,11 +65,11 @@ test('开放地块全部建成建筑后，道路骨架仍连接所有来源与�
 });
 
 
-test('起点只揭示 30×30，前哨探索保留，重开恢复迷雾',()=>{
+test('起点按设施视野揭示，前哨探索保留，重开恢复初始迷雾',()=>{
   const s=createCampaign({...DEFAULTS,budget:1000,initialPopulation:1000},undefined,generateCityMap(MAP_DEFAULTS));
-  assert.equal(s.explored.size,900);assert.equal(isExplored(s,key(30,0)),false);s.day=3;
+  const initial=new Set(s.explored);assert.deepEqual(s.explored,visionField(s));assert.equal(isExplored(s,key(30,0)),false);s.day=3;
   let changed=false;
-  // 连续向外建设前哨；初始 30×30 比火光控制区更大，第一座前哨未必触及迷雾。
+  // 连续向外建设前哨；外围视野与永久探索记录分别验证。
   for(let round=0;round<12&&!changed;round++){
     for(let i=0;i<3600;i++)if(inControl(s,i)&&plotContent(s,i)?.status==='ruin')clearPlot(s,i);
     const candidates=Array.from({length:3600},(_,i)=>i).filter(i=>!outpostError(s,i));
@@ -78,7 +78,7 @@ test('起点只揭示 30×30，前哨探索保留，重开恢复迷雾',()=>{
     assert.equal(buildOutpost(s,id),'');
     if(s.explored.size>before){const explored=new Set(s.explored);assert.equal(removeOutpost(s,id),'');assert.deepEqual(s.explored,explored);changed=true;}
   }
-  assert.ok(changed);assert.equal(restartCampaign(s).explored.size,900);
+  assert.ok(changed);assert.deepEqual(restartCampaign(s).explored,initial);
 });
 
 test('不同 seed 起步保证受控的廉价 2×2 废墟，包括普通尺寸 3–6 的例外',()=>{
