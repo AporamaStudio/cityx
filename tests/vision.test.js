@@ -27,3 +27,11 @@ test('敌源揭示尺寸可配置，独立于据点且昼夜保持；前哨外�
  s.outposts.set(key(30,40),{});const before=visionField(s);s.params.outpostSight=10;assert.ok(visionField(s).size>before.size);
  assert.match(validateParams({...s.params,nightSightMultiplier:-1},s,false),/视野倍率/);
 });
+
+test('医院中心固定揭示5×5，昼夜相同且不获得控制权限',()=>{
+ const s=state();s.sites=[{x:1,y:1,width:10,height:12,role:'hospital'}];
+ for(const phase of ['build','battle']){const seen=visionField(s,phase);
+  for(let y=5;y<=9;y++)for(let x=4;x<=8;x++){assert.ok(seen.has(key(x,y)));assert.ok(!inControl(s,key(x,y)));}
+  assert.ok(!seen.has(key(3,7)));assert.ok(!seen.has(key(6,10)));
+ }
+});

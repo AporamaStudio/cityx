@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {createCampaign,key,buildTower,removeTower,buildOutpost,removeOutpost,buildProduction,buildHousing,contentCells,productionQuote,housingQuote,economyBuildQuote,embeddingQuote,population,funds,inControl,beginBattle,restoreNight,clearPlot,plotContent} from '../src/model.js';
+import {createCampaign,key,buildTower,removeTower,buildOutpost,removeOutpost,buildProduction,buildHousing,contentCells,productionQuote,housingQuote,economyBuildQuote,embeddingQuote,population,funds,inControl,beginBattle,restoreNight,clearPlot,plotContent,demolitionQuote} from '../src/model.js';
 function setup(kind='building',ruinType='production',people=20){
  const p={x:15,y:22,width:3,height:3,kind,ruinType},layout={width:SIZE,height:SIZE,camp:{x:15,y:27},blocks:[p],tiles:Array(SIZE*SIZE).fill('road')};
  const wave=[{x:10,y:10,hp:6,count:1,first:1,interval:2}];
@@ -12,8 +12,8 @@ test('废墟嵌入一次完成清场与建炮，剩余经营绕开炮位；拆�
  const s=setup(),cash=funds(s);assert.equal(buildTower(s,id,'A'),'');
  assert.equal(s.clearingWorkers,1);assert.equal(funds(s),cash-10);assert.equal(contentCells(s,id).length,8);assert.ok(!s.blocked.has(id));
  assert.equal(buildProduction(s,id),'');assert.equal(productionQuote(s,id).area,8);assert.ok(!s.blocked.has(id));
- const before=funds(s);assert.equal(removeTower(s,id),'');assert.equal(funds(s),before+5);assert.equal(productionQuote(s,id).area,8);
- const q=economyBuildQuote(s,id,'production');assert.equal(q.added,1);assert.equal(buildProduction(s,id),'');assert.equal(funds(s),before+5-q.cost);assert.equal(productionQuote(s,id).area,9);
+ const before=funds(s);assert.equal(removeTower(s,id),'');assert.equal(funds(s),before+10);assert.equal(productionQuote(s,id).area,8);
+ const q=economyBuildQuote(s,id,'production');assert.equal(q.added,1);assert.equal(buildProduction(s,id),'');assert.equal(funds(s),before+10-q.cost);assert.equal(productionQuote(s,id).area,9);
 });
 test('完好住房改建人口与清场一起检查，失败不扣钱不改地图，允许恰好用尽空闲',()=>{
  const s=setup('building','housing',0);assert.equal(buildHousing(s,id),'');
@@ -50,4 +50,14 @@ test('内部缺口不产生嵌入边缘，紧邻建筑接缝与不连通外侧�
  const edge=key(15,23),outside=key(14,23);
  s.terrainWalls.add(outside);assert.match(buildTower(s,edge,'A'),/边缘/);
  s.terrainWalls.delete(outside);s.field.distance.delete(outside);assert.match(buildTower(s,edge,'A'),/边缘/);
+});
+
+test('跨天补建仅新增投资全返，旧格维持半返；局部拆改使用对应格投入日期',()=>{
+ const s=setup(),corner=id;assert.equal(buildTower(s,corner,'A'),'');assert.equal(buildProduction(s,id),'');
+ const oldCost=s.production.get(id).cost;s.day=4;removeTower(s,corner);
+ const q=economyBuildQuote(s,id,'production');assert.equal(buildProduction(s,id),'');
+ assert.equal(demolitionQuote(s,id).refund,Math.floor(oldCost*.5)+q.cost);
+ assert.equal(embeddingQuote(s,corner).refund,q.cost);
+ const oldCell=key(17,22),entry=s.production.get(id).paid.get(oldCell);
+ assert.equal(embeddingQuote(s,oldCell).refund,Math.floor(entry.cost*.5));
 });

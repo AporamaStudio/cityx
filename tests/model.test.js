@@ -18,7 +18,7 @@ test('曼哈顿覆盖与边界裁切，独立炮塔预算和禁建格',()=>{
   const s=createState();assert.ok(placementError(s,s.camp));assert.ok(placementError(s,key(5,3)));assert.ok(placementError(s,key(2,14)));assert.equal(placementError(s,key(20,28)),'');
   for(let x=0;x<10;x++)assert.equal(buildTower(s,key(x,28),'A'),'');
   assert.equal(funds(s),0);assert.match(placementError(s,key(20,28)),/预算/);
-  assert.equal(removeTower(s,key(0,28)),'');assert.equal(funds(s),5);
+  assert.equal(removeTower(s,key(0,28)),'');assert.equal(funds(s),10);
 });
 test('同时入格先合并再扣一次火力，满值相加且不回血',()=>{
   const s=createState([{x:1,y:1,hp:1,count:1,first:100,interval:1}]);s.phase='battle';
@@ -44,7 +44,7 @@ test('墙与塔独立占地，共享资金且分别退款',()=>{
   const s=createState(),wall=key(14,10),tower=key(15,10);
   assert.equal(placementError(s,wall),'');assert.equal(changeWall(s,wall),'');assert.match(placementError(s,wall),/重叠/);
   assert.equal(buildTower(s,tower,'B'),'');assert.match(changeWall(s,tower),/炮塔/);assert.equal(funds(s),78);
-  assert.equal(changeWall(s,wall,true),'');assert.equal(funds(s),79);assert.equal(removeTower(s,tower),'');assert.equal(funds(s),89);
+  assert.equal(changeWall(s,wall,true),'');assert.equal(funds(s),80);assert.equal(removeTower(s,tower),'');assert.equal(funds(s),100);
   assert.match(changeWall(s,key(2,14),true),/固定墙/);s.params.budget=1;assert.match(changeWall(s,wall),/资金不足/);
 });
 test('允许封死火光，建设与拆除不改变锁定题目',()=>{
@@ -83,7 +83,7 @@ test('墙价参与参数预算校验，取消和重试不制造资金',()=>{
   s.towers.set(key(14,20),'A');assert.equal(funds(s),88);
   const p=structuredClone(s.params);p.wallCost=100;assert.match(validateParams(p,s),/超出预算/);assert.equal(funds(s),88);
   const retry=makeState(s.sources,s.towers,s.playerWalls,s.params);assert.equal(funds(retry),88);
-  retry.towers.delete(key(14,20));assert.equal(funds(retry),98);assert.equal(changeWall(retry,key(14,20),true),'');assert.equal(funds(retry),99);
+  retry.towers.delete(key(14,20));assert.equal(funds(retry),98);assert.equal(changeWall(retry,key(14,20),true),'');assert.equal(funds(retry),100);
 });
 
 // 地块内前哨、控制并集与建筑绕行在 plot-building.test.js 检查，不做平衡推演。
@@ -179,11 +179,11 @@ test('跨晚击杀只累计一次，不因进入次日重复发钱',()=>{
 });
 
 // 经营投资跨晚固定；收益必须和真实控制及重试快照一致。
-test('生产建设、当天与跨天拆除均返还一半，资金不足不改变设施',async()=>{
+test('生产建设、当天全返、跨天返还一半，资金不足不改变设施',async()=>{
   const {buildProduction,removeProduction,productionError}=await import('../src/model.js');
   const s=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1}),id=key(11,24);s.day=2;
   assert.equal(buildProduction(s,id),'');assert.equal(funds(s),80);
-  assert.equal(removeProduction(s,id),'');assert.equal(funds(s),90);
+  assert.equal(removeProduction(s,id),'');assert.equal(funds(s),100);
   assert.ok(productionError(s,key(3,17)));assert.equal(changeWall(s,id),'');assert.equal(buildProduction(s,id),'');changeWall(s,id,true);
   buildProduction(s,id);const snapshot=beginBattle(s);assert.ok(removeProduction(s,id));
   s.phase='build';s.day=3;const prior=funds(s);assert.equal(removeProduction(s,id),'');assert.equal(funds(s),prior+10);assert.equal(removeProduction(restoreNight(snapshot),id),'');
@@ -207,8 +207,8 @@ test('多格街区任意格操作同一投资，整块控制才有生产资格',
   assert.equal(productionCells(key(12,25)).length,4);assert.equal(buildProduction(s,key(12,25)),'');
   assert.equal(s.production.size,1);assert.equal(funds(s),50);assert.ok(buildProduction(s,key(11,24)));
   assert.ok(changeWall(s,key(12,25)));assert.ok(buildOutpost(s,key(12,25)));
-  assert.equal(removeProduction(s,key(11,25)),'');assert.equal(funds(s),60);
-  assert.equal(buildProduction(s,key(4,24)),'');assert.equal(funds(s),4);assert.equal(expectedIncome(s),9);
+  assert.equal(removeProduction(s,key(11,25)),'');assert.equal(funds(s),70);
+  assert.equal(buildProduction(s,key(4,24)),'');assert.equal(funds(s),14);assert.equal(expectedIncome(s),9);
   assert.match(productionError(s,key(11,24)),/资金不足/);
   const partial=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1,controlRadius:1});partial.day=2;assert.match(productionError(partial,key(11,24)),/缺.*格控制/);
 });
@@ -246,15 +246,15 @@ test('各类设施跨天返还50%，地块换建与重试不制造资金',async(
   assert.equal(removeTower(s,tower),'');assert.equal(changeWall(s,wall,true),'');assert.equal(removeOutpost(s,post),'');assert.equal(removeProduction(s,key(12,25)),'');
   assert.equal(funds(s),prior+28);assert.equal(s.demolitionSpent,29);
   changeWall(s,wall);buildTower(s,tower,'A');buildOutpost(s,post);
-  assert.equal(demolitionQuote(s,post).refund,12);const snapshot=beginBattle(s);
+  assert.equal(demolitionQuote(s,post).refund,25);const snapshot=beginBattle(s);
   assert.ok(removeTower(s,tower));assert.ok(removeOutpost(s,post));assert.ok(changeWall(s,wall,true));
-  const retry=restoreNight(snapshot);assert.equal(demolitionQuote(retry,tower).refund,5);
-  removeTower(retry,tower);changeWall(retry,wall,true);removeOutpost(retry,post);assert.equal(funds(retry),prior+9);
+  const retry=restoreNight(snapshot);assert.equal(demolitionQuote(retry,tower).refund,10);
+  removeTower(retry,tower);changeWall(retry,wall,true);removeOutpost(retry,post);assert.equal(funds(retry),prior+28);
   assert.equal(funds(restartCampaign(retry)),200);
 });
 test('夜间独立补炮建造日保留到次日，损坏维修不刷新建造日',()=>{
   const s=createCampaign(),id=key(14,18);s.day=2;
-  assert.equal(buildTower(s,id,'A'),'');assert.equal(modelExports.demolitionQuote(s,id).refund,5);removeTower(s,id);
+  assert.equal(buildTower(s,id,'A'),'');assert.equal(modelExports.demolitionQuote(s,id).refund,10);removeTower(s,id);
   beginBattle(s);assert.equal(buildTower(s,id,'A'),'');s.phase='won';enterMorning(s);
   assert.equal(modelExports.demolitionQuote(s,id).day,2);assert.equal(modelExports.demolitionQuote(s,id).refund,5);
   s.towerHealth.get(id).hp=0;assert.equal(repairFacility(s,id),'');assert.equal(modelExports.demolitionQuote(s,id).day,2);
@@ -308,8 +308,8 @@ test('敌群预告区分出生批次和抵达结果，重试清空结果',async(
   assert.equal(restoreNight(snapshot).enemyOutcomes.size,0);
 });
 
-test('拆除返还比例可调且向下取整，与建造日期无关',()=>{
+test('当天全返，旧投入按可配置比例向下取整',()=>{
   const s=createCampaign();s.day=3;const id=key(14,18);buildTower(s,id,'A');
-  for(const day of [3,4]){s.day=day;for(const percent of [0,35,50,100]){s.params.demolitionRefundPercent=percent;assert.equal(modelExports.demolitionQuote(s,id).refund,Math.floor(10*percent/100));}}
+  for(const day of [3,4]){s.day=day;for(const percent of [0,35,50,100]){s.params.demolitionRefundPercent=percent;assert.equal(modelExports.demolitionQuote(s,id).refund,day===3?10:Math.floor(10*percent/100));}}
   assert.match(validateParams({...s.params,demolitionRefundPercent:101},s),/拆除返还/);
 });

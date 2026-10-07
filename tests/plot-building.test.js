@@ -108,7 +108,7 @@ test('当天临时建筑撤销后恢复原始路径，同时保留其他建筑�
   const s=createCampaign({...DEFAULTS,budget:1000},[wave],layout);s.day=3;
   const original=[...s.attacks[0].path],cash=funds(s),a=key(15,22),b=key(15,24);
   assert.equal(buildProduction(s,a),'');assert.notDeepEqual(s.attacks[0].path,original);
-  assert.equal(removeProduction(s,a),'');assert.deepEqual(s.attacks[0].path,original);assert.equal(funds(s),cash-5);
+  assert.equal(removeProduction(s,a),'');assert.deepEqual(s.attacks[0].path,original);assert.equal(funds(s),cash);
   assert.equal(buildProduction(s,b),'');const onlyB=[...s.attacks[0].path];
   assert.equal(buildProduction(s,a),'');assert.equal(removeProduction(s,a),'');
   assert.deepEqual(s.attacks[0].path,onlyB);assert.ok(s.attacks[0].path.every(id=>!s.blocked.has(id)));

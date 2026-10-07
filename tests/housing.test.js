@@ -12,7 +12,7 @@ test('住房当天入住，人口独立于 HP；生产占用、拆除释放劳�
   assert.equal(buildProduction(s,factory),'');assert.deepEqual(population(s),{total:2,working:1,free:1});
   const before=funds(s);assert.match(removeHousing(s,home),/依赖/);assert.equal(funds(s),before);
   assert.equal(removeProduction(s,factory),'');assert.equal(population(s).free,2);
-  assert.equal(demolitionQuote(s,home).refund,8);assert.equal(removeHousing(s,home),'');assert.equal(population(s).total,0);
+  assert.equal(demolitionQuote(s,home).refund,16);assert.equal(removeHousing(s,home),'');assert.equal(population(s).total,0);
 });
 test('住房遵守阶段、预算、全块控制与单用途；不足不扣钱',()=>{
   const s=setup();s.day=1;assert.match(buildHousing(s,home),/第 2 天/);s.day=2;

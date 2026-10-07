@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=44';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=45';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -429,6 +429,20 @@ export function economyBuildQuote(state,id,type){
   const cost=type==='housing'?added*state.params.housingCostPerCell:areaQuote(state,id,after).cost-areaQuote(state,id,before).cost;
   return {added,cost,labor:type==='production'?Math.ceil(after/state.params.productionCellsPerWorker)-Math.ceil(before/state.params.productionCellsPerWorker):0,residents:type==='housing'?Math.ceil(after/state.params.housingCellsPerResident)-Math.ceil(before/state.params.housingCellsPerResident):0,income:areaQuote(state,id,after).income};
 }
+// 每格保留投入日期，次日补建不会把旧建筑的投资变成当天全返。
+function addEconomyInvestment(state,id,type,quote){
+  const plot=productionId(id,state),map=type==='housing'?state.housing:state.production,old=map.get(plot);
+  const paid=new Map(old?.paid??[]),existing=new Set(old?contentCells(state,id):[]);
+  const added=availableCells(state,id).filter(cell=>!existing.has(cell));
+  const base=Math.floor(quote.cost/added.length),remainder=quote.cost%added.length;
+  added.forEach((cell,i)=>paid.set(cell,{cost:base+(i<remainder?1:0),day:state.day}));
+  map.set(plot,{day:old?.day??state.day,cost:(old?.cost??0)+quote.cost,paid});
+}
+function investmentRefund(state,entries){
+  let today=0,older=0;
+  for(const entry of entries)if(entry.day===state.day)today+=entry.cost;else older+=entry.cost;
+  return today+Math.floor(older*state.params.demolitionRefundPercent/100);
+}
 // 嵌入报价没有副作用：人口减少、释放工人、清场占用与退款一并预览。
 export function embeddingQuote(state,id){
   const c=plotContent(state,id),cells=contentCells(state,id),occupied=cells.includes(id),plot=productionId(id,state);
@@ -438,7 +452,7 @@ export function embeddingQuote(state,id){
   const released=factory?Math.ceil(cells.length/state.params.productionCellsPerWorker)-Math.ceil((cells.length-1)/state.params.productionCellsPerWorker):0;
   const record=home?state.housing.get(plot):factory?state.production.get(plot):null;
   const invested=record?.cost??(home?housingQuote(state,id).cost:factory?productionQuote(state,id).cost:0);
-  const cost=building?Math.floor(invested/cells.length):0,refund=Math.floor(cost*state.params.demolitionRefundPercent/100);
+  const investment=record?.paid?.get(id),cost=building?(investment?.cost??Math.floor(invested/cells.length)):0,refund=investmentRefund(state,[{cost,day:investment?.day??record?.day??0}]);
   const incomeLoss=factory?areaQuote(state,id,cells.length).income-areaQuote(state,id,cells.length-1).income:0;
   return {labor,residents,released,cost,refund,incomeLoss,freeAfter:population(state).free-residents+released-labor};
 }
@@ -463,7 +477,7 @@ function embeddingError(state,id){
 function applyEmbedding(state,id){
   const c=plotContent(state,id),cells=contentCells(state,id);if(!cells.includes(id))return;
   const q=embeddingQuote(state,id),plot=productionId(id,state),map=c.type==='housing'?state.housing:state.production,record=map.get(plot);
-  if(c.status==='building'&&record){record.cost=(record.cost??(c.type==='housing'?housingQuote(state,id).cost:productionQuote(state,id).cost))-q.cost;retainDemolitionCost(state,q);}
+  if(c.status==='building'&&record){record.cost=(record.cost??(c.type==='housing'?housingQuote(state,id).cost:productionQuote(state,id).cost))-q.cost;record.paid?.delete(id);retainDemolitionCost(state,q);}
   state.clearingWorkers+=q.labor;
   const remaining=new Set(cells.filter(cell=>cell!==id));
   state.plotContents.set(plot,{...c,cells:remaining});
@@ -485,7 +499,7 @@ export function housingError(state,id){
 }
 export function buildHousing(state,id){
   const error=housingError(state,id);if(error)return error;
-  const plot=productionId(id,state),q=economyBuildQuote(state,id,'housing');state.housing.set(plot,{day:state.day,cost:(state.housing.get(plot)?.cost??0)+q.cost});
+  const plot=productionId(id,state),q=economyBuildQuote(state,id,'housing');addEconomyInvestment(state,id,'housing',q);
   state.plotContents.set(plot,{status:'building',type:'housing',cells:new Set(availableCells(state,id))});rebuildTerrain(state);return '';
 }
 export function housingRemovalError(state,id){
@@ -516,7 +530,7 @@ export function productionError(state,id) {
 }
 export function buildProduction(state,id) {
   const error=productionError(state,id);if(error)return error;
-  const plot=productionId(id,state),q=economyBuildQuote(state,id,'production');state.production.set(plot,{day:state.day,cost:(state.production.get(plot)?.cost??0)+q.cost});
+  const plot=productionId(id,state),q=economyBuildQuote(state,id,'production');addEconomyInvestment(state,id,'production',q);
   state.plotContents.set(plot,{status:'building',type:'production',cells:new Set(availableCells(state,id))});rebuildTerrain(state);return '';
 }
 export function removeProduction(state,id) {
@@ -574,7 +588,7 @@ export function battleRoutes(state) {
   return routes;
 }
 
-// 拆除统一按配置比例返还，零头向下取整；未返还部分保留为沉没支出。
+// 当天投入全返，旧投入按配置比例返还；维修与清场人力不因拆除撤销。
 export function demolitionQuote(state,id) {
   const production=state.production.get(productionId(id,state)),tower=state.towers.get(id),post=state.outposts.get(outpostAt(state,id));
   let cost=0,day=1,type='';
@@ -584,7 +598,9 @@ export function demolitionQuote(state,id) {
   else if(contentCells(state,id).includes(id)&&production){type='production';cost=production.cost??productionQuote(state,id).cost;day=production.day??1;}
   else if(contentCells(state,id).includes(id)&&state.housing.has(productionId(id,state))){type='housing';cost=state.housing.get(productionId(id,state)).cost??housingQuote(state,id).cost;day=state.housing.get(productionId(id,state)).day;}
   else if(contentCells(state,id).includes(id)&&plotContent(state,id).status==='ruin'){type='ruin';day=0;}
-  return {type,cost,day,refund:Math.floor(cost*state.params.demolitionRefundPercent/100)};
+  const record=type==='production'?production:type==='housing'?state.housing.get(productionId(id,state)):null;
+  const refund=investmentRefund(state,record?.paid?[...record.paid.values()]:[{cost,day}]);
+  return {type,cost,day,refund};
 }
 function retainDemolitionCost(state,quote){state.demolitionSpent+=quote.cost-quote.refund;}
 export function buildTower(state,id,type) {
@@ -621,6 +637,11 @@ export function visionField(state,phase=state.phase){
   const size=p.sourceRevealSize,offset=Math.floor((size-1)/2);
   for(const source of state.waves?.flat()??state.sources)for(let dy=0;dy<size;dy++)for(let dx=0;dx<size;dx++){
     const x=source.x-offset+dx,y=source.y-offset+dy;if(inside(x,y))seen.add(key(x,y));
+  }
+  // 医院中心固定揭示 5×5，仅提供地标信息，不代表已经控制或占领。
+  for(const p of state.sites.filter(p=>p.role==='hospital')){
+    const cx=p.x+Math.floor((p.width??p.size)/2),cy=p.y+Math.floor((p.height??p.size)/2);
+    for(let y=cy-2;y<=cy+2;y++)for(let x=cx-2;x<=cx+2;x++)if(inside(x,y))seen.add(key(x,y));
   }
   return seen;
 }

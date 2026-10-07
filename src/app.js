@@ -1,8 +1,8 @@
 import {drawFog} from './fog.js';
 import {drawRoadTexture,drawBlockTexture} from './city-textures.js?v=3';
 import {drawCampfire} from './icons.js';
-import { SIZE, DEFAULTS } from './config.js?v=44';
-import { contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=44';
+import { SIZE, DEFAULTS } from './config.js?v=45';
+import { contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=45';
 import {generateCityMap} from './city-map.js?v=6';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -320,7 +320,7 @@ function draw() {
     const id=key(p.x,p.y),built=state.production.has(id),active=built&&productionActive(state,id);
     // 敌人经过街区时优先显示敌群，避免标签盖住生命与血条。
     const cells=productionCells(id,state);
-    if(!cells.every(cell=>visibleCell(cell)))continue;
+    if(p.role==='hospital'?!visibleCell(key(p.x+Math.floor((p.width??p.size)/2),p.y+Math.floor((p.height??p.size)/2))):!cells.every(cell=>visibleCell(cell)))continue;
     if(p.role!=='hospital'&&!['production','housing','outpost'].includes(tool))continue;
     // 全图用于判断方向，不让固定字号标签挤满小地块；悬停仍能查看。
     if(p.role!=='hospital'&&(size<12||state.day===1)&&productionId(hover,state)!==id)continue;
@@ -413,12 +413,12 @@ function update() {
   if(tool==='repair')$('toolInfo').textContent=`次日点击受损火光、墙或损坏炮塔修满。火光按 HP 计费；墙与塔完全损坏时，维修费为造价的 ${state.params.defenseRepairPercent}%，部分受损按缺失 HP 比例计费（向上取整）。前哨不受击，无需维修。`;
   if(tool==='housing')$('toolInfo').textContent=`住房每格 ${state.params.housingCostPerCell} 金币，每 ${state.params.housingCellsPerResident} 格入住 1 人（整块向上取整）。只能恢复住房废墟，空地可新建住房；生产废墟须先拆除才能换建；立即增加劳动力，不受攻击。人口与火光 HP 独立；营地先遣队提供初始 ${state.params.initialPopulation} 人。`;
   if(tool==='production')$('toolInfo').textContent=`生产每 ${state.params.productionCellsPerWorker} 格占用 1 人，拆除后释放。小地块回款快，大地块持续产出高。4×4 基准费用 ${16*state.params.productionCostPerCell}、每晚 +${16*state.params.productionIncomePerCell}；悬停看实际报价与回本时间。整块受控才可修缮或新建。地块建筑不受击，挡路时敌人绕行。`;
-  if(tool==='erase')$('toolInfo').textContent=`清理废墟不收钱，每 ${state.params.clearingCellsPerWorker} 格占用 1 人（向上取整），当天立即完成、次日释放。建筑统一返还造价的 ${state.params.demolitionRefundPercent}%，零头向下取整，不分建造日期。墙与炮塔分别拆除，前哨仍须解除外围控制依赖。`;
+  if(tool==='erase')$('toolInfo').textContent=`清理废墟不收钱，每 ${state.params.clearingCellsPerWorker} 格占用 1 人（向上取整），当天立即完成、次日释放。当天投入全额返还，旧投入返还 ${state.params.demolitionRefundPercent}%，向下取整；清场用工与维修费用不退。墙与炮塔分别拆除，前哨仍须解除外围控制依赖。`;
 
   $('morningTitle').textContent=`${state.day===1?'守住第一晚':state.day===2?'恢复生产，守住防线':'向北收复，守住火光'}`;
   updateNightReport();
   $('mapConfigLink').href=`map-preview.html?${new URLSearchParams(mapSettings)}`;
-  const prices={wall:state.params.wallCost,build:state.params.weapons.A.cost,long:state.params.weapons.B.cost,outpost:state.params.outpostCost,production:'按地块报价',housing:'按地块报价',repair:'按损伤报价',erase:`-${state.params.demolitionRefundPercent}%`};
+  const prices={wall:state.params.wallCost,build:state.params.weapons.A.cost,long:state.params.weapons.B.cost,outpost:state.params.outpostCost,production:'按地块报价',housing:'按地块报价',repair:'按损伤报价',erase:`↩100% / ${state.params.demolitionRefundPercent}%`};
   for(const [id,price] of Object.entries(prices))$('price-'+id).textContent=String(price);
   $('budget').textContent = funds(state);
   const people=population(state);$('population').hidden=false;
@@ -535,7 +535,7 @@ function paramsEditor(params) {
     }
     $('params').append(row);
   }
-  fields('全局',params,'',[['budget','资金',0,10000],['wallCost','墙价',1,1000],['demolitionRefundPercent','拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙/塔伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙/塔造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campRepairCost','火光修复单价/HP',1,1000]]);
+  fields('全局',params,'',[['budget','资金',0,10000],['wallCost','墙价',1,1000],['demolitionRefundPercent','旧投入拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙/塔伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙/塔造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campRepairCost','火光修复单价/HP',1,1000]]);
   fields('视野',params,'',[['campSight','火光外围格数',0,30],['outpostSight','前哨外围格数',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealSize','敌源揭示边长',1,5]]);
   fields('住房与人口',params,'',[['clearingCellsPerWorker','清理每名工人承担格数',1,100],['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房每格费用',1,1000]]);
   fields('街区生产（4×4 基准）',params,'',[['productionCostPerCell','基准每格恢复费用',1,1000],['productionIncomePerCell','基准每格每晚收入',0,1000]]);
