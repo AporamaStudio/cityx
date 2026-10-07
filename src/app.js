@@ -380,8 +380,6 @@ function update() {
   $('morningTitle').textContent=`${state.day===1?'守住第一晚':state.day===2?'恢复生产，守住防线':'向北收复，守住火光'}`;
   updateNightReport();
   $('mapConfigLink').href=`map-preview.html?${new URLSearchParams(mapSettings)}`;
-  $('income').hidden=state.production.size===0;
-  $('income').textContent=`守住后收入 +${expectedIncome(state)} 金币`;
   const prices={wall:state.params.wallCost,build:state.params.weapons.A.cost,long:state.params.weapons.B.cost,outpost:state.params.outpostCost,production:'按地块报价',repair:'按损伤报价',erase:`-${state.params.demolitionRefundPercent}%`};
   for(const [id,price] of Object.entries(prices))$('price-'+id).textContent=String(price);
   $('budget').textContent = funds(state);
@@ -433,6 +431,7 @@ function updateNightReport(){
   $('nightReport').hidden=!report;
   if(!report)return;
   $('reportTitle').textContent=`${state.phase==='build'?'昨天':'今天'}收入`;
+  $('reportTotal').textContent=`+${report.economy+report.earned}`;
   $('reportEconomy').textContent=`+${report.economy}`;
   $('reportKills').textContent=`+${report.earned}`;
 }
