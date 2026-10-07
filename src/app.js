@@ -1,4 +1,4 @@
-import {drawRoadTexture,drawBlockTexture} from './city-textures.js?v=1';
+import {drawRoadTexture,drawBlockTexture} from './city-textures.js?v=3';
 import {drawCampfire} from './icons.js';
 import { SIZE, DEFAULTS } from './config.js?v=36';
 import { population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=36';
@@ -134,7 +134,7 @@ function draw() {
     if(wallBody?.hp===0){ctx.fillStyle='#956b57';ctx.fillRect(x+.1,y+.6,.8,.24);ctx.strokeStyle='#dfaa81';ctx.lineWidth=.06;ctx.beginPath();ctx.moveTo(x+.2,y+.2);ctx.lineTo(x+.8,y+.8);ctx.stroke();}
     if(wallBody&&wallBody.hp>0&&wallBody.hp<wallBody.max){ctx.fillStyle='#533a32';ctx.fillRect(x+.1,y+.85,.8,.1);ctx.fillStyle='#ecc58f';ctx.fillRect(x+.1,y+.85,.8*wallBody.hp/wallBody.max,.1);}
     if(postGhost&&inControl(previewState,id)&&!inControl(state,id)){ctx.fillStyle='#f0d18b66';ctx.fillRect(x,y,1,1);}
-    if (!inControl(controlState,id,controlRadius)) {ctx.fillStyle='#07121577';ctx.fillRect(x,y,1,1);}
+    if (!inControl(controlState,id,controlRadius)) {ctx.fillStyle=state.layout?.tiles[id]==='road'?'#07121522':'#07121577';ctx.fillRect(x,y,1,1);}
     else {
       ctx.fillStyle='#7fc8e810';ctx.fillRect(x,y,1,1);
       // 控制范围不等于建造格：只标出当前工具符合地形条件的位置。
@@ -146,7 +146,9 @@ function draw() {
       }
       ctx.stroke();ctx.setLineDash([]);
     }
-    ctx.strokeStyle = palette.grid; ctx.lineWidth = .025; ctx.strokeRect(x, y, 1, 1);
+    // 道路弱化格线，避免把连续路面割裂成棋盘；悬停和建设范围仍标识具体格子。
+    ctx.save();if(state.layout?.tiles[id]==='road')ctx.globalAlpha=.18;
+    ctx.strokeStyle = palette.grid; ctx.lineWidth = .025; ctx.strokeRect(x, y, 1, 1);ctx.restore();
   }
   // 灯光只代表存活设施与生产状态，不表示敌人无法进入的安全区。
   const lamp=(x,y,r,color)=>{
@@ -194,7 +196,13 @@ function draw() {
   const label = (text,x,y,color,font=.4) => {ctx.fillStyle=color;ctx.font=`600 ${font}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,x,y);};
   for (const id of new Set([...($('heat').checked?fire.keys():[]),...added])) {
     const [x,y]=xy(id), changed=added.has(id);
-    if(!state.walls.has(id)) label((fire.get(id)||0)+(changed?weapon.power:0),x+.5,y+.5,changed?'#f0ffad':'#b8f1d3',changed?.43:.35);
+    if(!state.walls.has(id)){
+      // 数值使用深色小底与描边，局部遮住装饰中线，确保火力信息优先。
+      const value=(fire.get(id)||0)+(changed?weapon.power:0),font=Math.max(changed?.43:.35,9/size);
+      ctx.save();ctx.font=`600 ${font}px system-ui`;const tw=ctx.measureText(String(value)).width;
+      ctx.fillStyle='#102b2be6';ctx.fillRect(x+.5-tw/2-.09,y+.5-font*.6,tw+.18,font*1.2);
+      label(value,x+.5,y+.5,changed?'#f0ffad':'#cbffe5',font);ctx.restore();
+    }
   }
   for(const p of state.sites){
     const {x,y}=p,n=p.width??p.size,m=p.height??p.size,id=key(x,y),built=state.production.has(id),active=built&&productionActive(state,id),selected=productionId(hover,state)===id,empty=plotContent(state,id).status==='empty';

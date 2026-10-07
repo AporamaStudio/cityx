@@ -1,8 +1,8 @@
 // 轻量程序贴图：日/夜各生成一套并缓存，纹理只表达材质，不参与通行或受击规则。
 const cache=new Map(),PX=32;
 const palettes={
-  day:{road:'#53656b',edge:'#a7aca0',lane:'#d7caa0',yard:'#697b70',ruin:'#877f6b',roof:'#b0a084',crack:'#454b46',factory:'#739697',factoryRoof:'#a4c2b9',home:'#af775c',homeWall:'#dfc6a0',window:'#425d64',grass:'#738b67'},
-  night:{road:'#213242',edge:'#526773',lane:'#8b927c',yard:'#263e3e',ruin:'#3c464a',roof:'#646967',crack:'#202d35',factory:'#335c61',factoryRoof:'#568485',home:'#655051',homeWall:'#918679',window:'#ffdf92',grass:'#294e40'},
+  day:{road:'#343e47',edge:'#a3aaa4',lane:'#b3aa87',yard:'#697b70',ruin:'#877f6b',roof:'#b0a084',crack:'#454b46',factory:'#739697',factoryRoof:'#a4c2b9',home:'#af775c',homeWall:'#dfc6a0',window:'#425d64',grass:'#738b67'},
+  night:{road:'#182936',edge:'#677d88',lane:'#969881',yard:'#263e3e',ruin:'#3c464a',roof:'#646967',crack:'#202d35',factory:'#335c61',factoryRoof:'#568485',home:'#655051',homeWall:'#918679',window:'#ffdf92',grass:'#294e40'},
 };
 function texture(id,w,h,paint){
   if(!cache.has(id)){const c=document.createElement('canvas');c.width=w*PX;c.height=h*PX;const g=c.getContext('2d');g.scale(PX,PX);paint(g);cache.set(id,c);}
@@ -12,23 +12,46 @@ function layers(ctx,x,y,w,h,mix,get){
   ctx.drawImage(get('day'),x,y,w,h);
   if(mix>0){ctx.save();ctx.globalAlpha=mix;ctx.drawImage(get('night'),x,y,w,h);ctx.restore();}
 }
-// 路缘只画在道路与地块接壤处，路口不画封口线；中线不改变路线预告。
+// 按实际横断面计算中心；宽路的中线位于整条道路中央，不按每个格子分别居中。
+const roadGeometry=new WeakMap();
+export function roadMarkings(layout){
+  if(roadGeometry.has(layout))return roadGeometry.get(layout);
+  const {width:w,height:h,tiles}=layout,marks=new Map();
+  const road=(x,y)=>x>=0&&y>=0&&x<w&&y<h&&tiles[y*w+x]==='road';
+  const span=(x,y,dx,dy)=>{let lo=0,hi=0;while(road(x+(lo-1)*dx,y+(lo-1)*dy))lo--;while(road(x+(hi+1)*dx,y+(hi+1)*dy))hi++;return {lo,hi,size:hi-lo+1};};
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(road(x,y)){
+    const across=span(x,y,1,0),along=span(x,y,0,1);
+    const vertical=across.size<=3&&along.size>3,horizontal=along.size<=3&&across.size>3;
+    const section=vertical?across:horizontal?along:null;
+    let crossing=0;
+    if(section)for(const sign of [-1,1]){
+      const nx=x+(horizontal?sign:0),ny=y+(vertical?sign:0);
+      if(road(nx,ny)&&span(nx,ny,vertical?1:0,vertical?0:1).size>section.size+1)crossing=sign;
+    }
+    marks.set(y*w+x,{mask:(road(x,y-1)?1:0)|(road(x+1,y)?2:0)|(road(x,y+1)?4:0)|(road(x-1,y)?8:0),axis:vertical?'v':horizontal?'h':'',center:section?(section.lo+section.hi+1)/2:0,width:section?.size??0,crossing});
+  }
+  roadGeometry.set(layout,marks);return marks;
+}
+// 沥青、连续浅色路缘、路口斑马线形成道路语言；交叉口内部不硬画中线。
 export function drawRoadTexture(ctx,layout,x,y,mix){
-  const road=(dx,dy)=>x+dx>=0&&y+dy>=0&&x+dx<layout.width&&y+dy<layout.height&&layout.tiles[(y+dy)*layout.width+x+dx]==='road';
-  const mask=(road(0,-1)?1:0)|(road(1,0)?2:0)|(road(0,1)?4:0)|(road(-1,0)?8:0);
-  layers(ctx,x,y,1,1,mix,time=>texture(`road:${mask}:${time}`,1,1,g=>{
+  const {mask,axis,center,width,crossing}=roadMarkings(layout).get(y*layout.width+x);
+  layers(ctx,x,y,1,1,mix,time=>texture(`road:${mask}:${axis}:${center}:${width}:${crossing}:${time}`,1,1,g=>{
     const p=palettes[time];g.fillStyle=p.road;g.fillRect(0,0,1,1);
     g.fillStyle=time==='day'?'#ffffff09':'#a9ccff08';
     for(let i=0;i<10;i++)g.fillRect((i*17%29)/32,(i*11%31)/32,.025,.025);
     g.fillStyle=p.edge;
-    if(!(mask&1))g.fillRect(0,0,1,.09);if(!(mask&4))g.fillRect(0,.91,1,.09);
-    if(!(mask&8))g.fillRect(0,0,.09,1);if(!(mask&2))g.fillRect(.91,0,.09,1);
-    g.fillStyle=p.lane;
-    if(mask===5)g.fillRect(.48,.24,.04,.40);
-    if(mask===10)g.fillRect(.24,.48,.40,.04);
-    // 宽路靠边的车道用短线连接；十字路口中间保持干净。
-    if(mask===7||mask===13)g.fillRect(mask===7?.28:.69,.25,.035,.35);
-    if(mask===11||mask===14)g.fillRect(.25,mask===11?.69:.28,.35,.035);
+    if(!(mask&1))g.fillRect(0,0,1,.08);if(!(mask&4))g.fillRect(0,.92,1,.08);
+    if(!(mask&8))g.fillRect(0,0,.08,1);if(!(mask&2))g.fillRect(.92,0,.08,1);
+    if(!axis)return;
+    const stripe=(cross,long,cw,len)=>axis==='v'?g.fillRect(cross,long,cw,len):g.fillRect(long,cross,len,cw);
+    if(crossing){
+      g.fillStyle=time==='day'?'#aab5b4':'#7b929c';
+      for(let i=.19;i<.85;i+=.22)stripe(i,crossing<0?.17:.58,.12,.25);
+    }else{
+      g.fillStyle=p.lane;
+      if(width===1)stripe(center-.045,.18,.09,.64);
+      else for(const offset of [-.09,.09])stripe(center+offset-.03,0,.06,1);
+    }
   }));
 }
 export function drawBlockTexture(ctx,p,kind,mix){
