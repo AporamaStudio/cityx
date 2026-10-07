@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=43';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=44';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -206,8 +206,7 @@ export function outpostError(state,id) {
   if([...state.outposts.values()].some(p=>p.plotId===productionId(id,state)))return '一个街区最多建设一个前哨。';
   if(state.towers.has(id)||state.playerWalls.has(id))return '该格已有防御设施。';
   const embed=embeddingError(state,id);if(embed)return embed;
-  const cells=new Set(productionCells(id,state));
-  if(![...cells].some(cell=>{const [x,y]=xy(cell);return [[x-1,y],[x+1,y],[x,y-1],[x,y+1]].some(([nx,ny])=>inside(nx,ny)&&!cells.has(key(nx,ny))&&state.field.distance.has(key(nx,ny)));}))return '地块须临接可达道路或空地。';
+  if(!streetEdgeAccess(state,id))return '前哨须位于街区边缘，并邻接街区外可达的道路或空地。';
   return funds(state)+embeddingQuote(state,id).refund<state.params.outpostCost?'资金不足，无法建造前哨。':'';
 }
 export function buildOutpost(state,id) {
@@ -443,10 +442,21 @@ export function embeddingQuote(state,id){
   const incomeLoss=factory?areaQuote(state,id,cells.length).income-areaQuote(state,id,cells.length-1).income:0;
   return {labor,residents,released,cost,refund,incomeLoss,freeAfter:population(state).free-residents+released-labor};
 }
+// 边缘按原始街区边界判定，内部缺口不会制造新边缘；邻接建筑接缝不算入口。
+export function streetEdgeAccess(state,id){
+  const plot=productionId(id,state);if(plot===null)return false;
+  const [x,y]=xy(id);
+  return [[x-1,y],[x+1,y],[x,y-1],[x,y+1]].some(([nx,ny])=>{
+    if(!inside(nx,ny))return false;
+    const next=key(nx,ny);
+    return productionId(next,state)!==plot&&!state.terrainWalls.has(next)&&!state.playerWalls.has(next)&&!state.towers.has(next)&&state.field.distance.has(next);
+  });
+}
 function embeddingError(state,id){
   const p=productionSite(id,state);if(!p)return '';
   const error=plotBuildError(state,id);if(error)return error;
   const q=embeddingQuote(state,id);
+  if(q.labor&&!streetEdgeAccess(state,id))return '只能从街区边缘嵌入，须邻接街区外可达的道路或空地；内部缺口不算边缘。';
   if(q.labor&&state.phase!=='build')return '夜晚只能在空位补炮，清场改建须在白天进行。';
   return q.freeAfter<0?`人力不足：清场占用 ${q.labor} 人，住房减少 ${q.residents} 人，生产释放 ${q.released} 人；还缺 ${-q.freeAfter} 人。`:'';
 }

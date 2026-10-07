@@ -34,3 +34,20 @@ test('单用途保留、夜间禁清场，快照保存缺口；清空经营后�
  const snap=beginBattle(s);const before=funds(s);assert.match(buildTower(s,key(16,22),'A'),/夜晚/);assert.equal(funds(s),before);
  const retry=restoreNight(snap);assert.equal(contentCells(retry,id).length,8);assert.equal(clearPlot(retry,key(16,22)),'');assert.equal(plotContent(retry,id).type,null);assert.ok(retry.towers.has(id));assert.equal(buildHousing(retry,id),'');assert.equal(housingQuote(retry,id).residents,4);
 });
+test('街区中心禁止嵌入与前哨，临外部道路可建；空地中心仍可放炮',()=>{
+ const s=setup(),center=key(16,23),before=structuredClone(s);
+ assert.match(buildTower(s,center,'A'),/边缘/);assert.deepEqual(s,before);
+ assert.match(buildOutpost(s,center),/边缘/);assert.deepEqual(s,before);
+ assert.equal(buildTower(s,id,'A'),'');
+ const open=setup('open');assert.equal(buildTower(open,center,'A'),'');assert.match(buildOutpost(open,key(16,23)),/设施/);
+ removeTower(open,center);assert.match(buildOutpost(open,center),/边缘/);
+});
+test('内部缺口不产生嵌入边缘，紧邻建筑接缝与不连通外侧不算入口',()=>{
+ const s=setup(),center=key(16,23),plot=plotContent(s,id);
+ plot.cells=new Set(contentCells(s,id).filter(cell=>cell!==key(16,22)));
+ // 模拟留下的空位；中心仍在固定街区内部。
+ assert.match(buildTower(s,center,'A'),/边缘/);
+ const edge=key(15,23),outside=key(14,23);
+ s.terrainWalls.add(outside);assert.match(buildTower(s,edge,'A'),/边缘/);
+ s.terrainWalls.delete(outside);s.field.distance.delete(outside);assert.match(buildTower(s,edge,'A'),/边缘/);
+});
