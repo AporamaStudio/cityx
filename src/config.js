@@ -1,8 +1,8 @@
 // 首轮实验参数；只用于快速试玩，不代表平衡结论。
 export const SIZE = 60;
 export const DEFAULTS = {
-  campSight: 4, outpostSight: 6, daySightMultiplier: 1, nightSightMultiplier: 0.5, eventSightMultiplier: 1, sourceRevealSize: 3,
-  clearingCellsPerWorker: 4,
+  campSight: 6, outpostSight: 9, daySightMultiplier: 1, nightSightMultiplier: 0.6, eventSightMultiplier: 1, sourceRevealSize: 3,
+  clearingCellsPerWorker: 1,
   initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 4,
   productionCostPerCell: 4, productionIncomePerCell: 0.5, killReward: 2,
   budget: 100, wallCost: 2, wallHP: 12, enemyPower: 1, defenseRepairPercent: 50, demolitionRefundPercent: 50, controlRadius: 9, campHP: 30, stepMs: 450,

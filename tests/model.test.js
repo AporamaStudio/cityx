@@ -184,7 +184,7 @@ test('生产建设、当天与跨天拆除均返还一半，资金不足不改�
   const s=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1}),id=key(11,24);s.day=2;
   assert.equal(buildProduction(s,id),'');assert.equal(funds(s),80);
   assert.equal(removeProduction(s,id),'');assert.equal(funds(s),90);
-  assert.ok(productionError(s,key(3,17)));assert.equal(changeWall(s,id),'');assert.ok(buildProduction(s,id));changeWall(s,id,true);
+  assert.ok(productionError(s,key(3,17)));assert.equal(changeWall(s,id),'');assert.equal(buildProduction(s,id),'');changeWall(s,id,true);
   buildProduction(s,id);const snapshot=beginBattle(s);assert.ok(removeProduction(s,id));
   s.phase='build';s.day=3;const prior=funds(s);assert.equal(removeProduction(s,id),'');assert.equal(funds(s),prior+10);assert.equal(removeProduction(restoreNight(snapshot),id),'');
   const poor=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1,budget:19});assert.ok(buildProduction(poor,id));assert.equal(poor.production.size,0);

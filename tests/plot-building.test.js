@@ -9,7 +9,7 @@ function make(kind='open') {
   for(let y=22;y<24;y++)for(let x=15;x<17;x++)tiles[key(x,y)]=kind==='open'?'open':'block';
   const layout={width:SIZE,height:SIZE,camp:{x:15,y:25},blocks:[plot],buildings:kind==='open'?[]:[plot],tiles};
   const wave=[{x:15,y:20,hp:6,count:1,first:1,interval:2}];
-  const s=createCampaign({...DEFAULTS,budget:1000},Array(5).fill(wave),layout);s.day=3;return s;
+  const s=createCampaign({...DEFAULTS,budget:1000,initialPopulation:30},Array(5).fill(wave),layout);s.day=3;return s;
 }
 const run=s=>{for(let i=0;i<200&&s.phase==='battle';i++)stepBattle(s);assert.notEqual(s.phase,'battle');};
 
@@ -47,17 +47,18 @@ test('建筑绕行仍经过可破坏墙，不用附近空路避开墙或炮塔�
 
 test('废墟免费清理后可换建，地块身份与生成布局保持不变',()=>{
   const s=make('building'),id=key(16,23),layout=structuredClone(s.layout),site=structuredClone(s.sites[0]);
-  assert.equal(plotContent(s,id).status,'ruin');assert.ok(buildOutpost(s,id));assert.equal(clearPlot(s,id),'');
+  assert.equal(plotContent(s,id).status,'ruin');assert.equal(clearPlot(s,id),'');
   assert.equal(funds(s),1000);assert.equal(plotContent(s,id).status,'empty');assert.ok(productionCells(id,s).every(cell=>!s.blocked.has(cell)));
-  assert.equal(buildOutpost(s,id),'');assert.equal(outpostAt(s,key(15,22)),id);assert.ok(buildProduction(s,id));
-  assert.equal(removeOutpost(s,key(15,22)),'');assert.equal(buildProduction(s,id),'');assert.equal(plotContent(s,id).type,'production');
+  assert.equal(buildOutpost(s,id),'');assert.equal(outpostAt(s,key(15,22)),undefined);assert.equal(buildProduction(s,id),'');
+  assert.equal(removeOutpost(s,id),'');assert.equal(buildProduction(s,id),'');assert.equal(plotContent(s,id).type,'production');
   assert.deepEqual(s.layout,layout);assert.deepEqual(s.sites[0],site);
 });
 
-test('空地允许墙塔，建设整块建筑前须处理实际占用，清理也不能绕过权限',()=>{
+test('街区内墙塔保留独立占地，经营使用剩余格；改建遵守阶段与控制',()=>{
   const s=make('building'),id=key(15,22);clearPlot(s,id);assert.equal(buildTower(s,id,'A'),'');assert.ok(buildOutpost(s,id));
-  assert.ok(buildProduction(s,id));removeTower(s,id);assert.equal(changeWall(s,id),'');assert.ok(buildProduction(s,id));
-  changeWall(s,id,true);assert.equal(buildProduction(s,id),'');assert.ok(buildTower(s,id,'A'));assert.ok(changeWall(s,id));
+  assert.equal(buildProduction(s,id),'');assert.equal(productionQuote(s,id).area,3);
+  assert.equal(removeTower(s,id),'');assert.equal(changeWall(s,id),'');assert.ok(buildProduction(s,id));
+  changeWall(s,id,true);assert.equal(buildProduction(s,id),'');assert.equal(buildTower(s,id,'A'),'');assert.ok(changeWall(s,id));
   s.phase='battle';assert.ok(clearPlot(s,id));s.phase='build';s.params.controlRadius=1;assert.ok(clearPlot(s,id));
 });
 
@@ -74,8 +75,8 @@ test('前哨仅需驻扎格受控，整块未受控也可扩张；禁止道路�
 
 test('前哨拆除检查控制依赖，旧建筑也按比例退款，跨格操作不重复扣费',()=>{
   const s=make(),id=key(15,22);s.params.controlRadius=5;buildOutpost(s,id);const tower=key(15,16);assert.equal(buildTower(s,tower,'A'),'');
-  assert.match(removeOutpost(s,key(16,23)),/依赖/);removeTower(s,tower);s.day=4;
-  const before=funds(s);assert.equal(clearPlot(s,key(16,23)),'');assert.equal(funds(s),before+12);assert.equal(plotContent(s,id).status,'empty');
+  assert.match(removeOutpost(s,id),/依赖/);removeTower(s,tower);s.day=4;
+  const before=funds(s);assert.equal(removeOutpost(s,id),'');assert.equal(funds(s),before+12);assert.equal(plotContent(s,id).status,'empty');
   assert.equal(buildProduction(s,key(16,23)),'');const invested=funds(s);assert.ok(buildProduction(s,id));assert.equal(funds(s),invested);
   s.day=5;const refund=Math.floor(productionQuote(s,id).cost/2);assert.equal(removeProduction(s,id),'');assert.equal(funds(s),invested+refund);
 });
@@ -83,8 +84,8 @@ test('前哨拆除检查控制依赖，旧建筑也按比例退款，跨格操�
 test('重试保留清理、换建与绕行，整局重来恢复原废墟；拆除不主动换最短路线',()=>{
   const s=make('building'),id=key(15,22);clearPlot(s,id);buildOutpost(s,id);
   const path=structuredClone(s.attacks[0].path),snapshot=beginBattle(s);run(s);
-  const retry=restoreNight(snapshot);assert.equal(plotContent(retry,id).type,'outpost');assert.deepEqual(retry.attacks[0].path,path);
-  assert.equal(clearPlot(retry,id),'');assert.deepEqual(retry.attacks[0].path,path);assert.ok(!retry.blocked.has(id));
+  const retry=restoreNight(snapshot);assert.ok(retry.outposts.has(id));assert.deepEqual(retry.attacks[0].path,path);
+  assert.equal(removeOutpost(retry,id),'');assert.deepEqual(retry.attacks[0].path,path);assert.ok(!retry.blocked.has(id));
   const fresh=restartCampaign(s);assert.equal(plotContent(fresh,id).status,'ruin');assert.equal(fresh.outposts.size,0);
 });
 

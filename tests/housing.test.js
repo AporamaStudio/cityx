@@ -29,7 +29,7 @@ test('重试保留人口投资，重开清空住房；参数调整不能产生�
 });
 
 test('废墟只能恢复原用途，拆为空地后可自由换建',()=>{
-  const s=setup(6),before=funds(s);
+  const s=setup(12),before=funds(s);
   assert.match(buildHousing(s,factory),/生产废墟/);assert.match(buildProduction(s,home),/住房废墟/);
   assert.equal(funds(s),before);assert.equal(s.housing.size,0);assert.equal(s.production.size,0);
   assert.equal(clearPlot(s,factory),'');assert.equal(plotContent(s,factory).type,null);
@@ -46,11 +46,11 @@ test('seed 固定两类废墟，起步保留生产；重开还原用途',()=>{
 });
 
 test('清理即时生效、不改金币，占用当日人力；不足不清理，次日释放',()=>{
-  const s=setup(1),before=funds(s);assert.equal(clearingLabor(s,home),1);
-  assert.equal(clearPlot(s,home),'');assert.equal(funds(s),before);assert.equal(population(s).total,1);assert.equal(population(s).free,0);
-  assert.match(clearPlot(s,factory),/需要 1 人/);assert.equal(plotContent(s,factory).status,'ruin');
-  const snap=beginBattle(s);assert.equal(restoreNight(snap).clearingWorkers,1);
-  s.waves=[[],[],[]];s.phase='won';assert.equal(enterMorning(s),true);assert.equal(population(s).free,1);
+  const s=setup(4),before=funds(s);assert.equal(clearingLabor(s,home),4);
+  assert.equal(clearPlot(s,home),'');assert.equal(funds(s),before);assert.equal(population(s).total,4);assert.equal(population(s).free,0);
+  assert.match(clearPlot(s,factory),/需要 4 人/);assert.equal(plotContent(s,factory).status,'ruin');
+  const snap=beginBattle(s);assert.equal(restoreNight(snap).clearingWorkers,4);
+  s.waves=[[],[],[]];s.phase='won';assert.equal(enterMorning(s),true);assert.equal(population(s).free,4);
 });
 test('测试台设定的是当前资源，保留布局且不伪造经营收入，生产依赖不足则拒绝',()=>{
   const s=createCampaign({...DEFAULTS,controlRadius:30});s.day=2;buildProduction(s,factory);
