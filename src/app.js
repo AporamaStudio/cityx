@@ -217,7 +217,7 @@ function draw() {
     ctx.globalAlpha = 1;ctx.setLineDash([]);
   });
   ctx.restore();
-  if (hover !== null && (state.phase === 'build' || weaponHover) && (!productionSite(hover,state)||weaponHover||postHover)) {
+  if (tool !== null && hover !== null && (state.phase === 'build' || weaponHover) && (!productionSite(hover,state)||weaponHover||postHover)) {
     const isWeapon = ['build','long'].includes(tool), weapon = selectedWeapon();
     const error = isWeapon ? previewError : tool==='production'?productionError(state,hover):tool==='housing'?housingError(state,hover):repairHover?repairError(state,hover):postHover?postError:candidate?.error;
     for (const id of isWeapon ? coverage(hover,weapon.range,weapon.shape) : [hover]) {
@@ -438,7 +438,7 @@ function draw() {
     const groups=state.enemies.filter(e=>currentlyVisible(hover)&&e.id===hover);if(groups.length)$('cellInfo').textContent+=groups.map(e=>` · ${e.hp}/${e.max} → ${'火光'}`).join('');
     if(candidate) $('cellInfo').textContent += candidate.error ? ` · ${candidate.error}` : ' · 今晚路线已锁定，墙只阻挡敌人';
     if(contentCells(state,hover).includes(hover)&&plotContent(state,hover).type==='housing')$('cellInfo').textContent+=` · ${plotContent(state,hover).status==='ruin'?'住房废墟':'住房'} · ${housingQuote(state,hover).residents} 位居民 · 不受攻击`;
-  } else $('cellInfo').textContent = '单击建造 · 拖动平移 · 滚轮缩放 · 悬停看生命';
+  } else $('cellInfo').textContent = '单击建造 · 右键取消选择 · 拖动平移 · 滚轮缩放 · 悬停看生命';
 }
 function update() {
   sound.setScene(state.phase,paused);
@@ -450,7 +450,7 @@ function update() {
   $('economyTools').hidden=!daytime||state.day<2;$('commonTools').hidden=!daytime;
   $('housing').hidden=!daytime||state.day<2;$('production').hidden=!daytime||state.day<2;$('outpost').hidden=!daytime||state.day<3;
   if((['production','housing'].includes(tool)&&state.day<2)||(tool==='outpost'&&state.day<3))tool='wall';
-  if(state.phase==='battle'&&!['build','long'].includes(tool))tool='build';
+  if(state.phase==='battle'&&tool!==null&&!['build','long'].includes(tool))tool='build';
   for(const id of ['wall','build','long','outpost','production','housing','repair','erase'])$(id).classList.toggle('selected',tool===id);
   $('toolHeading').textContent=daytime?'建设工具':'夜间补炮';
   const w=selectedWeapon();
@@ -460,6 +460,7 @@ function update() {
   if(tool==='housing')$('toolInfo').textContent=`住房每格 ${state.params.housingCostPerCell} 金币，每 ${state.params.housingCellsPerResident} 格入住 1 人（整块向上取整）。只能恢复住房废墟，空地可新建住房；生产废墟须先拆除才能换建；立即增加劳动力，不受攻击。人口与火光 HP 独立；营地先遣队提供初始 ${state.params.initialPopulation} 人。`;
   if(tool==='production')$('toolInfo').textContent=`生产每 ${state.params.productionCellsPerWorker} 格占用 1 人，拆除后释放。小地块回款快，大地块持续产出高。4×4 基准费用 ${16*state.params.productionCostPerCell}、每晚 +${16*state.params.productionIncomePerCell}；悬停看实际报价与回本时间。整块受控才可修缮或新建。地块建筑不受击，挡路时敌人绕行。`;
   if(tool==='erase')$('toolInfo').textContent=`当天建造费全返，旧投入返还 ${state.params.demolitionRefundPercent}%。清场用工和维修费不退，经营缺口不会自动恢复。`;
+  if(tool===null)$('toolInfo').textContent='浏览地图 · 悬停查看，拖动平移。选择左侧工具后可继续建设。';
 
   $('morningTitle').textContent=`${state.day===1?'守住第一晚':state.day===2?'恢复生产，守住防线':'向北收复，守住火光'}`;
   updateNightReport();
@@ -649,10 +650,12 @@ $('apply').onclick=()=>{
 };
 $('addSource').onclick=()=>{const sources=readSources();if(sources.length>=12){$('configError').textContent='最多 12 个源头。';return;}sources.push({x:1,y:1,hp:12,count:4,first:1,interval:6,target:-2});sourceEditor(sources);};
 $('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;panX=(width-base*SIZE)/2;panY=(height-base*SIZE)/2;draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;
-canvas.addEventListener('contextmenu',e=>e.preventDefault());
+// 右键退出当前工具，保留悬停查看与地图移动，不再执行建设或拆除。
+canvas.addEventListener('contextmenu',e=>{e.preventDefault();tool=null;dragging=null;notify('');update();});
 canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();changeZoom(e.deltaY<0?1.12:1/1.12,e.clientX-r.left,e.clientY-r.top);},{passive:false});
 // 单击放置、拖动平移；在松开时才建造，避免拖地图误花预算。
 canvas.addEventListener('pointerdown',e=>{
+  if(e.button===2)return;
   dragging={x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,moved:false,panOnly:e.button!==0||e.altKey};
   canvas.setPointerCapture(e.pointerId);
 });
@@ -667,7 +670,7 @@ canvas.addEventListener('pointermove',e=>{
 canvas.addEventListener('pointerup',e=>{
   const shouldPlace=dragging&&!dragging.moved&&!dragging.panOnly;dragging=null;
   if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);
-  if(!shouldPlace)return;
+  if(!shouldPlace||tool===null)return;
   const id=cellAt(e);if(id===null)return;
   if(state.phase!=='build'&&!(state.phase==='battle'&&['build','long'].includes(tool))){notify('防守中只能独立补炮，不能造墙、修复或拆除。');return;}
   if(paramsDirty()){notify('请先应用或取消实验参数预览，再修改布局。');return;}
