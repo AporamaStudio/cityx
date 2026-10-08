@@ -122,22 +122,52 @@ test('补炮不即时扣血，从下一拍使用新火力',()=>{
 
 test('火光按缺失 HP 与单价修满，前哨没有维修报价',()=>{
   const s=makeState();s.day=3;s.hp=23;
-  assert.equal(repairFacility(s,s.camp),'');assert.equal(s.hp,30);assert.equal(funds(s),93);
-  assert.match(repairFacility(s,s.camp),/受损/);assert.equal(funds(s),93);
-  s.hp=29;s.params.campRepairCost=3;assert.equal(repairFacility(s,s.camp),'');assert.equal(funds(s),90);
+  assert.deepEqual(repairQuote(s,s.camp),{missing:7,restore:7,cost:35,type:'camp'});
+  assert.equal(repairFacility(s,s.camp),'');assert.equal(s.hp,30);assert.equal(funds(s),65);
+  assert.match(repairFacility(s,s.camp),/受损/);assert.equal(funds(s),65);
+  s.hp=29;s.params.campRepairCost=3;assert.equal(repairFacility(s,s.camp),'');assert.equal(funds(s),62);
   assert.equal(clearPlot(s,key(11,24)),'');assert.equal(buildOutpost(s,key(11,24)),'');assert.equal(repairQuote(s,key(11,24)).missing,0);
 });
-test('修复不够钱时不改变生命或资金，战斗及失败不能修复',()=>{
-  const s=makeState();s.day=2;s.hp=20;s.params.budget=9;
-  assert.match(repairFacility(s,s.camp),/资金不足/);assert.equal(s.hp,20);assert.equal(funds(s),9);
-  s.params.budget=10;assert.equal(repairFacility(s,s.camp),'');assert.equal(funds(s),0);
+test('火光按余额部分修复，保留零头，不溢出最大HP；战斗及失败不能修复',()=>{
+  const s=makeState();s.day=2;s.hp=6;s.params.budget=44;
+  assert.deepEqual(repairQuote(s,s.camp),{missing:24,restore:8,cost:40,type:'camp'});
+  assert.equal(repairFacility(s,s.camp),'');assert.equal(s.hp,14);assert.equal(funds(s),4);
+  assert.match(repairFacility(s,s.camp),/资金不足.*5/);assert.equal(s.hp,14);assert.equal(funds(s),4);
+  s.params.budget=140;assert.equal(repairFacility(s,s.camp),'');assert.equal(s.hp,30);assert.equal(funds(s),20);
+  s.hp=27;s.params.campRepairCost=3;s.params.budget=124;
+  assert.deepEqual(repairQuote(s,s.camp),{missing:3,restore:1,cost:3,type:'camp'});
+  assert.equal(repairFacility(s,s.camp),'');assert.equal(s.hp,28);assert.equal(funds(s),1);
+  s.params.budget=123;assert.match(repairFacility(s,s.camp),/资金不足/);assert.equal(funds(s),0);
   s.hp=10;s.phase='battle';assert.match(repairFacility(s,s.camp),/防守/);assert.equal(s.hp,10);
   s.phase='lost';s.hp=0;assert.ok(repairFacility(s,s.camp));assert.equal(s.hp,0);
 });
 
 
 const modelExports=await import('../src/model.js');
-const {createCampaign,beginBattle,restoreNight,restartCampaign,campaignComplete}=await import('../src/model.js');
+const {createCampaign,beginBattle,restoreNight,restartCampaign,campaignComplete,campCritical,settleEconomy,buildProduction,applyTestScenario}=await import('../src/model.js');
+test('火光危急默认低于30%，配置阈值、边界、关闭与非法值均生效',()=>{
+  const s=makeState();
+  assert.equal(s.params.campWarningPercent,30);
+  for(const [max,hp,percent,critical] of [[30,9,30,false],[30,8,30,true],[30,0,30,false],[100,30,30,false],[100,29,30,true],[100,100,30,false],[30,8,20,false],[30,5,20,true],[30,14,50,true],[30,1,0,false],[30,30,100,false]]){
+    s.params.campHP=max;s.params.campWarningPercent=percent;s.hp=hp;assert.equal(campCritical(s),critical);
+  }
+  for(const percent of [-1,101,NaN,30.5])assert.match(validateParams({...DEFAULTS,campWarningPercent:percent},s,false),/危急阈值/);
+});
+test('失败成果按原始敌人数和实际守住夜晚累计，失败不发经营且重试回滚',()=>{
+  const wave=[{x:15,y:24,hp:1,count:3,first:1,interval:1}];
+  const s=createCampaign({...DEFAULTS,killReward:0},[wave,[{...wave[0],count:2},{...wave[0],y:23,hp:100,count:1,first:10}]]);
+  s.towers.set(key(14,24),'A');beginBattle(s);while(s.phase==='battle')stepBattle(s);
+  assert.equal(s.killed,3);assert.equal(s.earned,0);assert.equal(s.survivedNights,1);
+  settleEconomy(s);assert.equal(s.survivedNights,1);enterMorning(s);
+  assert.equal(buildProduction(s,key(11,24)),'');
+  const snapshot=beginBattle(s);while(s.phase==='battle')stepBattle(s);
+  assert.equal(s.phase,'lost');assert.equal(s.hp,0);assert.equal(s.killed,5);assert.equal(s.survivedNights,1);
+  settleEconomy(s);assert.equal(s.nightEconomy,0);assert.equal(s.economyEarned,0);
+  const tick=s.tick;stepBattle(s);assert.equal(s.tick,tick);assert.equal(enterMorning(s),false);
+  const retry=restoreNight(snapshot);assert.equal(retry.hp,30);assert.equal(retry.killed,3);assert.equal(retry.survivedNights,1);
+  const fresh=restartCampaign(s);assert.equal(fresh.killed,0);assert.equal(fresh.survivedNights,0);
+  assert.equal(applyTestScenario(fresh,2,100,6),'');assert.equal(fresh.survivedNights,0);
+});
 test('连续三晚继承受损 HP 和资金，单晚统计清零且第三晚结束',()=>{
   const wave=[{x:15,y:24,hp:2,count:1,first:1,interval:1,target:-1}];
   const s=createCampaign(DEFAULTS,[wave,wave,wave]);
@@ -166,7 +196,7 @@ test('预留未来源头但允许封路，第三天仍可修复，失败不能�
   assert.ok(changeWall(s,future));assert.ok(buildOutpost(s,future));
   for(const [x,y] of [[14,1],[16,1],[15,0]])assert.equal(changeWall(s,key(x,y)),'');
   assert.equal(changeWall(s,key(15,2)),'');
-  s.day=3;s.hp=27;const before=funds(s);assert.equal(repairFacility(s,s.camp),'');assert.equal(funds(s),before-3);
+  s.day=3;s.hp=27;const before=funds(s);assert.equal(repairFacility(s,s.camp),'');assert.equal(funds(s),before-15);
   s.phase='lost';assert.equal(enterMorning(s),false);
 });
 test('跨晚击杀只累计一次，不因进入次日重复发钱',()=>{

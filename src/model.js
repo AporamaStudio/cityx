@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=51';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=52';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -54,6 +54,8 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
     hp: params.campHP, enemies: [], enemyOutcomes:new Map(), events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
+  // 本局成果独立于金币倍率和测试台日期；战前快照同时回滚这些计数。
+  state.killed=0;state.survivedNights=0;
   state.plotContents=new Map(state.sites.map(p=>[key(p.x,p.y),{status:p.kind==='open'?'empty':'ruin',type:p.kind==='open'?null:(p.ruinType??'production')}]));
   initializeExploration(state);rebuildTerrain(state);lockAttacks(state);return state;
 }
@@ -86,6 +88,7 @@ export function knownSources(state) {
 }
 export const firstNightReady=state=>state.day!==1||state.towers.size>0;
 export const campaignComplete=state=>state.phase==='won'&&state.day===(state.waves?.length??1);
+export const campCritical=state=>state.hp>0&&state.hp*100<state.params.campHP*state.params.campWarningPercent;
 function clearNight(state) {
   state.tick=0;state.enemies=[];state.enemyOutcomes=new Map();state.events=[];state.spawned=0;state.removed=0;
   state.damage=0;state.leaked=0;state.merges=0;state.nightEarned=0;state.nightEconomy=0;state.economySettled=false;state.productionReport=null;
@@ -196,25 +199,28 @@ export function lockAttacks(state) {
   state.attacks=state.sources.map((source,index)=>{const path=pathFrom(key(source.x,source.y),state.field);return {...structuredClone(source),index,target:state.camp,originalPath:[...path],path};});
 }
 export const enemyKey=(enemy)=>`${enemy.id}:${enemy.target}`;
-// 火光、墙与塔按实际缺失 HP 报价；一次修满，瞭望塔无需维修。
+// 火光按余额购买整数 HP，余款保留；墙仍一次修满，瞭望塔无需维修。
 export function repairQuote(state,id) {
   const camp=id===state.camp,wall=state.wallHealth.get(id),target=camp?{hp:state.hp,max:state.params.campHP}:wall;
   const missing=target?Math.max(0,target.max-target.hp):0,type=camp?'camp':wall?'wall':'';
-  const cost=wall?Math.ceil(state.params.wallCost*missing/target.max*state.params.defenseRepairPercent/100):missing*state.params.campRepairCost;
-  return {missing,cost,type};
+  const restore=camp?Math.min(missing,Math.floor(Math.max(0,funds(state))/state.params.campRepairCost)):missing;
+  const cost=wall?Math.ceil(state.params.wallCost*missing/target.max*state.params.defenseRepairPercent/100):restore*state.params.campRepairCost;
+  return {missing,restore,cost,type};
 }
 export function repairError(state,id) {
   if(state.phase!=='build')return '防守中不能修复。';
   if(state.day<2)return '次日才能修复受损设施。';
   const quote=repairQuote(state,id);
   if(!quote.missing)return '请选择受损火光或墙。';
+  if(quote.type==='camp'&&!quote.restore)return `资金不足，至少需要 ${state.params.campRepairCost} 钱恢复 1 HP。`;
   if((quote.type==='wall'&&!inGroundControl(state,id)))return '这里不在控制范围内，无法维修防线。';
   return funds(state)<quote.cost?`资金不足，修满需要 ${quote.cost} 钱（${quote.missing} HP）。`:'';
 }
 export function repairFacility(state,id) {
   const error=repairError(state,id);if(error)return error;
-  state.repairSpent+=repairQuote(state,id).cost;
-  if(id===state.camp)state.hp=state.params.campHP;
+  const quote=repairQuote(state,id); // 先固定报价，再扣款，避免余额变化导致恢复量缩水。
+  state.repairSpent+=quote.cost;
+  if(id===state.camp)state.hp+=quote.restore;
   else {
     const target=state.wallHealth.get(id);target.hp=target.max;
     if(state.wallHealth.has(id))state.walls.add(id);
@@ -319,6 +325,7 @@ export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   if(!integer(params.cellMeters,1,1000))return '每格距离须为 1–1000 米整数。';
   if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
+  if(!integer(params.campWarningPercent,0,100))return '火光危急阈值须为 0–100% 整数，0 关闭持续警示。';
   if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';
   if(!integer(params.campSight,0,30)||!integer(params.outpostSight,0,30)||!integer(params.sourceRevealSize,1,5))return '外围视野须为 0–30 整数，敌源揭示边长须为 1–5 整数。';
   if(!['daySightMultiplier','nightSightMultiplier','eventSightMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=3))return '视野倍率须为 0–3，可使用小数。';
@@ -406,7 +413,7 @@ export function stepBattle(state,actions=null) {
     if(enemy.hp<=0){
       // 仍按原始成员发击杀奖励；攻抵目标或撤离不发钱。
       const reward=enemy.members*state.params.killReward;
-      state.earned+=reward;state.nightEarned+=reward;state.removed+=enemy.members;
+      state.earned+=reward;state.nightEarned+=reward;state.removed+=enemy.members;state.killed+=enemy.members;
       for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'killed');
       state.events.push({type:'kill',id:enemy.id,target:enemy.target,value:reward,members:enemy.members});
     }else if(enemy.id===enemy.target){
@@ -637,6 +644,7 @@ export function clearPlot(state,id) {
 // 只在守住当晚时入账一次；失败不结算，重试由完整战前快照回滚。
 export function settleEconomy(state) {
   if(state.phase!=='won'||state.economySettled)return;
+  state.survivedNights++;
   // 固定当晚经营结果，次日恢复控制或拆建不会改写昨夜账单。
   const productive=[...state.production.keys()].filter(id=>productionActive(state,id));
   const stopped=[...state.production.keys()].filter(id=>!productionActive(state,id));

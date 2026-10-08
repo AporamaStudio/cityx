@@ -99,7 +99,7 @@ header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320
 .wallet .resource-people{align-items:stretch}.population-main svg{width:38px;height:38px}.population-main strong{font-size:36px}.resource-people span{text-align:left}
 
 /* 虚线与浅色区分待发生退款和已经到账的金币。 */
-.refund-preview{display:inline-block;margin-left:6px;padding:1px 5px;border:1px dashed #b8e2c4;border-radius:4px;color:#c6f0b5;font-size:16px;font-weight:700;white-space:nowrap}.refund-preview[hidden],#erasePreview[hidden]{display:none}
+.refund-preview{display:inline-block;margin-left:6px;padding:1px 5px;border:1px dashed #b8e2c4;border-radius:4px;color:#c6f0b5;font-size:16px;font-weight:700;white-space:nowrap}.refund-preview[hidden],#erasePreview[hidden],#repairPreview[hidden]{display:none}#repairPreview.unaffordable{color:var(--red)}
 
 /* 声音是玩家设置，页首随时可用，不挤占建设与防守面板。 */
 .audio-settings{position:relative;flex-shrink:0;margin-left:auto;z-index:120}.audio-settings summary{white-space:nowrap;border:1px solid var(--line);border-radius:7px;padding:8px 11px;font-size:12px}.audio-settings summary:focus-visible{outline:2px solid var(--orange);outline-offset:2px}.audio-popover{position:absolute;right:0;top:calc(100% + 8px);width:210px;background:var(--panel);border:1px solid #4b7163;border-radius:9px;padding:14px;box-shadow:0 6px 20px #0006;display:grid;grid-template-columns:65px 1fr;gap:15px 8px;align-items:center}.audio-popover label{display:flex;align-items:center;gap:5px;white-space:nowrap}.audio-popover input[type=range]{width:100%;min-width:0;accent-color:var(--teal)}.audio-popover input:disabled{opacity:.4}
@@ -116,3 +116,23 @@ header{grid-template-columns:auto auto minmax(140px,1fr) minmax(240px,1.4fr) aut
 .map-tools .view-presets{display:flex;align-items:center;gap:5px;flex:none}
 
 #outpost .tool-name{display:inline-flex;align-items:center;gap:5px}#outpost .tool-name svg{width:18px;height:18px;flex:none}
+
+/* 危急提示只缓慢闪烁火光和地图边缘，保留战场的可读性与鼠标操作。 */
+.camp-warning{display:block;margin-top:10px;color:#ffaaa0;font-size:12px}.camp-warning[hidden],#showDefeat[hidden]{display:none}
+#campPanel.camp-critical{border-color:#cf7068}.camp-critical .camp-title h1{color:#ffaaa0;animation:camp-danger 1.4s ease-in-out infinite}.camp-critical #campBar{background:#f5847c}
+#viewport.camp-critical::after{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;box-shadow:inset 0 0 70px 12px #cf403754;animation:camp-danger 1.4s ease-in-out infinite}
+#campHitFlash{position:absolute;inset:0;z-index:3;pointer-events:none;opacity:0;background:#e5413324;box-shadow:inset 0 0 90px 20px #ed453a99}
+.repair-hp{margin-left:5px;color:var(--teal)}
+@keyframes camp-danger{0%,100%{opacity:1}50%{opacity:.6}}
+#showDefeat{width:100%;margin-top:12px;border-color:#a56762;color:#ffc4bb}
+/* 结算保留失守地图作背景，优先让玩家回到战前重新布防。 */
+#defeat{width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:30px;border:1px solid #a8655e;border-radius:16px;color:#e5edeb;background:radial-gradient(ellipse at 50% 0,#49312e,#1c252b 65%);box-shadow:0 24px 90px #0008;text-align:center}
+#defeat::backdrop{background:#091015b3}
+.defeat-symbol{width:90px;height:90px;margin:0 auto 16px;border:1px solid #b878624d;border-radius:50%;background:radial-gradient(circle,#d0773626,#171e2444)}
+#defeatIcon{width:100%;height:100%}.defeat-night{margin:0 0 10px;color:#c5a69d;font-size:12px;letter-spacing:2px}
+#defeatTitle{margin:0;color:#ffb2a4;font-size:34px;letter-spacing:4px}.defeat-subtitle{margin:7px 0 24px;color:#baada8;letter-spacing:5px}
+.defeat-stats{display:grid;grid-template-columns:1fr 1fr;gap:18px 12px;margin:0;padding:20px 0;border-top:1px solid #92706740;border-bottom:1px solid #92706740}.defeat-stats dt{color:#acb8bb;font-size:12px}.defeat-stats dd{margin:6px 0 0;font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}.defeat-stats div:nth-child(n+3) dd{color:#f1ce79}
+.defeat-receipt{display:flex;justify-content:center;gap:24px;margin:18px 0;color:#acb8bb;font-size:12px}.defeat-receipt b{margin-left:5px;color:#f1ce79;font-weight:600}
+.defeat-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.defeat-actions .primary{font-size:13px}.defeat-inspect{margin-top:14px;border-color:transparent;background:transparent;color:#acb8bb;padding:6px 12px}
+@media(prefers-reduced-motion:reduce){.camp-critical .camp-title h1,#viewport.camp-critical::after{animation:none}}
+@media(max-width:540px){#defeat{padding:24px}.defeat-symbol{width:70px;height:70px;margin-bottom:12px}#defeatTitle{font-size:29px}}
