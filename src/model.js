@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=50';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=51';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -55,7 +55,6 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
     hp: params.campHP, enemies: [], enemyOutcomes:new Map(), events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
   state.plotContents=new Map(state.sites.map(p=>[key(p.x,p.y),{status:p.kind==='open'?'empty':'ruin',type:p.kind==='open'?null:(p.ruinType??'production')}]));
-  for(const [id,p] of state.outposts){p.plotId??=productionId(id,state);}
   initializeExploration(state);rebuildTerrain(state);lockAttacks(state);return state;
 }
 
@@ -249,7 +248,7 @@ export function outpostError(state,id) {
 export function buildOutpost(state,id) {
   const error=outpostError(state,id);if(error)return error;
   // 挑高瞭望塔只提供控制和视野，地面保持通行，不参与建筑清场。
-  state.outposts.set(id,{day:state.day});return '';
+  state.outposts.set(id,{day:state.day});revealControl(state);return '';
 }
 export function removeOutpost(state,id) {
   if(state.phase!=='build')return '只能在建设阶段拆除瞭望塔。';
@@ -277,7 +276,7 @@ export function placementError(state, id, type = 'A') {
   if (!Number.isInteger(id) || id < 0 || id >= SIZE * SIZE) return '请选择地图内的格子。';
   if(!isExplored(state,id))return '该位置尚未探索。';
   if (!inControl(state,id)) return '超出控制范围，不能架设炮台。';
-  if(state.fixedWalls.has(id)||state.outposts.has(id)||state.playerWalls.has(id)||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '炮塔独立建于未占用道路或开放场地，不能与墙、建筑或目标重叠。';
+  if(state.fixedWalls.has(id)||state.outposts.has(id)||state.playerWalls.has(id)||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '该格被设施或保留目标占用，不能重叠建设炮塔。';
   if(state.phase==='battle'&&state.enemies.some(e=>e.id===id))return '不能在敌人占据的格子上补炮。';
   if (state.towers.has(id)) return state.phase==='battle'?'该格已有武器，防守中不能拆除。':'该格已有武器，可用拆除工具撤销。';
   if (!state.params.weapons[type]) return '未知武器。';
@@ -297,7 +296,7 @@ export function wallPreview(state, id, remove = false) {
   else if (!remove && !inGroundControl(state,id)) error = '超出基础地面控制范围，不能建墙。';
   else if (!remove && state.blocked.has(id)) error = '建筑或废墟占地，需先清理为空地。';
 
-  else if (!remove && state.towers.has(id)) error = '这里已有独立炮塔，不能叠建墙。';
+  else if (!remove && (state.towers.has(id)||state.outposts.has(id))) error = '这里已有炮塔或瞭望塔，不能叠建墙。';
   else if (!remove && (state.walls.has(id)||state.playerWalls.has(id))) error = '这里已有墙或墙的废墟，请选择修复或拆除。';
   else if (!remove && (id === state.camp || reservedSources(state).some(s=>key(s.x,s.y)===id))) error = '不能覆盖篝火或敌人源头。';
   else if (!remove && funds(state) < state.params.wallCost) error = '资金不足，墙与炮台共用资金。';
@@ -350,7 +349,7 @@ export function validateSources(sources, state) {
     const s = sources[i], id = key(s.x, s.y), prefix = `源头 ${i + 1}：`;
     if (!['x','y','hp','count','first','interval'].every(k=>Number.isInteger(s[k])) || !Number.isInteger(s.target??-2)) return prefix + '请填写整数。';
     if (!inside(s.x, s.y)) return prefix + `坐标应为 0–${SIZE-1}。`;
-    if (state.walls.has(id) || id === state.camp || state.towers.has(id)) return prefix + '与障碍、控制站、生产地点或武器冲突。';
+    if (state.walls.has(id) || id === state.camp || state.towers.has(id) || state.outposts.has(id)) return prefix + '与障碍、火光、瞭望塔或炮位冲突。';
     if(![-2,-1].includes(s.target??-2))return prefix+'当前只攻击火光，瞭望塔不可受击。';
     if (seen.has(id)) return prefix + '位置不能重复。';
     if (!state.field.distance.has(id)) return prefix + '无法到达篝火。';
@@ -427,10 +426,10 @@ export function stepBattle(state,actions=null) {
     const body=state.wallHealth.get(id);
     if(!body||body.hp<=0)continue;
     const hit=Math.min(body.hp,attack.value);body.hp-=hit;
-    state.events.push({type:attack.type==='wall'?'wallHit':'towerHit',id,value:hit});
+    state.events.push({type:'wallHit',id,value:hit});
     if(body.hp===0){
-      if(attack.type==='wall')state.walls.delete(id);
-      state.events.push({type:attack.type==='wall'?'wallLost':'towerLost',id,value:0});
+      state.walls.delete(id);
+      state.events.push({type:'wallLost',id,value:0});
     }
   }
   if(state.hp<=0)state.phase='lost';
@@ -530,7 +529,7 @@ function embeddingError(state,id){
   const p=productionSite(id,state);if(!p)return '';
   const error=plotBuildError(state,id);if(error)return error;
   const q=embeddingQuote(state,id);
-  if(q.labor&&!streetEdgeAccess(state,id))return '只能从街区边缘嵌入，须邻接街区外可达的道路或空地；内部缺口不算边缘。';
+  if(q.labor&&!streetEdgeAccess(state,id))return '炮塔须位于原始街区的临路边缘；内部缺口不算边缘。';
   return q.freeAfter<0?`人力不足：清场占用 ${q.labor} 人，住房减少 ${q.residents} 人，生产释放 ${q.released} 人；还缺 ${-q.freeAfter} 人。`:'';
 }
 function applyEmbedding(state,id,preserveBuilding=false){

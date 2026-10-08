@@ -3,8 +3,8 @@ import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-text
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,WATCHTOWER_SVG} from './icons.js?v=2';
 import {createGameAudio} from './audio.js?v=3';
-import { SIZE, DEFAULTS } from './config.js?v=50';
-import { towerBuildCost, towerCapacity, towerSiteError, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=52';
+import { SIZE, DEFAULTS } from './config.js?v=51';
+import { towerBuildCost, towerCapacity, towerSiteError, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=53';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -123,7 +123,7 @@ function draw() {
   const postHover=hover!==null&&state.phase==='build'&&tool==='outpost';
   const postError=postHover?(paramsDirty()?'请先应用或取消参数预览。':outpostError(state,hover)):'';
   const postGhost=postHover&&!postError;
-  const previewState=postGhost?{...state,outposts:new Map([...state.outposts,[hover,{plotId:productionId(hover,state),day:state.day}]])}:state;
+  const previewState=postGhost?{...state,outposts:new Map([...state.outposts,[hover,{day:state.day}]])}:state;
   const previewControlled=postGhost?controlMask(previewState):controlled;
   const knownIds=new Set(knownSources(state).map(s=>key(s.x,s.y)));
   const plannedRoutes=forecastAttacks(state,Number($('forecastDay').value)+1).map(attack=>knownIds.has(key(attack.x,attack.y))?attack:{...attack,path:[]});
@@ -370,8 +370,8 @@ function draw() {
       }
       if(event.type==='leak'){ctx.fillStyle=`rgba(255,100,80,${.6*(1-impact)})`;ctx.fillRect(x-.25,y-.25,1.5,1.5);}
       ctx.strokeStyle=event.type==='merge'?'#ffe0a1':'#ffbbb0';ctx.lineWidth=.075;ctx.strokeRect(x+.01,y+.01,.98,.98);
-      if(['merge','hit','wallHit','towerHit','wallLost','towerLost'].includes(event.type)) {
-        const text=event.type==='merge'?`合流 ${event.value}`:event.type==='wallLost'?'攻破':event.type==='towerLost'?'损坏停火':`−${event.value}`;
+      if(['merge','hit','wallHit','wallLost'].includes(event.type)) {
+        const text=event.type==='merge'?`合流 ${event.value}`:event.type==='wallLost'?'攻破':`−${event.value}`;
         ctx.font='600 .43px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.lineWidth=.12;ctx.strokeStyle='#142024';ctx.strokeText(text,x+.5,y-.05-impact*.3);ctx.fillStyle=event.type==='merge'?'#ffe0a1':'#ffb1a3';ctx.fillText(text,x+.5,y-.05-impact*.3);
       }
     }
@@ -477,7 +477,7 @@ function update() {
   if(tool==='repair')$('toolInfo').textContent=`次日点击受损火光、墙修满。火光按 HP 计费；墙完全损坏时，维修费为造价的 ${state.params.defenseRepairPercent}%，部分受损按缺失 HP 比例计费（向上取整）。瞭望塔不受击，无需维修。`;
   if(tool==='housing')$('toolInfo').textContent=`住房每格 ${state.params.housingCostPerCell} 金币，每 ${state.params.housingCellsPerResident} 格入住 1 人（整块向上取整）。只能恢复住房废墟，空地可新建住房；生产废墟须先拆除才能换建；立即增加劳动力，不受攻击。人口与火光 HP 独立；营地先遣队提供初始 ${state.params.initialPopulation} 人。`;
   if(tool==='production')$('toolInfo').textContent=`生产每 ${state.params.productionCellsPerWorker} 格占用 1 人，拆除后释放。小地块回款快，大地块持续产出高。4×4 基准费用 ${16*state.params.productionCostPerCell}、每晚 +${16*state.params.productionIncomePerCell}；悬停看实际报价与回本时间。建筑碰到基础控制一格即可修缮；空地新建仍须逐格完整受控。地块建筑不受击，挡路时敌人绕行。`;
-  if(tool==='erase')$('toolInfo').textContent=`当天建造费全返，旧投入返还 ${state.params.demolitionRefundPercent}%。清场用工和维修费不退，经营缺口不会自动恢复。`;
+  if(tool==='erase')$('toolInfo').textContent=`白天基价当天全返，旧投入返还 ${state.params.demolitionRefundPercent}%。夜间加急费、清场用工和维修费不退，经营缺口不会自动恢复。`;
   if(tool===null)$('toolInfo').textContent='浏览地图 · 悬停查看，拖动平移。选择左侧工具后可继续建设。';
 
   $('morningTitle').textContent=`${state.day===1?'守住第一晚':state.day===2?'恢复生产，守住防线':'向北收复，守住火光'}`;
@@ -635,7 +635,7 @@ function reset(keep=true){
   if(keep&&!preparation)return;
   state=keep?restoreNight(preparation):restartCampaign(state);
   if(!keep)preparation=null;
-  clearPlayback();$('forecastDay').value=String(state.day-1);
+  clearPlayback();$('firstNightNotice').hidden=true;$('forecastDay').value=String(state.day-1);
   sourceEditor(state.sources);paramsEditor(state.params);refreshParams();
   notify(keep?`已恢复第 ${state.day} 晚战前状态；保留更早的损伤与收支，撤销本晚收入和补炮。`:'已整局重来：恢复第一天初始资金与生命，保留已应用的参数和波次配置。');
 }
@@ -646,7 +646,7 @@ $('testDay').replaceChildren(...state.waves.map((_,i)=>{const o=document.createE
 $('applyTest').onclick=()=>{
   const error=applyTestScenario(state,Number($('testDay').value),Number($('testGold').value),Number($('testPeople').value));
   if(error){notify(error);return;}
-  preparation=null;clearPlayback();hover=null;tool='wall';$('forecastDay').value=String(state.day-1);
+  preparation=null;clearPlayback();$('firstNightNotice').hidden=true;hover=null;tool='wall';$('forecastDay').value=String(state.day-1);
   sourceEditor(state.sources);paramsEditor(state.params);refreshParams();
   notify(`测试台：已进入第 ${state.day} 天白天，现有布局保留，清理用工释放；跳过夜晚不发收入。人口填写的是总人口。`);
 };
@@ -693,7 +693,7 @@ canvas.addEventListener('pointerup',e=>{
   if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);
   if(!shouldPlace||tool===null)return;
   const id=cellAt(e);if(id===null)return;
-  if(state.phase!=='build'&&!(state.phase==='battle'&&['build','long'].includes(tool))){notify('防守中只能独立补炮，不能造墙、修复或拆除。');return;}
+  if(state.phase!=='build'&&!(state.phase==='battle'&&['build','long'].includes(tool))){notify('防守中只能在建筑炮位补炮，不能造墙、修复或拆除。');return;}
   if(paramsDirty()){notify('请先应用或取消实验参数预览，再修改布局。');return;}
   const beforePeople=population(state).total,beforeFunds=funds(state),erasedType=tool==='erase'?demolitionQuote(state,id).type:null;let actionError='';
   if(tool==='housing'){
@@ -701,7 +701,7 @@ canvas.addEventListener('pointerup',e=>{
   } else if(tool==='production'){
     const error=actionError=buildProduction(state,id);notify(error||`街区已恢复！预计每晚收入 +${productionQuote(state,id).income}，守住后自动入账。`);
   } else if(['outpost','repair'].includes(tool)){
-    const error=actionError=tool==='repair'?repairFacility(state,id):buildOutpost(state,id);notify(error||(tool==='repair'?'设施已修满，按缺失 HP 扣费。':'瞭望塔已建立；立即扩张控制，不受敌人攻击。建筑挡路时敌人就近绕行，目标仍是火光。'));
+    const error=actionError=tool==='repair'?repairFacility(state,id):buildOutpost(state,id);notify(error||(tool==='repair'?'设施已修满，按缺失 HP 扣费。':'瞭望塔已建立，控制与视野立即扩张。'));
     if(!error)sourceEditor(readSources());
   } else if(tool==='wall'){
     const error=actionError=changeWall(state,id);notify(error||'墙已建造；今晚路线不变，敌人到这里会停下攻击。');
@@ -784,7 +784,7 @@ function advance() {
   if(state.events.some(event=>event.type==='leak'))sound.play('hurt');
   for (const event of state.events) {
     const [x,y] = xy(event.id);
-    const defenseText={wallHit:`墙 (${x},${y}) 受到 ${event.value} 点伤害`,towerHit:`炮塔 (${x},${y}) 受到 ${event.value} 点伤害`,wallLost:`墙 (${x},${y}) 被攻破，敌人将沿原路线推进`,towerLost:`炮塔 (${x},${y}) 损坏停火，次日可维修`};
+    const defenseText={wallHit:`墙 (${x},${y}) 受到 ${event.value} 点伤害`,wallLost:`墙 (${x},${y}) 被攻破，敌人将沿原路线推进`};
     const text = defenseText[event.type]|| (event.type === 'merge' ? `(${x},${y}) ${event.members} 批合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.members} 批敌人，+${event.value} 资金` : `(${x},${y}) 火力削减 ${event.value}`);
     if(event.type==='merge'&&!explainedMerge&&currentlyVisible(event.id)){
       explainedMerge=true;$('mergeNotice').hidden=false;
@@ -803,7 +803,7 @@ function advance() {
     dawnAt=campaignComplete(state)?0:performance.now()+900;
   }
   if (state.phase === 'won') notify(campaignComplete(state)?'全部夜晚守住了！可重试最后一晚或整局重来。':`第 ${state.day} 晚守住了。进入次日建设、修复并准备下一晚。`);
-  if (state.phase === 'lost') notify('火光熄灭。检查破墙位置、炮塔受损与持续火力覆盖，可重试当晚。');
+  if (state.phase === 'lost') notify('火光熄灭。检查破墙位置与持续火力覆盖，可重试当晚。');
   if(state.phase==='lost')$('testControls').open=true;
   if(state.phase==='lost')sound.play('lost');
   update();

@@ -13,13 +13,14 @@ test('所有可达格严格接近篝火，预览到达目标，默认三路实�
   s.phase='battle';for(let i=0;i<100&&s.phase==='battle';i++)stepBattle(s);
   assert.equal(s.phase,'lost');assert.ok(s.merges>0);
 });
-test('曼哈顿覆盖与边界裁切，独立炮塔预算和禁建格',()=>{
+test('曼哈顿覆盖与边界裁切，建筑炮位预算和禁建格',()=>{
   assert.equal(coverage(key(15,15),1).length,5);assert.equal(coverage(key(15,15),2).length,13);assert.equal(coverage(0,2).length,6);
-  const s=createState();assert.ok(placementError(s,s.camp));assert.ok(placementError(s,key(5,3)));assert.ok(placementError(s,key(2,14)));assert.equal(placementError(s,key(20,28)),'');
-  for(let x=0;x<10;x++)assert.equal(buildTower(s,key(x,28),'A'),'');
-  assert.equal(funds(s),0);assert.match(placementError(s,key(20,28)),/预算/);
-  assert.equal(removeTower(s,key(0,28)),'');assert.equal(funds(s),10);
+  const s=createState(),a=key(11,24),b=key(19,26);s.params.budget=10;
+  for(const id of [s.camp,key(5,3),key(2,14),key(20,28)])assert.ok(placementError(s,id));
+  assert.equal(buildTower(s,a,'A'),'');assert.equal(funds(s),0);assert.match(placementError(s,b),/预算/);
+  assert.equal(removeTower(s,a),'');assert.equal(funds(s),10);
 });
+
 test('同时入格先合并再扣一次火力，满值相加且不回血',()=>{
   const s=createState([{x:1,y:1,hp:1,count:1,first:100,interval:1}]);s.phase='battle';
   s.field.next=new Map([[1,3],[2,3]]);s.enemies=[{id:1,hp:3,max:10,members:1,sources:[0]},{id:2,hp:8,max:10,members:1,sources:[1]}];s.towers.set(3,'A');
@@ -41,9 +42,9 @@ test('非法配置被拒绝，重试复制布局并恢复预算与状态',()=>{
 
 
 test('墙与塔独立占地，共享资金且分别退款',()=>{
-  const s=createState(),wall=key(14,10),tower=key(15,10);
-  assert.equal(placementError(s,wall),'');assert.equal(changeWall(s,wall),'');assert.match(placementError(s,wall),/重叠/);
-  assert.equal(buildTower(s,tower,'B'),'');assert.match(changeWall(s,tower),/炮塔/);assert.equal(funds(s),78);
+  const s=createState(),wall=key(14,10),tower=key(11,24);
+  assert.match(placementError(s,wall),/建筑实体/);assert.equal(changeWall(s,wall),'');assert.match(placementError(s,wall),/重叠/);
+  assert.equal(buildTower(s,tower,'B'),'');assert.match(changeWall(s,tower),/建筑|炮塔/);assert.equal(funds(s),78);
   assert.equal(changeWall(s,wall,true),'');assert.equal(funds(s),80);assert.equal(removeTower(s,tower),'');assert.equal(funds(s),100);
   assert.match(changeWall(s,key(2,14),true),/固定墙/);s.params.budget=1;assert.match(changeWall(s,wall),/资金不足/);
 });
@@ -66,18 +67,13 @@ test('两类火力与形状切换，参数拒绝非法、超预算和控制范�
 });
 
 
-test('控制范围与建造格分开，范围外不能造墙或架炮但仍可通行和受火力',()=>{
-  const s=makeState();
-  assert.equal(inControl(s,key(15,16)),true);assert.equal(inControl(s,key(15,15)),false);
-  assert.equal(inControl(s,key(24,25)),true);assert.equal(inControl(s,key(24,24)),true);
-  assert.equal(inControl(s,key(24,16)),false);assert.equal(inControl(s,key(23,16)),false);
-  assert.equal(inControl(s,key(22,16)),true);assert.equal(inControl(s,key(23,17)),true);
-  assert.match(changeWall(s,key(15,15)),/控制范围/);assert.match(placementError(s,key(16,14)),/控制范围/);
-  assert.equal(placementError(s,key(15,17)),'');assert.match(changeWall(s,s.camp),/篝火/);
-  assert.equal(changeWall(s,key(15,16)),'');assert.equal(buildTower(s,key(15,17),'B'),'');
-  assert.equal(funds(s),78);assert.ok(fireField(s).get(key(15,15))>0);
-  assert.ok(s.field.distance.has(key(15,15)));assert.equal(inControl(s,key(15,15)),false);
+test('控制范围外不能建造，建筑炮位的火力仍可覆盖未受控道路',()=>{
+  const s=makeState();s.params.controlRadius=3;const tower=key(11,24),road=key(10,24);
+  assert.ok(inControl(s,tower));assert.equal(inControl(s,road),false);assert.match(changeWall(s,road),/控制范围/);
+  assert.equal(buildTower(s,tower,'B'),'');assert.equal(funds(s),80);assert.ok(fireField(s).get(road)>0);
+  assert.ok(s.field.distance.has(road));assert.equal(inControl(s,road),false);assert.match(changeWall(s,s.camp),/篝火/);
 });
+
 test('墙价参与参数预算校验，取消和重试不制造资金',()=>{
   const s=makeState();assert.equal(changeWall(s,key(14,20)),'');assert.equal(funds(s),98);
   s.towers.set(key(14,20),'A');assert.equal(funds(s),88);
@@ -109,13 +105,14 @@ test('抵达火光不发击杀收入，前哨不能被配置为攻击目标',()=
   const s=makeState([{x:15,y:24,hp:2,count:1,first:1,interval:1}]);s.phase='battle';stepBattle(s);stepBattle(s);assert.equal(s.earned,0);
   assert.match(validateSources([{...s.sources[0],target:key(11,24)}],s),/只攻击火光/);
 });
-test('战斗可独立补炮，遵守资金、占用和控制限制，不可造墙或拆除',()=>{
-  const s=makeState(),a=key(14,20);s.params.budget=9;s.phase='battle';
+test('战斗可建筑补炮，遵守加急预算、人力和控制，禁止造墙和拆除',()=>{
+  const s=makeState(),a=key(11,24);s.params.budget=19;s.phase='battle';
   assert.match(placementError(s,a),/预算/);s.earned=1;assert.equal(buildTower(s,a,'A'),'');assert.equal(funds(s),0);
   assert.match(placementError(s,key(14,14)),/控制/);assert.match(placementError(s,a),/武器|炮台/);
   assert.match(changeWall(s,key(13,20)),/战斗/);assert.ok(removeTower(s,a));
   s.enemies=[{id:key(15,20)}];s.params.budget=100;assert.match(placementError(s,key(15,20)),/敌人占据/);
 });
+
 test('补炮不即时扣血，从下一拍使用新火力',()=>{
   const s=createState([{x:15,y:20,hp:8,count:1,first:1,interval:1}]);s.phase='battle';stepBattle(s);
   s.towers.set(key(14,21),'A');assert.equal(s.enemies[0].hp,8);fireField(s);assert.equal(s.enemies[0].hp,8);
@@ -240,7 +237,7 @@ test('自定义击杀金币按原始成员累计，奖励金额与消灭数量�
 
 test('各类设施跨天返还50%，地块换建与重试不制造资金',async()=>{
   const {demolitionQuote,buildProduction,removeProduction}=await import('../src/model.js');
-  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1,budget:200}),wall=key(14,18),tower=key(13,18),post=key(19,26);s.day=3;
+  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1,budget:200,controlRadius:30}),wall=key(14,18),tower=key(2,22),post=key(19,26);s.day=3;
   changeWall(s,wall);buildTower(s,tower,'A');clearPlot(s,post);buildOutpost(s,post);buildProduction(s,key(11,24));
   const prior=funds(s);s.day=4;assert.equal(demolitionQuote(s,post).refund,12);
   assert.equal(removeTower(s,tower),'');assert.equal(changeWall(s,wall,true),'');assert.equal(removeOutpost(s,post),'');assert.equal(removeProduction(s,key(12,25)),'');
@@ -252,12 +249,12 @@ test('各类设施跨天返还50%，地块换建与重试不制造资金',async(
   removeTower(retry,tower);changeWall(retry,wall,true);removeOutpost(retry,post);assert.equal(funds(retry),prior+28);
   assert.equal(funds(restartCampaign(retry)),200);
 });
-test('夜间独立补炮建造日保留到次日，损坏维修不刷新建造日',()=>{
-  const s=createCampaign(),id=key(14,18);s.day=2;
+test('夜间建筑补炮建造日保留到次日，返还使用白天基价',()=>{
+  const s=createCampaign(),id=key(11,24);s.day=2;
   assert.equal(buildTower(s,id,'A'),'');assert.equal(modelExports.demolitionQuote(s,id).refund,10);removeTower(s,id);
-  beginBattle(s);assert.equal(buildTower(s,id,'A'),'');s.phase='won';enterMorning(s);
+  beginBattle(s);assert.equal(buildTower(s,id,'A'),'');assert.equal(s.nightBuildSpent,10);s.phase='won';enterMorning(s);
   assert.equal(modelExports.demolitionQuote(s,id).day,2);assert.equal(modelExports.demolitionQuote(s,id).refund,5);
-  s.towerHealth.get(id).hp=0;assert.equal(repairFacility(s,id),'');assert.equal(modelExports.demolitionQuote(s,id).day,2);
+  assert.equal(repairQuote(s,id).missing,0);
 });
 
 test('默认十五晚可完整推进，最后一晚只结算一次',async()=>{
@@ -309,7 +306,7 @@ test('敌群预告区分出生批次和抵达结果，重试清空结果',async(
 });
 
 test('当天全返，旧投入按可配置比例向下取整',()=>{
-  const s=createCampaign();s.day=3;const id=key(14,18);buildTower(s,id,'A');
+  const s=createCampaign();s.day=3;const id=key(11,24);assert.equal(buildTower(s,id,'A'),'');
   for(const day of [3,4]){s.day=day;for(const percent of [0,35,50,100]){s.params.demolitionRefundPercent=percent;assert.equal(modelExports.demolitionQuote(s,id).refund,day===3?10:Math.floor(10*percent/100));}}
   assert.match(validateParams({...s.params,demolitionRefundPercent:101},s),/拆除返还/);
 });

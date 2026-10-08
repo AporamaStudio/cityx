@@ -13,7 +13,7 @@ function make(kind='open') {
 }
 const run=s=>{for(let i=0;i<200&&s.phase==='battle';i++)stepBattle(s);assert.notEqual(s.phase,'battle');};
 
-test('路线上的空地可建前哨，敌人绕建筑仍抵达火光，前哨无损伤或退场奖励',()=>{
+test('路线上的空地可建瞭望塔，原路保持通行，无损伤或退场奖励',()=>{
   const s=make(),original=structuredClone(s.attacks[0]),id=key(15,22);
   assert.ok(original.path.includes(id));assert.equal(buildOutpost(s,id),'');
   assert.ok(inControl(s,key(15,16)));assert.equal(s.attacks[0].target,s.camp);
@@ -30,19 +30,18 @@ test('建筑封住狭窄出口时允许退回道路，不因保留路线前缀�
   const map=structuredClone(make().layout);
   for(const x of [14,16]){map.blocks.push({x,y:20,width:1,height:2,kind:'building'});for(const y of [20,21])map.tiles[key(x,y)]='block';}
   const wave=[{x:15,y:19,hp:6,count:1,first:1,interval:2}],s=createCampaign({...DEFAULTS,budget:1000},[wave],map);s.day=3;
-  assert.ok(s.attacks[0].path.includes(key(15,21)));assert.equal(buildOutpost(s,key(15,22)),'');
+  assert.ok(s.attacks[0].path.includes(key(15,21)));assert.equal(buildProduction(s,key(15,22)),'');
   assert.equal(s.attacks[0].path[0],key(15,19));assert.equal(s.attacks[0].path.at(-1),s.camp);
   assert.ok(s.attacks[0].path.every(id=>!s.blocked.has(id)));assert.equal(new Set(s.attacks[0].path).size,s.attacks[0].path.length);
   beginBattle(s);run(s);assert.equal(s.hp,24);
 });
 
 test('建筑绕行仍经过可破坏墙，不用附近空路避开墙或炮塔火力',()=>{
-  const s=make();buildOutpost(s,key(15,22));const wall=s.attacks[0].path[3],original=structuredClone(s.attacks);
+  const s=make();assert.equal(buildProduction(s,key(15,22)),'');const wall=s.attacks[0].path[3],original=structuredClone(s.attacks);
   assert.equal(changeWall(s,wall),'');s.wallHealth.get(wall).hp=2;
-  const [x,y]=[wall%SIZE,Math.floor(wall/SIZE)],tower=key(x-1,y);assert.equal(buildTower(s,tower,'B'),'');
-  s.params.weapons.B.power=1;beginBattle(s);
+  assert.equal(buildTower(s,key(15,22),'B'),'');s.params.weapons.B.power=1;beginBattle(s);
   let hit=false;for(let i=0;i<30&&s.phase==='battle';i++){stepBattle(s);if(s.events.some(e=>e.type==='wallHit'))hit=true;}
-  assert.ok(hit);assert.deepEqual(s.attacks,original);assert.ok(s.outposts.has(key(15,22)));
+  assert.ok(hit);assert.deepEqual(s.attacks,original);
 });
 
 test('废墟免费清理后可换建，地块身份与生成布局保持不变',()=>{
@@ -54,28 +53,29 @@ test('废墟免费清理后可换建，地块身份与生成布局保持不变',
   assert.deepEqual(s.layout,layout);assert.deepEqual(s.sites[0],site);
 });
 
-test('街区内墙塔保留独立占地，经营使用剩余格；改建遵守阶段与控制',()=>{
-  const s=make('building'),id=key(15,22);clearPlot(s,id);assert.equal(buildTower(s,id,'A'),'');assert.ok(buildOutpost(s,id));
-  assert.equal(buildProduction(s,id),'');assert.equal(productionQuote(s,id).area,3);
-  assert.equal(removeTower(s,id),'');assert.equal(changeWall(s,id),'');assert.ok(buildProduction(s,id));
-  changeWall(s,id,true);assert.equal(buildProduction(s,id),'');assert.equal(buildTower(s,id,'A'),'');assert.ok(changeWall(s,id));
+test('炮塔依附建筑，占用经营面积；清空后可铺墙但必须先拆炮',()=>{
+  const s=make('building'),id=key(15,22);assert.equal(buildTower(s,id,'A'),'');assert.ok(buildOutpost(s,id));
+  assert.equal(buildProduction(s,id),'');assert.equal(productionQuote(s,id).area,3);assert.match(clearPlot(s,id),/先拆除炮塔/);
+  assert.equal(removeTower(s,id),'');assert.equal(clearPlot(s,id),'');assert.equal(changeWall(s,id),'');
+  assert.match(buildTower(s,key(16,23),'A'),/建筑实体/);changeWall(s,id,true);assert.equal(buildProduction(s,id),'');
+  assert.equal(buildTower(s,id,'A'),'');assert.ok(changeWall(s,id));
   s.phase='battle';assert.ok(clearPlot(s,id));s.phase='build';s.params.controlRadius=1;assert.ok(clearPlot(s,id));
 });
 
-test('前哨仅需驻扎格受控，整块未受控也可扩张；禁止道路与火光地块建设',()=>{
+test('瞭望塔只需驻扎格受控，允许道路但不占火光；参数不能丢失控制依赖',()=>{
   const s=make();s.params.controlRadius=2;const id=key(15,23);
   assert.ok(inControl(s,id));assert.ok(!inControl(s,key(16,23)));assert.equal(buildOutpost(s,id),'');
-  assert.ok(inControl(s,key(16,23)));assert.ok(buildOutpost(s,key(14,23)));
-  assert.equal(buildTower(s,key(15,18),'A'),'');
-  const params=structuredClone(s.params);params.controlRadius=1;params.outpostRadius=1;
+  assert.ok(inControl(s,key(16,23)));assert.match(buildOutpost(s,key(14,23)),/间距/);
+  assert.equal(changeWall(s,key(15,18)),'');const params=structuredClone(s.params);params.controlRadius=1;params.outpostRadius=1;
   assert.match(validateParams(params,s),/控制范围/);
+  const road=make();assert.equal(buildOutpost(road,key(14,24)),'');assert.ok(!road.blocked.has(key(14,24)));
   const map=structuredClone(s.layout);map.blocks.push({x:15,y:25,width:2,height:2,kind:'open'});
-  const home=createCampaign(DEFAULTS,undefined,map);assert.ok(buildOutpost(home,home.camp));assert.ok(buildProduction(home,home.camp));assert.ok(clearPlot(home,home.camp));
+  const home=createCampaign(DEFAULTS,undefined,map);home.day=3;assert.ok(buildOutpost(home,home.camp));assert.ok(buildProduction(home,home.camp));assert.ok(clearPlot(home,home.camp));
 });
 
 test('前哨拆除检查控制依赖，旧建筑也按比例退款，跨格操作不重复扣费',()=>{
-  const s=make(),id=key(15,22);s.params.controlRadius=5;buildOutpost(s,id);const tower=key(15,16);assert.equal(buildTower(s,tower,'A'),'');
-  assert.match(removeOutpost(s,id),/依赖/);removeTower(s,tower);s.day=4;
+  const s=make(),id=key(15,22);s.params.controlRadius=5;buildOutpost(s,id);const wall=key(15,16);assert.equal(changeWall(s,wall),'');
+  assert.match(removeOutpost(s,id),/依赖/);changeWall(s,wall,true);s.day=4;
   const before=funds(s);assert.equal(removeOutpost(s,id),'');assert.equal(funds(s),before+12);assert.equal(plotContent(s,id).status,'empty');
   assert.equal(buildProduction(s,key(16,23)),'');const invested=funds(s);assert.ok(buildProduction(s,id));assert.equal(funds(s),invested);
   s.day=5;const refund=Math.floor(productionQuote(s,id).cost/2);assert.equal(removeProduction(s,id),'');assert.equal(funds(s),invested+refund);

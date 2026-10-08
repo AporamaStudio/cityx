@@ -33,11 +33,11 @@ test('生成地图接入路线、矩形经营、建设限制及重试',()=>{
   const b=s.sites.find(b=>b.kind==='building'&&b.ruinType==='production'&&b.width!==b.height&&productionControlled(s,key(b.x,b.y))&&inGroundControl(s,key(b.x,b.y))),id=key(b.x,b.y);
   assert.equal(productionCells(id,s).length,b.width*b.height);assert.ok(!s.field.distance.has(id));
   assert.equal(productionQuote(s,id).area,b.width*b.height);assert.ok(productionQuote(s,id).cost<=b.width*b.height*8);assert.equal(productionQuote(s,id).income,Math.ceil(b.width*b.height*DEFAULTS.productionIncomePerCell));
-  assert.ok(wallPreview(s,id).error);assert.equal(placementError(s,id),'');assert.equal(outpostError(s,id),'');
+  assert.ok(wallPreview(s,id).error);assert.equal(placementError(s,id),'');assert.match(outpostError(s,id),/可通行/);
   assert.equal(buildProduction(s,id),'');assert.ok(!s.field.distance.has(id));
   const road=layout.tiles.findIndex((t,id)=>t==='road'&&!wallPreview(s,id).error);
   assert.equal(changeWall(s,road),'');assert.ok(placementError(s,road));
-  const tower=layout.tiles.findIndex((t,id)=>t==='road'&&!placementError(s,id));assert.equal(buildTower(s,tower,'A'),'');
+  const tower=layout.tiles.findIndex((t,cell)=>t==='block'&&!productionCells(id,s).includes(cell)&&!placementError(s,cell));assert.equal(buildTower(s,tower,'A'),'');
   const post=layout.tiles.findIndex((t,id)=>t==='open'&&!outpostError(s,id));
   assert.equal(buildOutpost(s,post),'');
   const snap=beginBattle(s);assert.ok(snap);
@@ -105,20 +105,17 @@ test('医院固定左上 10×12，不重叠且路网保持连通，不能清理�
   }
 });
 
-test('路旁近防炮不改变敌源路线，实际接触后可以被攻击',()=>{
+test('城市建筑炮位邻接敌人仍不改路线、不受攻击',()=>{
   const s=createCampaign(DEFAULTS,undefined,generateCityMap(MAP_DEFAULTS)),attack=s.attacks[1];
-  // 地图可以调整；保留“下一格无炮，但街道敌人已与炮塔接触”的场景。
   let tower,position;
   for(let i=0;i<attack.path.length-1&&tower===undefined;i++)for(const delta of [-1,1,-60,60]){
-    const candidate=attack.path[i]+delta;
-    if(s.attacks.some(a=>a.path.includes(candidate))||placementError(s,candidate))continue;
-    tower=candidate;position=i;break;
+    const candidate=attack.path[i]+delta;if(placementError(s,candidate))continue;tower=candidate;position=i;break;
   }
   assert.notEqual(tower,undefined);assert.equal(buildTower(s,tower,'A'),'');
-  const enemy={id:attack.path[position],target:s.camp,path:[...attack.path]};
-  const path=[...attack.path];assert.deepEqual(enemyAction(s,enemy),{to:enemy.id,attackId:tower,attackType:'tower'});assert.deepEqual(attack.path,path);
+  const enemy={id:attack.path[position],target:s.camp,path:[...attack.path]},path=[...attack.path];
+  assert.deepEqual(enemyAction(s,enemy),{to:path[position+1]});assert.deepEqual(attack.path,path);
   beginBattle(s);s.enemies=[{...enemy,hp:100,max:100,members:1,sources:[1],origins:['1:0']}];stepBattle(s);
-  assert.equal(s.towerHealth.get(tower).hp,DEFAULTS.weapons.A.hp-DEFAULTS.enemyPower);
+  assert.ok(!s.events.some(event=>event.type==='towerHit'));assert.equal(s.towers.get(tower),'A');
 });
 
 test('开局街区不产生三格以上宽道路，并满足三类受控地块保障',()=>{

@@ -16,9 +16,9 @@ export const DEFAULTS = {
   },
   camp: [15, 25],
   sources: [
-    { x: 5, y: 3, count: 4, first: 1, interval: 6 },
-    { x: 25, y: 3, count: 4, first: 1, interval: 6 },
-    { x: 15, y: 1, count: 4, first: 9, interval: 6 },
+    { x: 5, y: 3, hp: 12, count: 4, first: 1, interval: 6 },
+    { x: 25, y: 3, hp: 12, count: 4, first: 1, interval: 6 },
+    { x: 15, y: 1, hp: 12, count: 4, first: 9, interval: 6 },
   ],
 };
 

@@ -24,9 +24,10 @@ test('建筑炮位不受邻接攻击且无维修报价',()=>{
 });
 
 test('瞭望塔仅用地面控制、保持通行与路径、遵守欧氏间距',async()=>{
- const {buildOutpost,outpostError,inGroundControl,terrainTraversable}=await import('../src/model.js');
+ const {buildOutpost,outpostError,inGroundControl,terrainTraversable,changeWall,validateSources}=await import('../src/model.js');
  const s=setup(),paths=structuredClone(s.attacks),walls=new Set(s.terrainWalls),id=key(14,25);
  assert.match(outpostError(s,origin),/可通行/);assert.ok(inGroundControl(s,id));assert.equal(buildOutpost(s,id),'');
+ assert.match(changeWall(s,id),/瞭望塔/);assert.match(validateSources([{x:14,y:25,hp:6,count:1,first:1,interval:2}],s),/瞭望塔/);
  assert.ok(terrainTraversable(s,id));assert.deepEqual(s.terrainWalls,walls);assert.deepEqual(s.attacks,paths);
  assert.match(buildOutpost(s,key(15,25)),/间距/);assert.equal(buildOutpost(s,key(18,25)),'');
  const remote=key(30,30);assert.match(buildOutpost(s,remote),/控制/);

@@ -64,7 +64,7 @@ canvas.addEventListener('pointermove',e=>{
   const r=canvas.getBoundingClientRect(),x=Math.floor((e.clientX-r.left-panX)/scale),y=Math.floor((e.clientY-r.top-panY)/scale);
   const id=x>=0&&y>=0&&x<map.width&&y<map.height?y*map.width+x:-1;hover=id>=0?lookup[id]:-1;
   const block=hover>=0?map.blocks[hover]:null;
-  $('info').textContent=block?`${block.kind==='open'?'开放场地':block.role==='hospital'?'医院（收复目标）':block.special?'特殊设施':'建筑街区'} ${block.id+1} · ${block.width}×${block.height} 格 · ${block.kind==='open'?'可通行 · 规划可建前哨、墙与炮台':block.role==='hospital'?'不可通行 · 占领待实现 · 不可清理换建':'废墟 · 不可通行 · 可修缮或清理换建'}`:id>=0?`(${x}, ${y}) · 道路 · 可通行 · 可建墙或独立炮塔；允许封路，敌人接触后攻击`:'悬停查看街区占地与通行规则';draw();
+  $('info').textContent=block?`${block.kind==='open'?'开放场地':block.role==='hospital'?'医院（收复目标）':block.special?'特殊设施':'建筑街区'} ${block.id+1} · ${block.width}×${block.height} 格 · ${block.kind==='open'?'可通行 · 可建瞭望塔、墙或经营设施':block.role==='hospital'?'不可通行 · 占领待实现 · 不可清理换建':'废墟 · 不可通行 · 可修缮或清理换建'}`:id>=0?`(${x}, ${y}) · 道路 · 可通行 · 可建墙或挑高瞭望塔；敌人只攻击挡路墙`:'悬停查看街区占地与通行规则';draw();
 });
 canvas.addEventListener('pointerup',()=>{drag=null;});canvas.addEventListener('pointercancel',()=>{drag=null;});canvas.addEventListener('lostpointercapture',()=>{drag=null;});canvas.addEventListener('pointerleave',()=>{hover=-1;draw();});
 const initial=readMapSettings(location.search);

@@ -32,12 +32,12 @@ test('Case C：建筑 A 碰到基础范围，紧邻建筑 B 不被链式控制',
   const b={x:15,y:10,width:3,height:3,kind:'building'},s=make('building',[b]);
   assert.ok(inControl(s,far));assert.ok(productionCells(key(15,10),s).every(id=>!inControl(s,id)&&!controlMask(s).has(id)));
 });
-test('Case D：远侧合法炮位可建塔、维修和重试，物理建筑与路线保持不变',()=>{
+test('Case D：远侧合法炮位可建塔和重试，物理建筑与路线保持不变',()=>{
   const s=make(),walls=new Set(s.terrainWalls),paths=structuredClone(s.attacks),before=new Map(s.field.distance);
   assert.equal(inGroundControl(s,far),false);assert.equal(buildTower(s,far,'A'),'');
   assert.deepEqual(s.terrainWalls,walls);assert.deepEqual(s.attacks,paths);assert.deepEqual(s.field.distance,before);
   assert.equal(terrainTraversable(s,far),false);assert.equal(buildingCells(s,far).length,9);assert.equal(contentCells(s,far).length,8);
-  s.towerHealth.get(far).hp=0;assert.equal(repairFacility(s,far),'');assert.equal(s.towerHealth.get(far).hp,DEFAULTS.weapons.A.hp);
+  assert.match(repairFacility(s,far),/受损火光或墙/);
   const snapshot=beginBattle(s),retry=restoreNight(snapshot);assert.ok(inControl(retry,far));assert.deepEqual(retry.terrainWalls,walls);
   s.phase='build';assert.equal(removeTower(s,far),'');assert.deepEqual(s.terrainWalls,walls);assert.equal(contentCells(s,far).length,8);
 });
@@ -46,16 +46,16 @@ test('Case E：墙不能借整栋建筑的远侧归属获得免费地面距离',
   assert.match(wallPreview(s,far).error,/基础地面控制/);assert.match(changeWall(s,street),/基础地面控制/);
   assert.deepEqual(s,before);
 });
-test('前哨可驻扎整体受控建筑远端，真实建成才扩张；未控空地不能借整块选址',()=>{
-  const s=make(),raw=rawControlMask(s),paths=structuredClone(s.attacks);
-  assert.equal(inGroundControl(s,far),false);assert.equal(inControl(s,street),false);assert.equal(outpostError(s,far),'');
-  assert.deepEqual(rawControlMask(s),raw);assert.equal(buildOutpost(s,far),'');
-  assert.ok(s.outposts.has(far));assert.ok(inGroundControl(s,street));assert.deepEqual(s.attacks,paths);assert.equal(validateParams(s.params,s),'');
-  assert.equal(changeWall(s,street),'');assert.match(removeOutpost(s,far),/依赖此前哨/);assert.equal(changeWall(s,street,true),'');
-  const retry=restoreNight(beginBattle(s));assert.ok(retry.outposts.has(far));assert.ok(inGroundControl(retry,street));
-  s.phase='build';assert.equal(removeOutpost(s,far),'');assert.deepEqual(rawControlMask(s),raw);assert.equal(inControl(s,street),false);
-  const open=make('open'),before=structuredClone(open);assert.match(buildOutpost(open,far),/受控/);assert.deepEqual(open,before);
+test('瞭望塔只借基础地面控制扩张，整栋归属不能用于远侧驻扎',()=>{
+  const s=make(),raw=rawControlMask(s),paths=structuredClone(s.attacks),anchor=key(10,12);
+  assert.equal(inGroundControl(s,far),false);assert.match(outpostError(s,far),/基础地面控制/);
+  assert.equal(buildOutpost(s,anchor),'');assert.ok(inGroundControl(s,street));assert.deepEqual(s.attacks,paths);assert.equal(validateParams(s.params,s),'');
+  assert.equal(changeWall(s,street),'');assert.match(removeOutpost(s,anchor),/依赖此瞭望塔/);assert.equal(changeWall(s,street,true),'');
+  const retry=restoreNight(beginBattle(s));assert.ok(retry.outposts.has(anchor));assert.ok(inGroundControl(retry,street));
+  s.phase='build';assert.equal(removeOutpost(s,anchor),'');assert.deepEqual(rawControlMask(s),raw);assert.equal(inControl(s,street),false);
+  const open=make('open'),before=structuredClone(open);assert.match(buildOutpost(open,far),/控制/);assert.deepEqual(open,before);
 });
+
 test('Case F：半块空地仍逐格控制，不按固定地块身份整块吸附',()=>{
   const s=make('open');s.params.controlRadius=3;const raw=rawControlMask(s),cells=productionCells(origin,s);
   assert.equal(cells.filter(id=>inControl(s,id)).length,5);assert.deepEqual(controlMask(s),raw);
@@ -69,10 +69,10 @@ test('废墟恢复生产或住房不改变物理图，收入按建筑归属生�
     assert.equal(clearPlot(s,far),'');assert.equal(inControl(s,far),false);assert.equal(terrainTraversable(s,far),true);
   }
 });
-test('清理支撑建筑前必须拆除越过基础范围的炮位，防止留下无权限设施',()=>{
+test('清理建筑前必须拆除炮位，防止留下悬空设施',()=>{
   const s=make();assert.equal(buildTower(s,far,'A'),'');const before=structuredClone(s);
-  assert.match(clearPlot(s,origin),/支撑边界炮位/);assert.deepEqual(s,before);
-  assert.equal(buildProduction(s,origin),'');assert.match(removeProduction(s,origin),/支撑边界炮位/);
+  assert.match(clearPlot(s,origin),/先拆除炮塔/);assert.deepEqual(s,before);
+  assert.equal(buildProduction(s,origin),'');assert.match(removeProduction(s,origin),/先拆除炮塔/);
   assert.equal(removeTower(s,far),'');assert.equal(removeProduction(s,origin),'');assert.equal(inControl(s,far),false);
 });
 test('最后一格经营面积改成炮位也保留物理建筑，拆炮后仍可清理废墟',()=>{
@@ -88,16 +88,15 @@ test('已控制建筑整体可见，不把可见或归属当成地面传播；�
   assert.equal(buildTower(s,far,'A'),'');assert.equal(validateParams(s.params,s),'');
   assert.match(validateParams({...s.params,controlRadius:1},s),/控制范围/);
 });
-test('塔不参与通行图：只在相邻时受击，建筑深处塔不能被街道敌人隔楼攻击',()=>{
+test('建筑炮位不受街道敌人攻击，也不允许向通行地面放炮',()=>{
   const s=make();assert.equal(buildTower(s,far,'A'),'');
   const enemy={id:street,path:[street,key(15,13)],target:s.camp};
-  assert.deepEqual(enemyAction(s,enemy),{to:street,attackId:far,attackType:'tower'});
-  s.towerHealth.get(far).hp=0;assert.deepEqual(enemyAction(s,enemy),{to:key(15,13)});assert.equal(terrainTraversable(s,far),false);
-  const inner=key(13,11);s.towers.set(inner,'B');s.towerHealth.set(inner,{hp:12,max:12});
-  assert.deepEqual(enemyAction(s,enemy),{to:key(15,13)});
-  const ground=key(10,8),walls=new Set(s.terrainWalls),paths=structuredClone(s.attacks);assert.equal(buildTower(s,ground,'A'),'');
-  assert.equal(terrainTraversable(s,ground),true);assert.deepEqual(s.terrainWalls,walls);assert.deepEqual(s.attacks,paths);
+  assert.deepEqual(enemyAction(s,enemy),{to:key(15,13)});assert.equal(terrainTraversable(s,far),false);
+  const ground=key(10,8),walls=new Set(s.terrainWalls),paths=structuredClone(s.attacks);
+  assert.match(buildTower(s,ground,'A'),/建筑实体/);assert.equal(terrainTraversable(s,ground),true);
+  assert.deepEqual(s.terrainWalls,walls);assert.deepEqual(s.attacks,paths);
 });
+
 test('建筑经营启停不改变物理阻挡，不可通行自然地形也不能被当成可走道路',()=>{
   const s=make(),natural=key(11,7);s.fixedWalls.add(natural);rebuildTerrain(s);
   assert.equal(s.layout.tiles[natural],'road');assert.equal(terrainTraversable(s,natural),false);
