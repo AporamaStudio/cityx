@@ -1,9 +1,10 @@
 import {drawFog} from './fog.js';
-import {drawRoadTexture,drawBlockTexture} from './city-textures.js?v=3';
+import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-textures.js?v=5';
+import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire} from './icons.js';
 import {createGameAudio} from './audio.js?v=3';
-import { SIZE, DEFAULTS } from './config.js?v=45';
-import { knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=46';
+import { SIZE, DEFAULTS } from './config.js?v=47';
+import { knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=47';
 import {generateCityMap} from './city-map.js?v=6';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -34,7 +35,7 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape')$('audioSett
 sound.setHidden(document.hidden);updateAudioControls();
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createCampaign(DEFAULTS,undefined,cityLayout), tool = 'wall', hover = null, dragging = null;
-let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0;
+let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0, cameraBottom=80;
 let fire = fireField(state), paused = false, timer = 0, last = 0;
 let messages = [], preparation = null, explainedMerge = false;
 const canBuildWeapon = () => ['build','battle'].includes(state.phase);
@@ -67,17 +68,28 @@ function previewParams() {
 
 // 画布使用设备像素比，地图输入和绘制都以 CSS 像素换算。
 function resize(fit = false) {
-  const oldW = width, oldH = height;
+  const oldW = width, oldH = height,oldCell=base*zoom,oldBottom=cameraBottom;
   width = viewport.clientWidth; height = viewport.clientHeight;
   canvas.width = Math.round(width * devicePixelRatio); canvas.height = Math.round(height * devicePixelRatio);
-  base = Math.min((width - 54) / SIZE, (height - 140) / SIZE);
-  if (fit || !oldW) { const view=initialView(state);zoom=SIZE/30;panX=width/2-(view.x+15)*base*zoom;panY=(height-80)/2-(view.y+15)*base*zoom-6; }
-  else { panX += (width - oldW) / 2; panY += (height - oldH) / 2; }
+  cameraBottom=Math.max(80,viewport.querySelector('.map-tools').offsetHeight+24);
+  base = cameraScale(width,height,SIZE,cameraBottom);
+  if (fit || !oldW) { const view=initialView(state);zoom=limitZoom(SIZE/30,base);panX=width/2-(view.x+15)*base*zoom;panY=(height-cameraBottom)/2-(view.y+15)*base*zoom-6; }
+  else {
+    // 窗口变化时保留镜头中心与格子大小；全图状态继续适应新窗口。
+    const centerX=(oldW/2-panX)/oldCell,centerY=((oldH-oldBottom)/2-panY)/oldCell;
+    zoom=limitZoom(zoom===1?1:oldCell/base,base);
+    panX=width/2-centerX*base*zoom;panY=(height-cameraBottom)/2-centerY*base*zoom;
+  }
+  constrainCamera();
   draw();
 }
-function changeZoom(factor, x = width / 2, y = height / 2) {
-  const old = zoom; zoom = Math.max(.65, Math.min(4, zoom * factor));
+function constrainCamera(){
+  const pan=limitPan(panX,panY,width,height,SIZE,base*zoom,cameraBottom);panX=pan.x;panY=pan.y;
+}
+function changeZoom(factor, x = width / 2, y = (height-cameraBottom) / 2) {
+  const old = zoom; zoom = limitZoom(zoom * factor,base);
   panX = x - (x - panX) * zoom / old; panY = y - (y - panY) * zoom / old;
+  constrainCamera();hover=null;
   draw();
 }
 function cellAt(event) {
@@ -91,6 +103,9 @@ function draw() {
   ctx.clearRect(0, 0, width, height);
   const size = base * zoom;
   const palette=Object.fromEntries(Object.keys(terrainColors).map(name=>[name,terrainColor(name)]));
+  // 地图外与远处雾使用同一底色，宽屏留白也不出现另一块纯色平面。
+  const backdrop=`rgb(${Math.round(32-nightMix*12)},${Math.round(48-nightMix*15)},${Math.round(57-nightMix*10)})`;
+  ctx.fillStyle=backdrop;ctx.fillRect(0,0,width,height);
   const controlState={...state,params:previewParams()};
   const controlRadius = controlState.params.controlRadius;
   const wallEdit = hover !== null && state.phase === 'build' && (tool==='wall'||(tool==='erase'&&!productionSite(hover,state)&&!state.towers.has(hover)));
@@ -155,6 +170,7 @@ function draw() {
   if((weaponHover&&!previewError)||(postHover&&!postError)){const q=embeddingQuote(state,hover);$('placementInfo').textContent+=` · 清场 ${q.labor} 人 · 空闲 ${population(state).free} → ${q.freeAfter}${q.residents?` · 人口 −${q.residents}`:''}${q.incomeLoss?` · 每天收入 −${q.incomeLoss}`:''}${q.refund?` · 拆返 +${q.refund} 金币`:''}`;}
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
+  drawCitySurroundings(ctx,cityLayout,nightMix,$('showFog').checked?state.explored:null,backdrop);
   // 全部地形、路线、敌群与源头都受探索遮罩约束，不能透过雾获取信息。
   ctx.fillStyle=palette.fog;ctx.fillRect(0,0,SIZE,SIZE);
   if(!visibleCell(key(30,15))){ctx.fillStyle='#8997a8';ctx.font='600 1.5px system-ui';ctx.textAlign='center';ctx.fillText('未探索 · 向北推进',30,15);}
@@ -423,6 +439,12 @@ function draw() {
   ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillStyle='#81999c';
   for(let i=0;i<SIZE;i+=5){ctx.fillText(i,panX+(i+.5)*size,panY-8);ctx.fillText(i,panX-14,panY+(i+.65)*size);}
   $('zoom').textContent = `${Math.round(zoom * 100)}%`;
+  // 比例尺选择 1/2/5 档距离，长度不超过 60 像素，缩放时始终对应实际米数。
+  const scaleMax=60*controlState.params.cellMeters/size,scaleUnit=10**Math.floor(Math.log10(scaleMax));
+  const scaleMeters=[5,2,1].find(n=>n*scaleUnit<=scaleMax)*scaleUnit;
+  const scaleText=scaleMeters>=1000?`${scaleMeters/1000} km`:`${scaleMeters} m`;
+  $('scaleLabel').textContent=scaleText;$('scaleBar').style.width=`${scaleMeters/controlState.params.cellMeters*size}px`;
+  $('mapScale').setAttribute('aria-label',`地图比例尺 ${scaleText}`);
   if (hover !== null) {
     const [x,y] = xy(hover), enemy = currentlyVisible(hover)?state.enemies.find(e=>e.id===hover):null;
     $('cellInfo').textContent = `格子 (${x}, ${y}) · ${inControl(controlState,hover,controlRadius)?'控制范围内':'控制范围外'} · 每拍火力 ${fire.get(hover)||0} · ${state.walls.has(hover)?'不可通行':'可通行'}${state.towers.has(hover)?` · 炮塔 ${state.towers.get(hover)} HP ${state.towerHealth.get(hover)?.hp}/${state.towerHealth.get(hover)?.max}${state.towerHealth.get(hover)?.hp===0?'（损坏停火）':''}`:''}${state.wallHealth.has(hover)?` · 墙 HP ${state.wallHealth.get(hover).hp}/${state.wallHealth.get(hover).max}`:''}${enemy?` · 敌群 ${enemy.hp}/${enemy.max}（${Math.round(enemy.hp/enemy.max*100)}%） · ${enemy.members} 批`:''}`;
@@ -578,6 +600,7 @@ function paramsEditor(params) {
     $('params').append(row);
   }
   fields('全局',params,'',[['budget','资金',0,10000],['wallCost','墙价',1,1000],['demolitionRefundPercent','旧投入拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙/塔伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙/塔造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campRepairCost','火光修复单价/HP',1,1000]]);
+  fields('地图',params,'',[['cellMeters','每格距离（米）',1,1000]]);
   fields('视野',params,'',[['campSight','火光外围格数',0,30],['outpostSight','前哨外围格数',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealSize','敌源揭示边长',1,5]]);
   fields('住房与人口',params,'',[['clearingCellsPerWorker','清理每名工人承担格数',1,100],['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房每格费用',1,1000]]);
   fields('街区生产（4×4 基准）',params,'',[['productionCostPerCell','基准每格恢复费用',1,1000],['productionIncomePerCell','基准每格每晚收入',0,1000]]);
@@ -644,7 +667,7 @@ $('apply').onclick=()=>{
   state.sources=structuredClone(sources);state.waves[state.day-1]=state.sources;lockAttacks(state);preparation=null;clearPlayback();sourceEditor(state.sources);notify(`第 ${state.day} 晚实验配置已重新出题并锁定；资金与损伤不变。`);update();
 };
 $('addSource').onclick=()=>{const sources=readSources();if(sources.length>=12){$('configError').textContent='最多 12 个源头。';return;}sources.push({x:1,y:1,hp:12,count:4,first:1,interval:6,target:-2});sourceEditor(sources);};
-$('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;panX=(width-base*SIZE)/2;panY=(height-base*SIZE)/2;draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;
+$('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;constrainCamera();hover=null;draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;
 // 右键退出当前工具，保留悬停查看与地图移动，不再执行建设或拆除。
 canvas.addEventListener('contextmenu',e=>{e.preventDefault();tool=null;dragging=null;notify('');update();});
 canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();changeZoom(e.deltaY<0?1.12:1/1.12,e.clientX-r.left,e.clientY-r.top);},{passive:false});
@@ -657,7 +680,7 @@ canvas.addEventListener('pointerdown',e=>{
 canvas.addEventListener('pointermove',e=>{
   if(dragging){
     if(Math.hypot(e.clientX-dragging.startX,e.clientY-dragging.startY)>4)dragging.moved=true;
-    if(dragging.moved||dragging.panOnly){panX+=e.clientX-dragging.x;panY+=e.clientY-dragging.y;}
+    if(dragging.moved||dragging.panOnly){panX+=e.clientX-dragging.x;panY+=e.clientY-dragging.y;constrainCamera();}
     dragging.x=e.clientX;dragging.y=e.clientY;
   }
   hover=cellAt(e);draw();

@@ -1,6 +1,8 @@
 // 首轮实验参数；只用于快速试玩，不代表平衡结论。
 export const SIZE = 60;
 export const DEFAULTS = {
+  // 每格的现实边长，仅用于地图比例尺；战斗和建设仍按格计算。
+  cellMeters: 20,
   campSight: 6, outpostSight: 9, daySightMultiplier: 1, nightSightMultiplier: 0.6, eventSightMultiplier: 1, sourceRevealSize: 3,
   clearingCellsPerWorker: 1,
   initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 4,
