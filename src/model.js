@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=49';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=50';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -49,7 +49,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
   const blocked=new Set(layout?layout.tiles.flatMap((t,id)=>t==='block'?[id]:[]):[]),walls=new Set([...fixedWalls,...blocked,...playerWalls]);
   const terrainWalls=new Set([...fixedWalls,...blocked]);
   const camp = layout?key(layout.camp.x,layout.camp.y):key(...DEFAULTS.camp), field = routeField(camp, terrainWalls);
-  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), clearingWorkers:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
+  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), clearingWorkers:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, nightBuildSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
     layout, blocked, terrainWalls, sites, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
@@ -111,7 +111,7 @@ export function fireField(state) {
   }
   return fire;
 }
-export const funds = state => state.params.budget + (state.debugGold??0) + state.earned + state.economyEarned - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - state.outposts.size*state.params.outpostCost - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
+export const funds = state => state.params.budget + (state.debugGold??0) + state.earned + state.economyEarned - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - state.outposts.size*state.params.outpostCost - (state.nightBuildSpent??0) - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
 // 控制范围取火光与瞭望塔覆盖的并集；地块内瞭望塔不受击、不失守。
 export function inStationRange(id, center, radius) {
   const [x,y]=xy(id),[cx,cy]=xy(center),dx=Math.abs(x-cx),dy=Math.abs(y-cy),cut=Math.min(2,radius);
@@ -270,6 +270,8 @@ export function enterMorning(state) {
   // 进入白天保留建筑内容、防线损伤和资金，再生成下一晚进攻。
   return true;
 }
+// 基价用于投资与拆返；夜间差额立即记为不可退加急费。
+export const towerBuildCost=(state,type)=>Math.ceil(state.params.weapons[type].cost*(state.phase==='battle'?state.params.nightTowerCostMultiplier:1));
 export function placementError(state, id, type = 'A') {
   if (!['build','battle'].includes(state.phase)) return '本晚已结束，请进入次日或重试。';
   if (!Number.isInteger(id) || id < 0 || id >= SIZE * SIZE) return '请选择地图内的格子。';
@@ -281,7 +283,7 @@ export function placementError(state, id, type = 'A') {
   if (!state.params.weapons[type]) return '未知武器。';
   const siteError=towerSiteError(state,id);if(siteError)return siteError;
   const embed=embeddingError(state,id);if(embed)return embed;
-  if (funds(state) + embeddingQuote(state,id).refund < state.params.weapons[type].cost) return '预算不足，无法架设炮台。';
+  if (funds(state) + embeddingQuote(state,id).refund < towerBuildCost(state,type)) return '预算不足，无法架设炮台。';
   return '';
 }
 
@@ -326,6 +328,7 @@ export function validateParams(params, state, checkLayout = true) {
   if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产或增加住房。';
   if(!integer(params.demolitionRefundPercent,0,100))return '拆除返还比例须为 0–100 整数。';
   if(!integer(params.outpostCost,1,1000)||!integer(params.outpostRadius,1,30)||!integer(params.campRepairCost,1,1000))return '瞭望塔价格 1–1000、半径 1–30；火光每 HP 修复单价 1–1000。';
+  if(!['nightTowerCostMultiplier','nightClearingLaborMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=1&&params[k]<=10))return '夜间加急倍率须为1–10。';
   if(!integer(params.outpostMinDistance,1,30))return '瞭望塔最小间距须为1–30格。';
   if(checkLayout){const ids=[...state.outposts.keys()];for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){const [x,y]=xy(ids[i]),[a,b]=xy(ids[j]);if(Math.hypot(x-a,y-b)<params.outpostMinDistance)return '现有瞭望塔不满足新间距，请先拆除或减小间距。';}}
   for (const type of ['A','B']) {
@@ -490,7 +493,7 @@ function investmentRefund(state,entries){
 // 嵌入报价没有副作用：人口减少、释放工人、清场占用与退款一并预览。
 export function embeddingQuote(state,id){
   const c=plotContent(state,id),cells=contentCells(state,id),occupied=cells.includes(id),plot=productionId(id,state);
-  const labor=buildingCells(state,id).includes(id)?Math.ceil(1/state.params.clearingCellsPerWorker):0;
+  const labor=buildingCells(state,id).includes(id)?Math.ceil(Math.ceil(1/state.params.clearingCellsPerWorker)*(state.phase==='battle'?state.params.nightClearingLaborMultiplier:1)):0;
   const building=occupied&&c.status==='building',home=building&&c.type==='housing',factory=building&&c.type==='production';
   const residents=home?Math.ceil(cells.length/state.params.housingCellsPerResident)-Math.ceil((cells.length-1)/state.params.housingCellsPerResident):0;
   const released=factory?Math.ceil(cells.length/state.params.productionCellsPerWorker)-Math.ceil((cells.length-1)/state.params.productionCellsPerWorker):0;
@@ -528,7 +531,6 @@ function embeddingError(state,id){
   const error=plotBuildError(state,id);if(error)return error;
   const q=embeddingQuote(state,id);
   if(q.labor&&!streetEdgeAccess(state,id))return '只能从街区边缘嵌入，须邻接街区外可达的道路或空地；内部缺口不算边缘。';
-  if(q.labor&&state.phase!=='build')return '夜晚只能在空位补炮，清场改建须在白天进行。';
   return q.freeAfter<0?`人力不足：清场占用 ${q.labor} 人，住房减少 ${q.residents} 人，生产释放 ${q.released} 人；还缺 ${-q.freeAfter} 人。`:'';
 }
 function applyEmbedding(state,id,preserveBuilding=false){
@@ -673,6 +675,7 @@ export function demolitionQuote(state,id) {
 function retainDemolitionCost(state,quote){state.demolitionSpent+=quote.cost-quote.refund;}
 export function buildTower(state,id,type) {
   const error=placementError(state,id,type);if(error)return error;
+  state.nightBuildSpent=(state.nightBuildSpent??0)+towerBuildCost(state,type)-state.params.weapons[type].cost;
   applyEmbedding(state,id,true);
   state.towers.set(id,type);state.towerDays.set(id,state.day);rebuildTerrain(state);return '';
 }

@@ -7,6 +7,7 @@ export const DEFAULTS = {
   clearingCellsPerWorker: 1,
   initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 4,
   productionCostPerCell: 2, productionIncomePerCell: 0.5, killReward: 2,
+  nightTowerCostMultiplier: 2, nightClearingLaborMultiplier: 2,
   budget: 100, wallCost: 2, wallHP: 12, enemyPower: 1, defenseRepairPercent: 50, demolitionRefundPercent: 50, controlRadius: 9, campHP: 30, stepMs: 450,
   outpostMinDistance: 4, outpostCost: 25, outpostRadius: 6, campRepairCost: 1,
   weapons: {
