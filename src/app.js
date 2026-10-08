@@ -2,7 +2,7 @@ import {drawFog} from './fog.js';
 import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-textures.js?v=5';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,WATCHTOWER_SVG} from './icons.js?v=2';
-import {createGameAudio} from './audio.js?v=3';
+import {createGameAudio} from './audio.js?v=4';
 import { SIZE, DEFAULTS } from './config.js?v=51';
 import { towerBuildCost, towerCapacity, towerSiteError, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=53';
 import {generateCityMap} from './city-map.js?v=8';
@@ -404,9 +404,9 @@ function draw() {
     const rows=[];
     if(!complete)rows.push({text:`−${quote.cost}`,icon:'coin',suffix:'',color:funds(state)>=quote.cost?'#f5df9c':'#f3a49c'});
     if(!home){
-      // 三行分别显示金币、人力、收入；建成后不再显示一次性费用。
-      rows.push({text:`−${productionLabor(state,id)}`,icon:'people',suffix:'',color:'#f4d3a2'});
-      rows.push({text:`+${complete&&!active?0:quote.income}`,icon:'coin',suffix:'/天',color:'#bff5ce'});
+      // 建成后仅显示占用人数与收入图标；未建成仍保留费用和产出报价。
+      rows.push({text:`${complete?'':'−'}${productionLabor(state,id)}`,icon:'people',suffix:'',color:'#f4d3a2'});
+      rows.push({text:`+${complete&&!active?0:quote.income}`,icon:'coin',suffix:complete?'':'/天',color:'#bff5ce'});
     }else rows.push({text:`+${quote.residents}`,icon:'people',suffix:'',color:'#f4d3a2'});
     ctx.save();ctx.font='600 10px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
     const iconSize=11,rowHeight=14;

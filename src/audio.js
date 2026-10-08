@@ -142,7 +142,12 @@ export function createGameAudio(options={}) {
     }else if(name==='clear'){
       rustle(effects,at,.18,.09,900);tone(effects,50,at,.12,.1,'triangle',.01,90);
     }else if(name==='hurt'){
-      tone(effects,40,at,.3,.22,'sine',.006,35);rustle(effects,at,.17,.08,650);
+      // 篝火受击：重低音下坠、干脆碎裂与连续塌落；仍经过玩家音量和总限幅。
+      tone(effects,43,at,.55,.52,'sine',.003,28);
+      tone(effects,52,at,.18,.15,'triangle',.002,45);
+      rustle(effects,at,.13,.38,7200,950);
+      [.035,.085,.14,.22].forEach((offset,i)=>rustle(effects,at+offset,.08+i*.035,.20-i*.03,4800-i*700,700));
+      rustle(effects,at+.055,.72,.24,1500,180,.008);
     }else if(name==='sunset'){
       // 落日：空气下沉、低音扫落，收尾是一声远处的闷响。
       rustle(effects,at,1.3,.13,2500,180,.2);
