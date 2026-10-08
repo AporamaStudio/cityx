@@ -106,3 +106,7 @@ header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320
 header{grid-template-columns:auto auto minmax(140px,1fr) minmax(240px,1.4fr) auto;gap:16px}
 @media(max-width:900px){header{grid-template-columns:auto auto minmax(0,1fr) auto;gap:10px}}
 @media(max-width:540px){header{grid-template-columns:auto auto auto}.audio-settings{grid-column:3;grid-row:1}.daily-objective{grid-column:1/-1}}
+
+#firstNightNotice{color:#ffd477;font-size:14px} #firstNightNotice[hidden]{display:none}
+
+.daily-objective{display:flex;align-items:center;gap:12px;flex-wrap:wrap}

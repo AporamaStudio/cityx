@@ -3,7 +3,7 @@ import {drawRoadTexture,drawBlockTexture} from './city-textures.js?v=3';
 import {drawCampfire} from './icons.js';
 import {createGameAudio} from './audio.js?v=3';
 import { SIZE, DEFAULTS } from './config.js?v=45';
-import { contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=45';
+import { knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=46';
 import {generateCityMap} from './city-map.js?v=6';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -100,7 +100,8 @@ function draw() {
   const postError=postHover?(paramsDirty()?'请先应用或取消参数预览。':outpostError(state,hover)):'';
   const postGhost=postHover&&!postError;
   const previewState=postGhost?{...state,outposts:new Map([...state.outposts,[hover,{plotId:productionId(hover,state),day:state.day}]])}:state;
-  const plannedRoutes=forecastAttacks(state,Number($('forecastDay').value)+1);
+  const knownIds=new Set(knownSources(state).map(s=>key(s.x,s.y)));
+  const plannedRoutes=forecastAttacks(state,Number($('forecastDay').value)+1).map(attack=>knownIds.has(key(attack.x,attack.y))?attack:{...attack,path:[]});
   const sourcePath=source=>plannedRoutes[viewedSources().indexOf(source)]?.path||[];
   const weaponHover=hover!==null&&canBuildWeapon()&&['build','long'].includes(tool);
   const weapon=selectedWeapon();
@@ -293,22 +294,15 @@ function draw() {
     ctx.restore();
   }
   // 敌源共用红色切角轮廓；细色条仅对应路线，不暗示不同敌种。
-  const drawSource=(source,index,futureDay=null)=>{
-    const {x,y}=source;ctx.save();
-    ctx.fillStyle=futureDay?'#1b2429':'#632f36';ctx.strokeStyle=futureDay?'#c48985':'#ff9a8b';ctx.lineWidth=.09;
-    if(futureDay)ctx.setLineDash([.14,.10]);
+  const drawSource=(source,index)=>{
+    const {x,y}=source;ctx.save();ctx.globalAlpha=source.active?1:.35;
+    ctx.fillStyle='#632f36';ctx.strokeStyle='#ff9a8b';ctx.lineWidth=.09;
     ctx.beginPath();ctx.moveTo(x+.23,y+.04);ctx.lineTo(x+.77,y+.04);ctx.lineTo(x+.96,y+.23);ctx.lineTo(x+.96,y+.77);ctx.lineTo(x+.77,y+.96);ctx.lineTo(x+.23,y+.96);ctx.lineTo(x+.04,y+.77);ctx.lineTo(x+.04,y+.23);ctx.closePath();ctx.fill();ctx.stroke();ctx.setLineDash([]);
     ctx.fillStyle=colors[index%colors.length];ctx.fillRect(x+.24,y+.79,.52,.08);
-    label(index+1,x+.5,y+.43,futureDay?'#d6b2ad':'#fff0e9',Math.max(.5,9/size));
-    if(futureDay){ctx.fillStyle='#142024';ctx.fillRect(x-.15,y- .65,1.3,.58);label(`D${futureDay}`,x+.5,y-.35,'#e0b3ab',Math.max(.36,9/size));}
+    label(index+1,x+.5,y+.43,'#fff0e9',Math.max(.5,9/size));
     ctx.restore();
   };
-  viewedSources().forEach((source,index)=>drawSource(source,index));
-  const visibleIds=new Set(viewedSources().map(s=>key(s.x,s.y)));
-  state.waves.slice(state.day).forEach((wave,index)=>wave.forEach((source,sourceIndex)=>{
-    const id=key(source.x,source.y);if(visibleIds.has(id))return;visibleIds.add(id);
-    drawSource(source,sourceIndex,state.day+index+1);
-  }));
+  knownSources(state).forEach(source=>drawSource(source,source.index));
   const [cx,cy] = xy(state.camp);
   // 火光是共同守护目标，用局部光晕定位；不暗化整个战场。
   const glow=ctx.createRadialGradient(cx+.5,cy+.5,.1,cx+.5,cy+.5,1.8);
@@ -446,6 +440,7 @@ function update() {
   fire = fireField({...state,params:previewParams()});
   // 夜晚聚焦补炮；资金不足仍显示灰色炮台，区别于阶段不允许的工具。
   const daytime=state.phase==='build';
+  if(!daytime||firstNightReady(state))$('firstNightNotice').hidden=true;
   for(const id of ['wall','outpost','production','housing','repair','erase'])$(id).hidden=!daytime;
   $('economyTools').hidden=!daytime||state.day<2;$('commonTools').hidden=!daytime;
   $('housing').hidden=!daytime||state.day<2;$('production').hidden=!daytime||state.day<2;$('outpost').hidden=!daytime||state.day<3;
@@ -797,6 +792,17 @@ $('start').onclick=()=>{
   if(campaignComplete(state))return;
   if(state.phase==='battle'){paused=!paused;timer=0;update();return;}
   if(state.phase!=='build')return;
+  if(!firstNightReady(state)){
+    const notice=$('firstNightNotice');notice.hidden=false;
+    // 每次拒绝开战都重播强调反馈，连续点击也能立即得到回应。
+    notice.getAnimations().forEach(animation=>animation.cancel());
+    notice.animate([
+      {color:'#ffd477',backgroundColor:'transparent'},
+      {color:'#fff7d6',backgroundColor:'#8c542d'},
+      {color:'#ffd477',backgroundColor:'transparent'}
+    ],{duration:reducedMotion.matches?700:450,iterations:reducedMotion.matches?1:2});
+    return;
+  }
   if(paramsDirty()){ $('experiments').open=true;notify('实验参数有未应用修改，请先应用或取消预览。');return; }
   if(JSON.stringify(readSources())!==JSON.stringify(state.sources)){ $('configError').textContent='来袭配置有未应用修改，请先应用配置。';$('settings').open=true;notify('请先应用来袭配置，确保预览与实际波次一致。');return; }
   const error=validateSources(state.sources,state);if(error){notify(error);return;}

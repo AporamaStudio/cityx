@@ -74,6 +74,15 @@ export function createCampaign(params=DEFAULTS, waves=WAVES, layout=null) {
   return state;
 }
 export const reservedSources=state=>state.waves?.slice(state.day-1).flat()??state.sources;
+// 按首次出兵日公开敌源；同一坐标视为同一个源头，停兵时保留地标。
+export function knownSources(state) {
+  const known=new Map();
+  for(const wave of state.waves?.slice(0,state.day)??[state.sources])wave.forEach((source,index)=>{
+    if(source.count>0)known.set(key(source.x,source.y),{...source,index});
+  });
+  return [...known.values()].map(source=>({...source,active:state.sources.some(s=>s.count>0&&s.x===source.x&&s.y===source.y)}));
+}
+export const firstNightReady=state=>state.day!==1||state.towers.size>0;
 export const campaignComplete=state=>state.phase==='won'&&state.day===(state.waves?.length??1);
 function clearNight(state) {
   state.tick=0;state.enemies=[];state.enemyOutcomes=new Map();state.events=[];state.spawned=0;state.removed=0;
@@ -635,7 +644,7 @@ export function visionField(state,phase=state.phase){
   for(const [id,type] of state.towers)if(state.towerHealth.get(id)?.hp!==0)
     for(const cell of coverage(id,p.weapons[type].range,p.weapons[type].shape))seen.add(cell);
   const size=p.sourceRevealSize,offset=Math.floor((size-1)/2);
-  for(const source of state.waves?.flat()??state.sources)for(let dy=0;dy<size;dy++)for(let dx=0;dx<size;dx++){
+  for(const source of knownSources(state))for(let dy=0;dy<size;dy++)for(let dx=0;dx<size;dx++){
     const x=source.x-offset+dx,y=source.y-offset+dy;if(inside(x,y))seen.add(key(x,y));
   }
   // 医院中心固定揭示 5×5，仅提供地标信息，不代表已经控制或占领。
