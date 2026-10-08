@@ -34,10 +34,10 @@ test('有短绕路也直接攻击路线上的墙，攻破后下一拍进入原�
   stepBattle(s);assert.equal(s.enemies[0].id,wall);assert.deepEqual(s.attacks,plan);assert.equal(s.playerWalls.has(wall),true);
 });
 
-test('敌人经过路边炮塔不停下攻击，也不按火力选择目标',()=>{
+test('敌人接触路边炮塔才攻击，不为远处高火力改目标',()=>{
   const s=make(100),near=key(14,21),far=key(17,22);buildTower(s,near,'A');buildTower(s,far,'B');s.params.weapons.B.power=9;
   const target=s.attacks[0].target;beginBattle(s);step(s,3);
-  assert.equal(s.enemies[0].id,key(15,22));assert.equal(s.towerHealth.get(near).hp,10);assert.equal(s.towerHealth.get(far).hp,12);assert.equal(s.enemies[0].target,target);
+  assert.equal(s.enemies[0].id,key(15,21));assert.equal(s.towerHealth.get(near).hp,9);assert.equal(s.towerHealth.get(far).hp,12);assert.equal(s.enemies[0].target,target);
 });
 
 test('炮塔损坏保留投资与占地、立即停火，次日付费维修恢复输出',()=>{

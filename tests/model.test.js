@@ -201,7 +201,7 @@ test('经营胜利结算一次、跨晚继承，失败不发钱，重试不复�
 });
 
 
-test('多格街区任意格操作同一投资，整块控制才有生产资格',async()=>{
+test('多格街区任意格操作同一投资，建筑至少碰一格才有生产资格',async()=>{
   const {productionCells,productionError,buildProduction,removeProduction,expectedIncome}=await import('../src/model.js');
   const s=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1,budget:70,controlRadius:30});s.day=2;
   assert.equal(productionCells(key(12,25)).length,4);assert.equal(buildProduction(s,key(12,25)),'');
@@ -210,7 +210,7 @@ test('多格街区任意格操作同一投资，整块控制才有生产资格',
   assert.equal(removeProduction(s,key(11,25)),'');assert.equal(funds(s),70);
   assert.equal(buildProduction(s,key(4,24)),'');assert.equal(funds(s),14);assert.equal(expectedIncome(s),9);
   assert.match(productionError(s,key(11,24)),/资金不足/);
-  const partial=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1,controlRadius:1});partial.day=2;assert.match(productionError(partial,key(11,24)),/缺.*格控制/);
+  const partial=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1,controlRadius:1});partial.day=2;assert.match(productionError(partial,key(11,24)),/碰到建筑至少一格/);
 });
 test('街区布局不重叠、不覆盖源头，报价按基准单价和面积曲线计算',async()=>{
   const {PRODUCTION_SITES}=await import('../src/config.js');
@@ -221,7 +221,7 @@ test('街区布局不重叠、不覆盖源头，报价按基准单价和面积�
   const params={...DEFAULTS,productionCostPerCell:9,productionIncomePerCell:2};
   assert.deepEqual(productionQuote({...s,params},key(2,22)),{area:9,cost:63,income:18});
   assert.deepEqual(productionQuote({...s,params},key(11,24)),{area:4,cost:23,income:8});
-  buildProduction(s,key(11,24));assert.ok(validateParams({...DEFAULTS,controlRadius:3},s));
+  buildProduction(s,key(11,24));assert.equal(validateParams({...DEFAULTS,controlRadius:3},s),'');assert.ok(validateParams({...DEFAULTS,controlRadius:1},s));
   assert.match(validateParams({...DEFAULTS,productionCostPerCell:NaN},s),/每格/);
   assert.match(validateParams({...DEFAULTS,productionIncomePerCell:-1},s),/每格/);
 });

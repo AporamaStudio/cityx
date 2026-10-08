@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
 import {MAP_DEFAULTS,readMapSettings,mapSearch} from '../src/map-settings.js';
 import {DEFAULTS} from '../src/config.js';
-import {visionField,enemyAction,createCampaign,key,productionCells,productionQuote,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,rebuildTerrain,inControl,isExplored,removeOutpost,clearPlot,plotContent} from '../src/model.js';
+import {visionField,enemyAction,createCampaign,key,productionCells,productionQuote,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,rebuildTerrain,inControl,inGroundControl,isExplored,removeOutpost,clearPlot,plotContent} from '../src/model.js';
 
 test('尺寸、特殊设施和紧邻实验保持完整分区与通路',()=>{
   let joined=0;
@@ -30,7 +30,7 @@ test('生成地图接入路线、矩形经营、建设限制及重试',()=>{
   const layout=generateCityMap({...MAP_DEFAULTS,seed:0}),s=createCampaign({...DEFAULTS,budget:1000},undefined,layout);
   s.day=3;
   for(const wave of s.waves)assert.equal(validateSources(wave,s),'');
-  const b=s.sites.find(b=>b.kind==='building'&&b.ruinType==='production'&&b.width!==b.height&&productionControlled(s,key(b.x,b.y))),id=key(b.x,b.y);
+  const b=s.sites.find(b=>b.kind==='building'&&b.ruinType==='production'&&b.width!==b.height&&productionControlled(s,key(b.x,b.y))&&inGroundControl(s,key(b.x,b.y))),id=key(b.x,b.y);
   assert.equal(productionCells(id,s).length,b.width*b.height);assert.ok(!s.field.distance.has(id));
   assert.equal(productionQuote(s,id).area,b.width*b.height);assert.ok(productionQuote(s,id).cost<=b.width*b.height*8);assert.equal(productionQuote(s,id).income,Math.ceil(b.width*b.height*DEFAULTS.productionIncomePerCell));
   assert.ok(wallPreview(s,id).error);assert.equal(placementError(s,id),'');assert.equal(outpostError(s,id),'');
@@ -105,9 +105,9 @@ test('医院固定左上 10×12，不重叠且路网保持连通，不能清理�
   }
 });
 
-test('路旁近防炮不阻挡敌源路线，经过时不受攻击',()=>{
+test('路旁近防炮不改变敌源路线，实际接触后可以被攻击',()=>{
   const s=createCampaign(DEFAULTS,undefined,generateCityMap(MAP_DEFAULTS)),attack=s.attacks[1];
-  // 地图可以调整；保留“敌人路旁有炮，但下一格无炮”的回归场景。
+  // 地图可以调整；保留“下一格无炮，但街道敌人已与炮塔接触”的场景。
   let tower,position;
   for(let i=0;i<attack.path.length-1&&tower===undefined;i++)for(const delta of [-1,1,-60,60]){
     const candidate=attack.path[i]+delta;
@@ -116,9 +116,9 @@ test('路旁近防炮不阻挡敌源路线，经过时不受攻击',()=>{
   }
   assert.notEqual(tower,undefined);assert.equal(buildTower(s,tower,'A'),'');
   const enemy={id:attack.path[position],target:s.camp,path:[...attack.path]};
-  assert.deepEqual(enemyAction(s,enemy),{to:attack.path[position+1]});
-  beginBattle(s);for(let i=0;i<100&&s.phase==='battle';i++)stepBattle(s);
-  assert.equal(s.towerHealth.get(tower).hp,DEFAULTS.weapons.A.hp);
+  const path=[...attack.path];assert.deepEqual(enemyAction(s,enemy),{to:enemy.id,attackId:tower,attackType:'tower'});assert.deepEqual(attack.path,path);
+  beginBattle(s);s.enemies=[{...enemy,hp:100,max:100,members:1,sources:[1],origins:['1:0']}];stepBattle(s);
+  assert.equal(s.towerHealth.get(tower).hp,DEFAULTS.weapons.A.hp-DEFAULTS.enemyPower);
 });
 
 test('开局街区不产生三格以上宽道路，并满足三类受控地块保障',()=>{
