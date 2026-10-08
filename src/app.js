@@ -3,14 +3,21 @@ import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-text
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire} from './icons.js';
 import {createGameAudio} from './audio.js?v=3';
-import { SIZE, DEFAULTS } from './config.js?v=47';
-import { knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=47';
+import { SIZE, DEFAULTS } from './config.js?v=48';
+import { knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=48';
 import {generateCityMap} from './city-map.js?v=6';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
 mapSettings.width=SIZE;mapSettings.height=SIZE;
 const cityLayout=generateCityMap(mapSettings);
 const $ = id => document.getElementById(id);
+// Canvas 报价直接复用钱包 SVG，金币和人口不会出现第二套图形。
+const resourceIcons={};
+for(const [name,selector] of [['coin','.wallet .coin-icon'],['people','.population-main svg']]){
+  const svg=document.querySelector(selector).cloneNode(true);
+  svg.setAttribute('xmlns','http://www.w3.org/2000/svg');svg.setAttribute('width','32');svg.setAttribute('height','32');svg.style.color='#f4d3a2';
+  const image=new Image();image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(svg));resourceIcons[name]=image;
+}
 const sound=createGameAudio();
 // 玩家声音偏好独立于实验参数和战前快照，重试不会重新打开已关闭的声音。
 function updateAudioControls(){
@@ -366,63 +373,46 @@ function draw() {
   ctx.restore();
   if($('showFog').checked)drawFog(ctx,SIZE,sight,state.explored,nightMix,reducedMotion.matches?0:performance.now()/1000);
   ctx.restore();
-  // 街区状态与收益保持屏幕字号，不因全图缩小而变成难读的小字。
+  // 街区报价有字号上限，并随地块缩小以保持边缘留白。
   for(const p of state.sites){
     const id=key(p.x,p.y),built=state.production.has(id),active=built&&productionActive(state,id);
     // 敌人经过街区时优先显示敌群，避免标签盖住生命与血条。
     const cells=productionCells(id,state);
     if(p.role==='hospital'?!visibleCell(key(p.x+Math.floor((p.width??p.size)/2),p.y+Math.floor((p.height??p.size)/2))):!cells.every(cell=>visibleCell(cell)))continue;
-    if(p.role!=='hospital'&&!['production','housing','outpost'].includes(tool))continue;
-    // 全图用于判断方向，不让固定字号标签挤满小地块；悬停仍能查看。
-    if(p.role!=='hospital'&&(size<12||state.day===1)&&productionId(hover,state)!==id)continue;
+    if(p.role!=='hospital'&&!['production','housing'].includes(tool))continue;
+    // 第一天尚未开放经营；正常报价随地块缩放，不再因镜头缩小突然消失。
+    if(p.role!=='hospital'&&state.day===1&&productionId(hover,state)!==id)continue;
     if((motion?.actors||state.enemies).some(e=>cells.includes(e.id)||cells.includes(e.to)))continue;
     const x=panX+(p.x+(p.width??p.size)/2)*size,y=panY+(p.y+(p.height??p.size)/2)*size;
     if(p.role!=='hospital'&&!built&&productionId(hover,state)!==id&&!productionControlled(state,id))continue;
-    const content=plotContent(state,id),post=content.type==='outpost';
+    const content=plotContent(state,id);
     if(cells.includes(state.camp))continue;
-    if(content.type==='housing'||(tool==='housing'&&content.status==='empty'&&p.role!=='hospital')){
-      const q=housingQuote(state,id),builtHome=state.housing.has(id),text=builtHome?`⌂ ${q.residents} 人`:`${content.status==='ruin'?'⌂ ':''}−${q.cost}    · +${q.residents} 人`;
-      ctx.font='600 11px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
-      const w=ctx.measureText(text).width+12;ctx.fillStyle='#142024f2';ctx.fillRect(x-w/2,y-12,w,24);ctx.fillStyle='#f4d3a2';ctx.fillText(text,x,y);
-      if(!builtHome){const coinX=x-ctx.measureText(text).width/2+ctx.measureText(`${content.status==='ruin'?'⌂ ':''}−${q.cost}`).width+7;ctx.fillStyle='#f3c557';ctx.beginPath();ctx.arc(coinX,y,4,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff0ac';ctx.lineWidth=1;ctx.stroke();}continue;
-    }
-    if(built){
-      const text=`+${active?productionQuote(state,id).income:0}`;
-      ctx.save();ctx.font='600 11px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
-      const w=ctx.measureText(text).width+22;ctx.fillStyle='#142024f2';ctx.fillRect(x-w/2,y-11,w,22);ctx.fillStyle=active?'#bff5ce':'#f3a49c';ctx.fillText(text,x-w/2+5,y);
-      const coinX=x+w/2-8;ctx.fillStyle='#f3c557';ctx.beginPath();ctx.arc(coinX,y,4.5,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff0ac';ctx.lineWidth=1;ctx.beginPath();ctx.arc(coinX,y,3,0,Math.PI*2);ctx.stroke();ctx.restore();continue;
-    }
-    if(content.status==='ruin'&&p.role!=='hospital'){
-      const quote=productionQuote(state,id),cost=`−${quote.cost}`,income=`+${quote.income}`;
-      ctx.save();ctx.font='600 11px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
-      const w=Math.max(ctx.measureText(cost).width+33,ctx.measureText(income).width+36);let left=x-w/2;
-      // 小街区紧邻火光时将报价挪到血条右侧，用短线保留地块对应关系。
-      const hpX=panX+(cx+.5)*size,hpY=panY+cy*size-25;
-      if(y+18>hpY&&y-18<hpY+23&&left<hpX+39&&left+w>hpX-39){
-        left=hpX+43;ctx.strokeStyle='#b8afa0';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(left,y);ctx.stroke();
-      }
-      ctx.fillStyle='#142024f2';ctx.fillRect(left,y-18,w,36);
-      // 破损屋顶、裂缝和残墙表示废墟；图标与费用同排，避免额外占一列。
-      ctx.fillStyle='#b8afa0';ctx.beginPath();ctx.moveTo(left+4,y-3);ctx.lineTo(left+4,y-14);ctx.lineTo(left+8,y-14);ctx.lineTo(left+8,y-10);ctx.lineTo(left+11,y-12);ctx.lineTo(left+14,y-9);ctx.lineTo(left+14,y-3);ctx.closePath();ctx.fill();
-      ctx.strokeStyle='#142024';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left+10,y-10);ctx.lineTo(left+8,y-7);ctx.lineTo(left+11,y-5);ctx.stroke();
-      const row=(text,cy,color,suffix='')=>{
-        const start=left+(suffix?5:18);ctx.fillStyle=color;ctx.fillText(text,start,cy);const cx=start+ctx.measureText(text).width+7;
-        ctx.fillStyle='#f3c557';ctx.beginPath();ctx.arc(cx,cy,4.5,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff0ac';ctx.lineWidth=1;ctx.beginPath();ctx.arc(cx,cy,3,0,Math.PI*2);ctx.stroke();
-        ctx.strokeStyle='#9b671b';ctx.beginPath();ctx.moveTo(cx,cy-2);ctx.lineTo(cx,cy+2);ctx.stroke();
-        if(suffix){ctx.fillStyle=color;ctx.fillText(suffix,cx+7,cy);}
-      };
-      row(cost,y-8,funds(state)>=quote.cost?'#f5df9c':'#f3a49c');row(income,y+8,'#bff5ce','/天');ctx.restore();continue;
-    }
     if(p.role==='hospital'){
       ctx.save();ctx.font='700 18px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
       ctx.lineWidth=4;ctx.strokeStyle='#142024';ctx.strokeText('医院',x,y);ctx.fillStyle='#fff0bc';ctx.fillText('医院',x,y);ctx.restore();continue;
     }
-    const title=post?'前哨':built?(active?'生产中':'已停产'):content.status==='empty'?'空地':'生产废墟';
-    ctx.font='600 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
-    const w=Math.max(ctx.measureText(title).width+8,48);
-    ctx.fillStyle='#142024ed';ctx.fillRect(x-w/2,y-14,w,30);
-    ctx.fillStyle=active?'#bff5ce':built?'#ffb7a5':'#f5df9c';ctx.fillText(title,x,y-6);
-    ctx.font='10px system-ui';ctx.fillText(post?'不受击':built&&!active?'收入 0':content.status==='empty'?'可选建筑':`+${productionQuote(state,id).income}/晚`,x,y+8);
+    // 空地跟随所选用途报价，已有用途只在对应工具下显示。
+    if(content.status!=='empty'&&content.type!==tool)continue;
+    const home=tool==='housing',complete=home?state.housing.has(id):built;
+    const quote=home?housingQuote(state,id):productionQuote(state,id);
+    const rows=[];
+    if(!complete)rows.push({text:`−${quote.cost}`,icon:'coin',suffix:'',color:funds(state)>=quote.cost?'#f5df9c':'#f3a49c'});
+    rows.push({text:`+${home?quote.residents:complete&&!active?0:quote.income}`,icon:home?'people':'coin',suffix:home?'':'/天',color:home?'#f4d3a2':'#bff5ce'});
+    ctx.save();ctx.font='600 10px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
+    const iconSize=11,rowHeight=14;
+    const widths=rows.map(row=>ctx.measureText(row.text).width+iconSize+3+ctx.measureText(row.suffix).width);
+    const width=Math.max(...widths)+8,height=rows.length*rowHeight+4;
+    // 将整个标签（底板、图标和文字）等比收进街区，四周至少留 0.15 格。
+    const fit=Math.min(1,Math.max(0,(p.width??p.size)-.3)*size/width,Math.max(0,(p.height??p.size)-.3)*size/height);
+    ctx.translate(x,y);ctx.scale(fit,fit);ctx.translate(-x,-y);
+    ctx.fillStyle='#142024f2';ctx.fillRect(x-width/2,y-height/2,width,height);
+    rows.forEach((row,i)=>{
+      const left=x-widths[i]/2,cy=y+(i-(rows.length-1)/2)*rowHeight;
+      ctx.fillStyle=row.color;ctx.fillText(row.text,left,cy);
+      const iconX=left+ctx.measureText(row.text).width+2,image=resourceIcons[row.icon];
+      if(image.complete&&image.naturalWidth)ctx.drawImage(image,iconX,cy-iconSize/2,iconSize,iconSize);
+      ctx.fillText(row.suffix,iconX+iconSize+1,cy);
+    });ctx.restore();
   }
   // 建设反馈跟随地图位置；短暂边框与金额提示不参与规则结算。
   if(placementFx){
@@ -538,6 +528,8 @@ function updateNightReport(){
   if(!report)return;
   $('reportTitle').textContent=`${state.phase==='build'?'昨天':'今天'}收入`;
   $('reportTotal').textContent=`+${report.economy+report.earned}`;
+  // 第一晚尚未开放经营，次日不展示无意义的经营收入项。
+  $('reportEconomy').closest('.report-economy').hidden=report.day===1;
   $('reportEconomy').textContent=`+${report.economy}`;
   $('reportKills').textContent=`+${report.earned}`;
 }

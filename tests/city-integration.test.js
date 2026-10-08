@@ -85,7 +85,7 @@ test('不同 seed 起步保证受控的廉价 2×2 废墟，包括普通尺寸 3
   for(let seed=0;seed<12;seed++){
     const layout=generateCityMap({...MAP_DEFAULTS,seed,minBlock:3,maxBlock:6}),s=createCampaign(DEFAULTS,undefined,layout);
     const b=s.sites.find(p=>p.role==='starter');assert.ok(b);assert.equal(b.width,2);assert.equal(b.height,2);
-    const id=key(b.x,b.y);assert.ok(productionControlled(s,id));assert.equal(productionQuote(s,id).cost,10);
+    const id=key(b.x,b.y);assert.ok(productionControlled(s,id));assert.equal(productionQuote(s,id).cost,5);
     s.day=2;assert.equal(buildProduction(s,id),'');
   }
 });

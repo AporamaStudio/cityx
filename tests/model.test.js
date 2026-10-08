@@ -290,12 +290,12 @@ test('昨夜经营报告固定控制不足的停产数量，次日拆建不改�
 
 test('每格收入减半保留小数，整块最终收入向上取整',async()=>{
   const {productionQuote}=await import('../src/model.js');
-  assert.equal(DEFAULTS.productionCostPerCell,4);assert.equal(DEFAULTS.productionIncomePerCell,0.5);
+  assert.equal(DEFAULTS.productionCostPerCell,2);assert.equal(DEFAULTS.productionIncomePerCell,0.5);
   const s=createCampaign();assert.equal(validateParams(s.params,s),'');
   const quote=(width,height)=>productionQuote({...s,sites:[{x:0,y:0,width,height}]},0);
-  assert.deepEqual(quote(2,2),{area:4,cost:10,income:2});
+  assert.deepEqual(quote(2,2),{area:4,cost:5,income:2});
   assert.equal(quote(3,3).income,5);
-  assert.deepEqual(quote(5,5),{area:25,cost:152,income:19});
+  assert.deepEqual(quote(5,5),{area:25,cost:76,income:19});
 });
 
 test('敌群预告区分出生批次和抵达结果，重试清空结果',async()=>{

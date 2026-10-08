@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=47';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=48';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
