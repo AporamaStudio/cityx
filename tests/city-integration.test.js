@@ -27,7 +27,7 @@ test('放不下的特殊区块不偷偷缩小，地图参数可通过链接复�
   assert.throws(()=>generateCityMap({minBlock:6,maxBlock:3}));
 });
 test('生成地图接入路线、矩形经营、建设限制及重试',()=>{
-  const layout=generateCityMap(MAP_DEFAULTS),s=createCampaign({...DEFAULTS,budget:1000},undefined,layout);
+  const layout=generateCityMap({...MAP_DEFAULTS,seed:'cityx-02'}),s=createCampaign({...DEFAULTS,budget:1000},undefined,layout);
   s.day=3;
   for(const wave of s.waves)assert.equal(validateSources(wave,s),'');
   const b=s.sites.find(b=>b.kind==='building'&&b.width!==b.height&&productionControlled(s,key(b.x,b.y))),id=key(b.x,b.y);
@@ -86,6 +86,7 @@ test('不同 seed 起步保证受控的廉价 2×2 废墟，包括普通尺寸 3
     const layout=generateCityMap({...MAP_DEFAULTS,seed,minBlock:3,maxBlock:6}),s=createCampaign(DEFAULTS,undefined,layout);
     const b=s.sites.find(p=>p.role==='starter');assert.ok(b);assert.equal(b.width,2);assert.equal(b.height,2);
     const id=key(b.x,b.y);assert.ok(productionControlled(s,id));assert.equal(productionQuote(s,id).cost,5);
+    const larger=s.sites.find(p=>p.role==='starterLarge');assert.deepEqual([larger.width,larger.height],[3,3]);assert.equal(larger.ruinType,'production');assert.ok(productionControlled(s,key(larger.x,larger.y)));
     s.day=2;assert.equal(buildProduction(s,id),'');
   }
 });

@@ -5,7 +5,7 @@ import {drawCampfire} from './icons.js';
 import {createGameAudio} from './audio.js?v=3';
 import { SIZE, DEFAULTS } from './config.js?v=48';
 import { knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=48';
-import {generateCityMap} from './city-map.js?v=6';
+import {generateCityMap} from './city-map.js?v=7';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
 mapSettings.width=SIZE;mapSettings.height=SIZE;
@@ -397,10 +397,15 @@ function draw() {
     const quote=home?housingQuote(state,id):productionQuote(state,id);
     const rows=[];
     if(!complete)rows.push({text:`−${quote.cost}`,icon:'coin',suffix:'',color:funds(state)>=quote.cost?'#f5df9c':'#f3a49c'});
+    if(!home){
+      const labor=productionLabor(state,id);
+      if(!complete)rows[0].labor=labor;
+      else rows.push({text:`−${labor}`,icon:'people',suffix:'',color:'#f4d3a2'});
+    }
     rows.push({text:`+${home?quote.residents:complete&&!active?0:quote.income}`,icon:home?'people':'coin',suffix:home?'':'/天',color:home?'#f4d3a2':'#bff5ce'});
     ctx.save();ctx.font='600 10px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
     const iconSize=11,rowHeight=14;
-    const widths=rows.map(row=>ctx.measureText(row.text).width+iconSize+3+ctx.measureText(row.suffix).width);
+    const widths=rows.map(row=>ctx.measureText(row.text).width+iconSize+3+ctx.measureText(row.suffix).width+(row.labor!==undefined?ctx.measureText(`−${row.labor}`).width+iconSize+9:0));
     const width=Math.max(...widths)+8,height=rows.length*rowHeight+4;
     // 将整个标签（底板、图标和文字）等比收进街区，四周至少留 0.15 格。
     const fit=Math.min(1,Math.max(0,(p.width??p.size)-.3)*size/width,Math.max(0,(p.height??p.size)-.3)*size/height);
@@ -412,6 +417,11 @@ function draw() {
       const iconX=left+ctx.measureText(row.text).width+2,image=resourceIcons[row.icon];
       if(image.complete&&image.naturalWidth)ctx.drawImage(image,iconX,cy-iconSize/2,iconSize,iconSize);
       ctx.fillText(row.suffix,iconX+iconSize+1,cy);
+      if(row.labor!==undefined){
+        const laborX=iconX+iconSize+7,text=`−${row.labor}`,people=resourceIcons.people;
+        ctx.fillStyle='#f4d3a2';ctx.fillText(text,laborX,cy);
+        if(people.complete&&people.naturalWidth)ctx.drawImage(people,laborX+ctx.measureText(text).width+2,cy-iconSize/2,iconSize,iconSize);
+      }
     });ctx.restore();
   }
   // 建设反馈跟随地图位置；短暂边框与金额提示不参与规则结算。

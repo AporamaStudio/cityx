@@ -90,21 +90,23 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
     if(tiles.some((t,id)=>t!=='block'&&d[id]<0)){paint(stripe,'road');continue;}
     a.width++;a.joined=true;b.joined=true;joined++;
   }
-  // 教学起步区统一预留：3×3 火光广场，两侧各一块 2×2 废墟，中间留路。
+  // 教学起步区统一预留：3×3 火光广场，两侧各一块 2×2 废墟，北侧加 3×3 生产废墟，中间留路。
   if(starterPlot){
     const cx=Math.max(6,Math.min(width-7,camp.x)),top=height-5;
     const area={x:cx-5,y:top-1,width:11,height:5};
+    const areas=[area,{x:cx-2,y:top-5,width:5,height:5}];
     for(let i=blocks.length-1;i>=0;i--){
       const b=blocks[i];
-      if(b.role==='camp'||(b.x<area.x+area.width&&b.x+b.width>area.x&&b.y<area.y+area.height&&b.y+b.height>area.y)){
+      if(b.role==='camp'||areas.some(a=>b.x<a.x+a.width&&b.x+b.width>a.x&&b.y<a.y+a.height&&b.y+b.height>a.y)){
         paint(b,'road');blocks.splice(i,1);
       }
     }
-    paint(area,'road');
+    areas.forEach(a=>paint(a,'road'));
     const plaza=addBlock({x:cx-1,y:top,width:3,height:3},'open');plaza.role='camp';plaza.special=true;plaza.name='火光广场';
     camp.x=cx;camp.y=top+1;
     const production=addBlock({x:cx-4,y:top,width:2,height:2},'building');production.role='starter';
     const housing=addBlock({x:cx+3,y:top,width:2,height:2},'building');housing.role='starterHousing';
+    const largerProduction=addBlock({x:cx-1,y:top-4,width:3,height:3},'building');largerProduction.role='starterLarge';
     blocks.forEach((b,i)=>b.id=i);
   }
   // 按最终地形记录道路，包含边缘余量，去掉被合拢的道路段。
@@ -113,7 +115,7 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
   roads.length=0;
   for(let cy=0;cy<height;cy++)for(let cx=0;cx<width;cx++)if(tiles[cy*width+cx]==='road')roads.push({x:cx,y:cy,width:1,height:1,kind:roadKinds.get(cy*width+cx)||'street'});
   // 在几何完成后分配原用途，避免改变既有 seed 的街道布局；起步生产点保留。
-  for(const b of blocks)if(b.kind==='building')b.ruinType=b.role==='hospital'?'hospital':b.role==='starter'?'production':b.role==='starterHousing'?'housing':random()<.35?'housing':'production';
+  for(const b of blocks)if(b.kind==='building')b.ruinType=b.role==='hospital'?'hospital':['starter','starterLarge'].includes(b.role)?'production':b.role==='starterHousing'?'housing':random()<.35?'housing':'production';
   const buildings=blocks.filter(b=>b.kind==='building'),openSpaces=blocks.filter(b=>b.kind==='open');
   const occupied=tiles.filter(t=>t==='block').length;
   return {version:5,seed,width,height,mainRoadWidth,minBlock,maxBlock,special,specialMin,specialMax,touching,starterPlot,hospital,tiles,roads,blocks,buildings,openSpaces,camp,goal,stats:{hospital:buildings.filter(b=>b.role==='hospital').length,special:buildings.filter(b=>b.special&&b.role!=='hospital').length,joined,buildings:buildings.length,openSpaces:openSpaces.length,occupied,coverage:occupied/(width*height)}};
