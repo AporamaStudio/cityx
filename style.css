@@ -123,6 +123,14 @@ header{grid-template-columns:auto auto minmax(140px,1fr) minmax(240px,1.4fr) aut
 #viewport.camp-critical::after{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;box-shadow:inset 0 0 70px 12px #cf403754;animation:camp-danger 1.4s ease-in-out infinite}
 #campHitFlash{position:absolute;inset:0;z-index:3;pointer-events:none;opacity:0;background:#e5413324;box-shadow:inset 0 0 90px 20px #ed453a99}
 .repair-hp{margin-left:5px;color:var(--teal)}
+/* 虚线框与条纹生命段只表达修复预览，保留真实余额和当前 HP。 */
+.refund-preview.spend-preview{margin-left:0;padding:1px 4px;border-color:var(--red);color:var(--red);font-size:14px}
+.wallet:has(.spend-preview:not([hidden]))>div:not(.resource-people){flex:1;min-width:0;flex-wrap:wrap;gap:4px}
+.camp-health{display:flex;align-items:center;gap:6px;white-space:nowrap}
+#campHPPreview{padding:1px 4px;border:1px dashed var(--teal);border-radius:4px;color:var(--teal);font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+#campPanel .meter{position:relative}
+#campBarPreview{position:absolute;top:0;height:100%;box-sizing:border-box;border:1px dashed var(--teal);background:repeating-linear-gradient(135deg,#85e0c166 0 3px,#85e0c1bb 3px 5px);transition:none}
+#campHPPreview[hidden],#campBarPreview[hidden]{display:none}
 @keyframes camp-danger{0%,100%{opacity:1}50%{opacity:.6}}
 #showDefeat{width:100%;margin-top:12px;border-color:#a56762;color:#ffc4bb}
 /* 结算保留失守地图作背景，优先让玩家回到战前重新布防。 */

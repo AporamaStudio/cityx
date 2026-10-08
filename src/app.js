@@ -152,19 +152,30 @@ function draw() {
   if(tool==='housing'&&hover!==null){const q=economyBuildQuote(state,hover,'housing');$('placementInfo').textContent=housingError(state,hover)||`住房预览 · 新增 ${q.added} 格 · 入住 +${q.residents} 人 · 花费 ${q.cost} · 剩余 ${funds(state)-q.cost}`;}
   if(tool==='production'&&hover!==null)$('placementInfo').textContent=productionError(state,hover)||`整块恢复预览 · 需要 ${productionLabor(state,hover)} 人（空闲 ${population(state).free}） · 每晚收入 +${productionQuote(state,hover).income} · 花费 ${productionQuote(state,hover).cost} · 剩余 ${funds(state)-productionQuote(state,hover).cost}`;
 
-  const refundPreview=$('refundPreview'),erasePreview=$('erasePreview'),repairPreview=$('repairPreview');
+  const refundPreview=$('refundPreview'),erasePreview=$('erasePreview'),repairPreview=$('repairPreview'),campHPPreview=$('campHPPreview'),campBarPreview=$('campBarPreview');
   refundPreview.hidden=true;erasePreview.hidden=true;repairPreview.hidden=true;$('moneyGain').hidden=false;
+  refundPreview.classList.remove('spend-preview');campHPPreview.hidden=true;campBarPreview.hidden=true;
   // 报价与实际修复共用余额计算；篝火显示本次可购买的 HP，保留不足单价的余款。
   if(repairHover){
-    const quote=repairQuote(state,hover);
+    const quote=repairQuote(state,hover),error=repairError(state,hover);
     if(quote.missing>0){
-      repairPreview.hidden=false;repairPreview.classList.toggle('unaffordable',!!repairError(state,hover));
+      repairPreview.hidden=false;repairPreview.classList.toggle('unaffordable',!!error);
       const previewKey=`${quote.type}:${quote.cost}:${quote.restore}`;
       if(repairPreview.dataset.quote!==previewKey){
         repairPreview.dataset.quote=previewKey;repairPreview.textContent=`−${quote.cost}`;
         repairPreview.append(document.querySelector('.price-coin').cloneNode(true));
         if(quote.type==='camp'){
           const gain=document.createElement('span');gain.className='repair-hp';gain.textContent=`+${quote.restore} HP`;repairPreview.append(gain);
+        }
+      }
+      // 只把可执行修复的扣款和恢复段叠在资源上，真实余额、HP 与危急状态不变。
+      if(!error&&quote.cost>0){
+        refundPreview.hidden=false;refundPreview.classList.add('spend-preview');$('moneyGain').hidden=true;
+        refundPreview.textContent=`−${quote.cost}`;refundPreview.setAttribute('aria-label',`预计花费 ${quote.cost} 金币，余额将为 ${funds(state)-quote.cost}`);
+        if(quote.type==='camp'){
+          campHPPreview.hidden=false;campHPPreview.textContent=`+${quote.restore}`;
+          campHPPreview.setAttribute('aria-label',`预计恢复 ${quote.restore} HP，修复后 ${state.hp+quote.restore} / ${state.params.campHP}`);
+          campBarPreview.hidden=false;campBarPreview.style.left=`${state.hp/state.params.campHP*100}%`;campBarPreview.style.width=`${quote.restore/state.params.campHP*100}%`;
         }
       }
     }
@@ -491,6 +502,10 @@ function update() {
   fire = fireField({...state,params:previewParams()});
   // 夜晚聚焦补炮；资金不足仍显示灰色炮台，区别于阶段不允许的工具。
   const daytime=state.phase==='build';
+  const repairTargets=[state.camp,...state.wallHealth.keys()].filter(id=>repairQuote(state,id).missing>0);
+  const repairAvailable=repairTargets.some(id=>!repairError(state,id));
+  // 修复耗尽余额或最后一个目标修满后退出工具，避免留下不可执行的预览。
+  if(tool==='repair'&&!repairAvailable)tool=null;
   if($('firstNightNotice').textContent==='请先建造一座炮塔'&&(!daytime||firstNightReady(state)))$('firstNightNotice').hidden=true;
   for(const id of ['wall','outpost','production','housing','repair','erase'])$(id).hidden=!daytime;
   $('economyTools').hidden=!daytime||state.day<2;$('commonTools').hidden=!daytime;
@@ -554,9 +569,8 @@ function update() {
     $(id).disabled=!allowed||short;
     $(id).title=!allowed?'防守中不能建设':short?(!Number.isFinite(cost)?'没有可补建的同用途街区':`资金不足：需要 ${cost}，现有 ${funds(state)}`):`花费 ${cost} 资金`;
   }
-  const repairPrices=[state.camp,...state.wallHealth.keys()].map(id=>repairQuote(state,id)).filter(q=>q.missing>0);
-  $('repair').disabled=!build||state.day<2||!repairPrices.length;
-  $('repair').title=state.day<2?'次日才能修复':!repairPrices.length?'没有受损设施':'悬停受损目标预览费用与恢复量';
+  $('repair').disabled=!repairAvailable;
+  $('repair').title=!build?'防守中不能修复':state.day<2?'次日才能修复':!repairTargets.length?'没有受损设施':!repairAvailable?repairError(state,repairTargets[0]):'悬停受损目标预览费用与恢复量';
   for(const id of ['applyParams','cancelParams','defaults'])$(id).disabled=!build||state.day!==1;
   document.querySelectorAll('#sources input, #sources select, #sources button').forEach(el=>el.disabled=!build);
   document.querySelectorAll('#params input, #params select').forEach(el=>el.disabled=!build||state.day!==1);
