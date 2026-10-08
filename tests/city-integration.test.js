@@ -27,10 +27,10 @@ test('放不下的特殊区块不偷偷缩小，地图参数可通过链接复�
   assert.throws(()=>generateCityMap({minBlock:6,maxBlock:3}));
 });
 test('生成地图接入路线、矩形经营、建设限制及重试',()=>{
-  const layout=generateCityMap({...MAP_DEFAULTS,seed:'cityx-02'}),s=createCampaign({...DEFAULTS,budget:1000},undefined,layout);
+  const layout=generateCityMap({...MAP_DEFAULTS,seed:0}),s=createCampaign({...DEFAULTS,budget:1000},undefined,layout);
   s.day=3;
   for(const wave of s.waves)assert.equal(validateSources(wave,s),'');
-  const b=s.sites.find(b=>b.kind==='building'&&b.width!==b.height&&productionControlled(s,key(b.x,b.y))),id=key(b.x,b.y);
+  const b=s.sites.find(b=>b.kind==='building'&&b.ruinType==='production'&&b.width!==b.height&&productionControlled(s,key(b.x,b.y))),id=key(b.x,b.y);
   assert.equal(productionCells(id,s).length,b.width*b.height);assert.ok(!s.field.distance.has(id));
   assert.equal(productionQuote(s,id).area,b.width*b.height);assert.ok(productionQuote(s,id).cost<=b.width*b.height*8);assert.equal(productionQuote(s,id).income,Math.ceil(b.width*b.height*DEFAULTS.productionIncomePerCell));
   assert.ok(wallPreview(s,id).error);assert.equal(placementError(s,id),'');assert.equal(outpostError(s,id),'');
@@ -105,12 +105,28 @@ test('医院固定左上 10×12，不重叠且路网保持连通，不能清理�
   }
 });
 
-test('默认城市43,50的近防炮不阻挡2号敌源路线，经过时不受攻击',()=>{
-  const s=createCampaign(DEFAULTS,undefined,generateCityMap(MAP_DEFAULTS)),tower=key(43,50);
-  assert.equal(buildTower(s,tower,'A'),'');const attack=s.attacks[1];
-  assert.ok(!attack.path.includes(tower));assert.ok(attack.path.includes(key(42,50)));
-  const enemy={id:key(42,50),target:s.camp,path:[...attack.path]};
-  assert.deepEqual(enemyAction(s,enemy),{to:key(41,50)});
+test('路旁近防炮不阻挡敌源路线，经过时不受攻击',()=>{
+  const s=createCampaign(DEFAULTS,undefined,generateCityMap(MAP_DEFAULTS)),attack=s.attacks[1];
+  // 地图可以调整；保留“敌人路旁有炮，但下一格无炮”的回归场景。
+  let tower,position;
+  for(let i=0;i<attack.path.length-1&&tower===undefined;i++)for(const delta of [-1,1,-60,60]){
+    const candidate=attack.path[i]+delta;
+    if(s.attacks.some(a=>a.path.includes(candidate))||placementError(s,candidate))continue;
+    tower=candidate;position=i;break;
+  }
+  assert.notEqual(tower,undefined);assert.equal(buildTower(s,tower,'A'),'');
+  const enemy={id:attack.path[position],target:s.camp,path:[...attack.path]};
+  assert.deepEqual(enemyAction(s,enemy),{to:attack.path[position+1]});
   beginBattle(s);for(let i=0;i<100&&s.phase==='battle';i++)stepBattle(s);
   assert.equal(s.towerHealth.get(tower).hp,DEFAULTS.weapons.A.hp);
+});
+
+test('开局街区不产生三格以上宽道路，并满足三类受控地块保障',()=>{
+ for(let seed=0;seed<12;seed++){
+  const map=generateCityMap({...MAP_DEFAULTS,seed}),s=createCampaign(DEFAULTS,undefined,map);
+  for(const [w,h,type] of [[2,2,'production'],[3,3,'production'],[2,2,'housing']])
+   assert.ok(map.blocks.some(b=>b.width===w&&b.height===h&&b.ruinType===type&&productionControlled(s,key(b.x,b.y))));
+  for(let y=map.height-9;y<map.height-2;y++)for(let x=0;x<map.width-2;x++)
+   assert.ok(!Array.from({length:9},(_,i)=>map.tiles[(y+Math.floor(i/3))*map.width+x+i%3]).every(t=>t==='road'));
+ }
 });

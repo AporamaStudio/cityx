@@ -46,9 +46,11 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
   // 地图边缘也是明确道路；纵向主轴保留两格，实验高速路时改为三格。
   road({x:0,y:0,width,height:1},'street');road({x:0,y:height-1,width,height:1},'street');
   road({x:0,y:1,width:1,height:height-2},'street');road({x:width-1,y:1,width:1,height:height-2},'street');
+  // 开局街区先划定完整带状区域，避免事后删整块建筑留下宽马路。
+  const cityEnd=starterPlot?height-9:height-1;
   const bands=[];let y=1,specialPlaced=false;
-  while(y<height-1){
-    const remaining=height-1-y;let h=Math.min(int(7,10),remaining);
+  while(y<cityEnd){
+    const remaining=cityEnd-y;let h=Math.min(int(7,10),remaining);
     if(remaining-h<minBlock+2)h=remaining;
     if(special&&!specialPlaced&&(!hospital||y>1)&&width>=specialMin+minBlock+mainRoadWidth+3&&remaining>=specialMin+minBlock+3)h=int(specialMin,Math.min(specialMax,remaining-minBlock-3));
     let spine=Math.floor((width-mainRoadWidth)/2)+int(-2,2);
@@ -90,23 +92,28 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
     if(tiles.some((t,id)=>t!=='block'&&d[id]<0)){paint(stripe,'road');continue;}
     a.width++;a.joined=true;b.joined=true;joined++;
   }
-  // 教学起步区统一预留：3×3 火光广场，两侧各一块 2×2 废墟，北侧加 3×3 生产废墟，中间留路。
+  // P0 起步保障：地块直接排入两排街区，横向间隔 1 格，小地块短边处最多 2 格。
   if(starterPlot){
-    const cx=Math.max(6,Math.min(width-7,camp.x)),top=height-5;
-    const area={x:cx-5,y:top-1,width:11,height:5};
-    const areas=[area,{x:cx-2,y:top-5,width:5,height:5}];
-    for(let i=blocks.length-1;i>=0;i--){
-      const b=blocks[i];
-      if(b.role==='camp'||areas.some(a=>b.x<a.x+a.width&&b.x+b.width>a.x&&b.y<a.y+a.height&&b.y+b.height>a.y)){
-        paint(b,'road');blocks.splice(i,1);
+    const cx=Math.floor(width/2),top=height-8;
+    const oldCamp=blocks.find(b=>b.role==='camp');if(oldCamp)delete oldCamp.role;
+    // 填满两侧街区；这里允许教学尺寸例外，但不把剩余空间摊成道路。
+    const fillStarterRow=(x,y,w)=>{
+      while(w>0){
+        const choices=[2,3,4,5].filter(n=>n===w||w-n-1>=2);
+        const n=choices[int(0,choices.length-1)];
+        addBlock({x,y,width:n,height:3},random()<.16?'open':'building');
+        x+=n+1;w-=n+1;
       }
+    };
+    for(const y of [top,top+4]){
+      fillStarterRow(1,y,cx-6);
+      fillStarterRow(cx+3,y,width-cx-4);
     }
-    areas.forEach(a=>paint(a,'road'));
-    const plaza=addBlock({x:cx-1,y:top,width:3,height:3},'open');plaza.role='camp';plaza.special=true;plaza.name='火光广场';
-    camp.x=cx;camp.y=top+1;
-    const production=addBlock({x:cx-4,y:top,width:2,height:2},'building');production.role='starter';
-    const housing=addBlock({x:cx+3,y:top,width:2,height:2},'building');housing.role='starterHousing';
-    const largerProduction=addBlock({x:cx-1,y:top-4,width:3,height:3},'building');largerProduction.role='starterLarge';
+    const production=addBlock({x:cx-4,y:top+1,width:2,height:2},'building');production.role='starter';
+    const largerProduction=addBlock({x:cx-1,y:top,width:3,height:3},'building');largerProduction.role='starterLarge';
+    const housing=addBlock({x:cx-4,y:top+5,width:2,height:2},'building');housing.role='starterHousing';
+    const plaza=addBlock({x:cx-1,y:top+4,width:3,height:3},'open');plaza.role='camp';plaza.special=true;plaza.name='火光广场';
+    camp.x=cx;camp.y=top+5;
     blocks.forEach((b,i)=>b.id=i);
   }
   // 按最终地形记录道路，包含边缘余量，去掉被合拢的道路段。
