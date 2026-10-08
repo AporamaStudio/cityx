@@ -833,6 +833,8 @@ $('start').onclick=()=>{
   if(JSON.stringify(readSources())!==JSON.stringify(state.sources)){ $('configError').textContent='来袭配置有未应用修改，请先应用配置。';$('settings').open=true;notify('请先应用来袭配置，确保预览与实际波次一致。');return; }
   const error=validateSources(state.sources,state);if(error){notify(error);return;}
   preparation=beginBattle(state);if(!preparation)return;
+  // 开战成功后撤下白天建设的失败提醒，避免被误认为夜间状态。
+  $('firstNightNotice').hidden=true;
   sound.play('sunset');
   receiptUntil=0;$('economyReceipt').hidden=true;recentGain=0;gainUntil=0;$('moneyGain').textContent='';
   $('forecastDay').value=String(state.day-1);paused=false;timer=0;last=performance.now();$('settings').open=false;notify('敌人正在接近。击杀自动获得资金；可暂停补炮，不能造墙或拆除。');update();
