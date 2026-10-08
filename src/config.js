@@ -8,7 +8,7 @@ export const DEFAULTS = {
   initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 4,
   productionCostPerCell: 2, productionIncomePerCell: 0.5, killReward: 2,
   budget: 100, wallCost: 2, wallHP: 12, enemyPower: 1, defenseRepairPercent: 50, demolitionRefundPercent: 50, controlRadius: 9, campHP: 30, stepMs: 450,
-  outpostCost: 25, outpostRadius: 6, campRepairCost: 1,
+  outpostMinDistance: 4, outpostCost: 25, outpostRadius: 6, campRepairCost: 1,
   weapons: {
     A: { shape: 'square', range: 1, power: 2, cost: 10 },
     B: { shape: 'square', range: 3, power: 1, cost: 20 },

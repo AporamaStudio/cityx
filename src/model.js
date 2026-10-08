@@ -112,7 +112,7 @@ export function fireField(state) {
   return fire;
 }
 export const funds = state => state.params.budget + (state.debugGold??0) + state.earned + state.economyEarned - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - state.outposts.size*state.params.outpostCost - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
-// 控制范围取火光与前哨覆盖的并集；地块内前哨不受击、不失守。
+// 控制范围取火光与瞭望塔覆盖的并集；地块内瞭望塔不受击、不失守。
 export function inStationRange(id, center, radius) {
   const [x,y]=xy(id),[cx,cy]=xy(center),dx=Math.abs(x-cx),dy=Math.abs(y-cy),cut=Math.min(2,radius);
   return Number.isInteger(id)&&id>=0&&id<SIZE*SIZE&&Math.max(dx,dy)<=radius&&dx+dy<=2*radius-cut;
@@ -153,7 +153,6 @@ export function rebuildTerrain(state) {
   state.blocked=new Set();
   for(const p of state.sites)if(plotContent(state,key(p.x,p.y)).status!=='empty')
     for(const id of buildingCells(state,key(p.x,p.y)))state.blocked.add(id);
-  for(const id of state.outposts.keys())state.blocked.add(id);
   state.terrainWalls=new Set([...state.fixedWalls,...state.blocked]);
   state.walls=new Set([...state.terrainWalls,...[...state.playerWalls].filter(id=>state.wallHealth.get(id)?.hp>0)]);
   rebuildFields(state);
@@ -193,12 +192,12 @@ export function forecastAttacks(state,night=state.day) {
   if(night===state.day)return state.attacks;
   return (state.waves?.[night-1]??[]).map((source,index)=>({...source,index,target:state.camp,path:pathFrom(key(source.x,source.y),state.field)}));
 }
-// 来源、目标与初始路线在白天开始锁定；前哨不进入目标池。
+// 来源、目标与初始路线在白天开始锁定；瞭望塔不进入目标池。
 export function lockAttacks(state) {
   state.attacks=state.sources.map((source,index)=>{const path=pathFrom(key(source.x,source.y),state.field);return {...structuredClone(source),index,target:state.camp,originalPath:[...path],path};});
 }
 export const enemyKey=(enemy)=>`${enemy.id}:${enemy.target}`;
-// 火光、墙与塔按实际缺失 HP 报价；一次修满，前哨无需维修。
+// 火光、墙与塔按实际缺失 HP 报价；一次修满，瞭望塔无需维修。
 export function repairQuote(state,id) {
   const camp=id===state.camp,wall=state.wallHealth.get(id),target=camp?{hp:state.hp,max:state.params.campHP}:wall;
   const missing=target?Math.max(0,target.max-target.hp):0,type=camp?'camp':wall?'wall':'';
@@ -223,7 +222,7 @@ export function repairFacility(state,id) {
   }
   return '';
 }
-// 前哨仅占锚点一格；街区经营与防御设施共用土地但独立拆除。
+// 瞭望塔仅占锚点一格；街区经营与防御设施共用土地但独立拆除。
 export const outpostAt=(state,id)=>state.outposts.has(id)?id:undefined;
 export function plotBuildError(state,id) {
   const cells=productionCells(id,state);
@@ -235,27 +234,28 @@ export function plotBuildError(state,id) {
   return '';
 }
 export function outpostError(state,id) {
-  if(state.day<3)return '第 3 天开放前哨与探索扩张。';
-  if(state.phase!=='build')return '防守中不能建设前哨。';
-  if(!inControl(state,id))return '前哨须建在受控地面或整体受控建筑的合法临街位置。';
-  const error=plotBuildError(state,id);if(error)return error;
-  if([...state.outposts.values()].some(p=>p.plotId===productionId(id,state)))return '一个街区最多建设一个前哨。';
-  if(state.towers.has(id)||state.playerWalls.has(id))return '该格已有防御设施。';
-  const embed=embeddingError(state,id);if(embed)return embed;
-  if(!streetEdgeAccess(state,id))return '前哨须位于街区边缘，并邻接街区外可达的道路或空地。';
-  return funds(state)+embeddingQuote(state,id).refund<state.params.outpostCost?'资金不足，无法建造前哨。':'';
+  if(state.day<3)return '第 3 天开放瞭望塔。';
+  if(state.phase!=='build')return '防守中不能建设瞭望塔。';
+  if(!Number.isInteger(id)||!inside(...xy(id)))return '请选择地图内的格子。';
+  if(!isExplored(state,id))return '该位置尚未探索。';
+  if(!inGroundControl(state,id))return '瞭望塔须建在已有基础地面控制范围内。';
+  if(productionSite(id,state)?.role==='hospital')return '医院为保留目标，不能建设瞭望塔。';
+  if(!terrainTraversable(state,id))return '瞭望塔只能建在可通行的道路、空地或自然地面。';
+  if(state.towers.has(id)||state.playerWalls.has(id)||state.outposts.has(id)||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '该格已有设施或保留目标。';
+  const [x,y]=xy(id),distance=state.params.outpostMinDistance;
+  if([...state.outposts.keys()].some(anchor=>{const [ax,ay]=xy(anchor);return Math.hypot(x-ax,y-ay)<distance;}))return `瞭望塔间距至少 ${distance} 格。`;
+  return funds(state)<state.params.outpostCost?'资金不足，无法建造瞭望塔。':'';
 }
 export function buildOutpost(state,id) {
   const error=outpostError(state,id);if(error)return error;
-  applyEmbedding(state,id);
-  const plotId=productionId(id,state);state.outposts.set(id,{day:state.day,plotId});
-  rebuildTerrain(state);return '';
+  // 挑高瞭望塔只提供控制和视野，地面保持通行，不参与建筑清场。
+  state.outposts.set(id,{day:state.day});return '';
 }
 export function removeOutpost(state,id) {
-  if(state.phase!=='build')return '只能在建设阶段拆除前哨。';
-  const anchor=outpostAt(state,id);if(anchor===undefined)return '这里没有前哨。';
+  if(state.phase!=='build')return '只能在建设阶段拆除瞭望塔。';
+  const anchor=outpostAt(state,id);if(anchor===undefined)return '这里没有瞭望塔。';
   const posts=new Map(state.outposts),post=posts.get(anchor);posts.delete(anchor);const candidate={...state,outposts:posts};
-  if([...state.playerWalls].some(cell=>inGroundControl(state,cell)&&!inGroundControl(candidate,cell))||[...state.towers.keys(),...posts.keys()].some(cell=>inControl(state,cell)&&!inControl(candidate,cell))||[...state.production.keys(),...state.housing.keys()].some(cell=>productionControlled(state,cell)&&!productionControlled(candidate,cell)))return '其他设施依赖此前哨的控制范围，请先拆除外围设施。';
+  if([...state.playerWalls].some(cell=>inGroundControl(state,cell)&&!inGroundControl(candidate,cell))||[...state.towers.keys()].some(cell=>inControl(state,cell)&&!inControl(candidate,cell))||[...posts.keys()].some(cell=>inGroundControl(state,cell)&&!inGroundControl(candidate,cell))||[...state.production.keys(),...state.housing.keys()].some(cell=>productionControlled(state,cell)&&!productionControlled(candidate,cell)))return '其他设施依赖此瞭望塔的控制范围，请先拆除外围设施。';
   retainDemolitionCost(state,demolitionQuote(state,id));state.outposts=posts;
   rebuildTerrain(state);return '';
 }
@@ -325,7 +325,9 @@ export function validateParams(params, state, checkLayout = true) {
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
   if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产或增加住房。';
   if(!integer(params.demolitionRefundPercent,0,100))return '拆除返还比例须为 0–100 整数。';
-  if(!integer(params.outpostCost,1,1000)||!integer(params.outpostRadius,1,30)||!integer(params.campRepairCost,1,1000))return '前哨价格 1–1000、半径 1–30；火光每 HP 修复单价 1–1000。';
+  if(!integer(params.outpostCost,1,1000)||!integer(params.outpostRadius,1,30)||!integer(params.campRepairCost,1,1000))return '瞭望塔价格 1–1000、半径 1–30；火光每 HP 修复单价 1–1000。';
+  if(!integer(params.outpostMinDistance,1,30))return '瞭望塔最小间距须为1–30格。';
+  if(checkLayout){const ids=[...state.outposts.keys()];for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){const [x,y]=xy(ids[i]),[a,b]=xy(ids[j]);if(Math.hypot(x-a,y-b)<params.outpostMinDistance)return '现有瞭望塔不满足新间距，请先拆除或减小间距。';}}
   for (const type of ['A','B']) {
     const w=params.weapons[type];
     if (!w || !['square','diamond'].includes(w.shape) || !integer(w.range,1,8) || !integer(w.power,1,99) || !integer(w.cost,1,1000)) return `武器 ${type}：范围 1–8、火力 1–99、价格 1–1000，均为整数。`;
@@ -333,8 +335,8 @@ export function validateParams(params, state, checkLayout = true) {
   if (!integer(params.productionCostPerCell,1,1000)||!(Number.isFinite(params.productionIncomePerCell)&&params.productionIncomePerCell>=0&&params.productionIncomePerCell<=1000)) return '每格生产恢复费用须为 1–1000、每格每晚收入须为 0–1000，可使用小数。';
   if (!integer(params.killReward,0,1000)) return '每个敌人击杀奖励须为 0–1000 整数。';
   const candidate={...state,params};
-  if(checkLayout&&([...state.playerWalls].some(id=>!inGroundControl(candidate,id))||[...state.towers.keys(),...state.outposts.keys()].some(id=>!inControl(candidate,id))||[...state.production.keys(),...state.housing.keys()].some(id=>!productionControlled(candidate,id))))return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
-  if (checkLayout && funds({...state,params}) < 0) return '按新价格计算，现有布局超出预算（含经营与前哨）。请提高资金，或取消预览后拆除设施。';
+  if(checkLayout&&([...state.playerWalls].some(id=>!inGroundControl(candidate,id))||[...state.towers.keys()].some(id=>!inControl(candidate,id))||[...state.outposts.keys()].some(id=>!inGroundControl(candidate,id))||[...state.production.keys(),...state.housing.keys()].some(id=>!productionControlled(candidate,id))))return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
+  if (checkLayout && funds({...state,params}) < 0) return '按新价格计算，现有布局超出预算（含经营与瞭望塔）。请提高资金，或取消预览后拆除设施。';
   return '';
 }
 // 配置失败时保留原地图和布局，避免静默丢失试玩结果。
@@ -346,7 +348,7 @@ export function validateSources(sources, state) {
     if (!['x','y','hp','count','first','interval'].every(k=>Number.isInteger(s[k])) || !Number.isInteger(s.target??-2)) return prefix + '请填写整数。';
     if (!inside(s.x, s.y)) return prefix + `坐标应为 0–${SIZE-1}。`;
     if (state.walls.has(id) || id === state.camp || state.towers.has(id)) return prefix + '与障碍、控制站、生产地点或武器冲突。';
-    if(![-2,-1].includes(s.target??-2))return prefix+'当前只攻击火光，前哨不可受击。';
+    if(![-2,-1].includes(s.target??-2))return prefix+'当前只攻击火光，瞭望塔不可受击。';
     if (seen.has(id)) return prefix + '位置不能重复。';
     if (!state.field.distance.has(id)) return prefix + '无法到达篝火。';
     if (s.hp < 1 || s.hp > 999 || s.count < 1 || s.count > 30 || s.first < 1 || s.first > 200 || s.interval < 1 || s.interval > 100) return prefix + '生命 1–999，批数 1–30，首拍 1–200，间隔 1–100。';
@@ -681,7 +683,7 @@ export function removeTower(state,id) {
 }
 
 
-// 迷雾只隐藏未探索信息；探索过的格子不会因拆前哨重新变黑。
+// 迷雾只隐藏未探索信息；探索过的格子不会因拆瞭望塔重新变黑。
 export function initialView(state){
   const [cx,cy]=xy(state.camp);
   return {x:Math.max(0,Math.min(SIZE-30,cx-15)),y:state.layout?SIZE-30:Math.max(0,Math.min(SIZE-30,cy-27)),width:30,height:30};

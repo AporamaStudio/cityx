@@ -22,3 +22,13 @@ test('建筑炮位不受邻接攻击且无维修报价',()=>{
  const enemy={id:key(14,22),path:[key(14,22),key(14,23),key(14,24)],target:s.camp};
  assert.deepEqual(enemyAction(s,enemy),{to:key(14,23)});assert.equal(repairQuote(s,origin).missing,0);
 });
+
+test('瞭望塔仅用地面控制、保持通行与路径、遵守欧氏间距',async()=>{
+ const {buildOutpost,outpostError,inGroundControl,terrainTraversable}=await import('../src/model.js');
+ const s=setup(),paths=structuredClone(s.attacks),walls=new Set(s.terrainWalls),id=key(14,25);
+ assert.match(outpostError(s,origin),/可通行/);assert.ok(inGroundControl(s,id));assert.equal(buildOutpost(s,id),'');
+ assert.ok(terrainTraversable(s,id));assert.deepEqual(s.terrainWalls,walls);assert.deepEqual(s.attacks,paths);
+ assert.match(buildOutpost(s,key(15,25)),/间距/);assert.equal(buildOutpost(s,key(18,25)),'');
+ const remote=key(30,30);assert.match(buildOutpost(s,remote),/控制/);
+ assert.deepEqual(towerCapacity(s,origin),{used:0,max:3});
+});
