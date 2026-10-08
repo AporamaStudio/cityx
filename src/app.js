@@ -3,8 +3,8 @@ import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-text
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,WATCHTOWER_SVG} from './icons.js?v=2';
 import {createGameAudio} from './audio.js?v=4';
-import { SIZE, DEFAULTS } from './config.js?v=52';
-import { towerBuildCost, towerCapacity, towerSiteError, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=56';
+import { SIZE, DEFAULTS } from './config.js?v=53';
+import { towerBuildCost, towerCapacity, towerSiteError, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=57';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -121,6 +121,7 @@ function draw() {
   const candidate = wallEdit ? wallPreview(state,hover,tool==='erase') : null;
   const repairHover=hover!==null&&state.phase==='build'&&tool==='repair';
   const postHover=hover!==null&&state.phase==='build'&&tool==='outpost';
+  const postSpacingConflict=postHover&&[...state.outposts.keys()].some(id=>{const [x,y]=xy(id),[hx,hy]=xy(hover);return Math.hypot(x-hx,y-hy)<state.params.outpostMinDistance;});
   const postError=postHover?(paramsDirty()?'请先应用或取消参数预览。':outpostError(state,hover)):'';
   const postGhost=postHover&&!postError;
   const previewState=postGhost?{...state,outposts:new Map([...state.outposts,[hover,{day:state.day}]])}:state;
@@ -330,9 +331,15 @@ function draw() {
     const [x,y] = xy(id);ctx.fillStyle='#253e3a';ctx.fillRect(x+.04,y+.04,.92,.92);ctx.strokeStyle='#92c8b8';ctx.lineWidth=.06;ctx.strokeRect(x+.04,y+.04,.92,.92);ctx.fillStyle=type==='B'?'#bab3f2':'#8bdbb9'; ctx.fillRect(x+.18,y+.22,.64,.6); ctx.fillStyle='#28483b'; ctx.fillRect(x+.37,y+.32,.26,.38); ctx.fillStyle='#ddffe7'; ctx.fillRect(x+.43,y+.08,.14,.35);if(type==='B'){ctx.fillRect(x+.22,y+.12,.12,.34);ctx.fillRect(x+.66,y+.12,.12,.34);}
     ctx.restore();
   }
-  if(tool==='outpost'){
+  // 间距按格心判定：只在待建点冲突时显示全部禁建格，轮廓与合法位置一致。
+  if(postSpacingConflict){
     ctx.save();ctx.strokeStyle='#e9a386';ctx.fillStyle='#df79531c';ctx.lineWidth=.06;ctx.setLineDash([.18,.12]);
-    for(const id of state.outposts.keys()){const [x,y]=xy(id);ctx.beginPath();ctx.arc(x+.5,y+.5,state.params.outpostMinDistance,0,Math.PI*2);ctx.fill();ctx.stroke();}
+    for(const id of state.outposts.keys()){
+      const [x,y]=xy(id),radius=state.params.outpostMinDistance;
+      const cells=new Set(coverage(id,radius,'square').filter(cell=>{const [cx,cy]=xy(cell);return Math.hypot(cx-x,cy-y)<radius;}));
+      ctx.beginPath();for(const cell of cells){const [cx,cy]=xy(cell);ctx.rect(cx,cy,1,1);}ctx.fill();
+      ctx.beginPath();for(const [a,b,c,d] of controlBoundary(cells)){ctx.moveTo(a,b);ctx.lineTo(c,d);}ctx.stroke();
+    }
     ctx.restore();
   }
   for(const [id,p] of previewState.outposts){
@@ -504,7 +511,9 @@ function update() {
   $('morningTitle').textContent=`${state.day===1?'守住第一晚':state.day===2?'恢复生产，守住防线':'向北收复，守住火光'}`;
   updateNightReport();
   $('mapConfigLink').href=`map-preview.html?${new URLSearchParams(mapSettings)}`;
-  const prices={wall:state.params.wallCost,build:towerBuildCost(state,'A'),long:towerBuildCost(state,'B'),outpost:state.params.outpostCost,production:'按地块报价',housing:'按地块报价'};
+  // 金币总额仍由模型结算；夜间按钮拆成白天基价 + 实际加急差额。
+  const towerPrice=type=>{const base=state.params.weapons[type].cost,cost=towerBuildCost(state,type);return state.phase==='battle'?`${base}+${cost-base}`:base;};
+  const prices={wall:state.params.wallCost,build:towerPrice('A'),long:towerPrice('B'),outpost:state.params.outpostCost,production:'按地块报价',housing:'按地块报价'};
   for(const [id,price] of Object.entries(prices))$('price-'+id).textContent=String(price);
   $('budget').textContent = funds(state);
   const people=population(state);$('population').hidden=false;

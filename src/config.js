@@ -7,7 +7,8 @@ export const DEFAULTS = {
   clearingCellsPerWorker: 1,
   initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 4,
   productionCostPerCell: 2, productionIncomePerCell: 0.5, killReward: 2,
-  nightTowerCostMultiplier: 2, nightClearingLaborMultiplier: 2,
+  // 夜间只默认加收金币，清场人数保持白天标准；倍率仍可独立调节。
+  nightTowerCostMultiplier: 2, nightClearingLaborMultiplier: 1,
   budget: 100, wallCost: 2, wallHP: 12, enemyPower: 1, defenseRepairPercent: 50, demolitionRefundPercent: 50, controlRadius: 9, campHP: 30, stepMs: 450,
   // 火光危急提示按最大 HP 百分比判断，0 关闭持续警示；受击仍短暂泛红。
   campWarningPercent: 30,
