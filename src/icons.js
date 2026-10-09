@@ -6,5 +6,12 @@ export function drawCampfire(ctx,x,y,size,alive=true){
   ctx.restore();
 }
 
+// 敌源耐久徽记：盾牌与剩余HP并列，大小占地共用一个标签。
+export function drawShield(ctx,x,y,size){
+  ctx.save();ctx.translate(x,y);ctx.scale(size,size);ctx.fillStyle='#f9d9be';ctx.strokeStyle='#9a6554';ctx.lineWidth=.08;
+  ctx.beginPath();ctx.moveTo(.5,.04);ctx.lineTo(.92,.20);ctx.lineTo(.86,.62);ctx.quadraticCurveTo(.75,.88,.5,.98);ctx.quadraticCurveTo(.25,.88,.14,.62);ctx.lineTo(.08,.20);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.moveTo(.5,.19);ctx.lineTo(.5,.79);ctx.stroke();ctx.restore();
+}
+
 // 挑高支架与平台，工具栏和地图使用同一份图形。
 export const WATCHTOWER_SVG='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><path d="M9 29 12 13h8l3 16M11 21l11 8M21 21l-11 8" fill="none" stroke="#9bddec" stroke-width="2"/><path d="M6 12h20v4H6zM5 9 16 2 27 9z" fill="#b3e8f2"/><path d="M10 9v3m12-3v3" stroke="#9bddec" stroke-width="2"/></svg>';

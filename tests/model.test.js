@@ -200,7 +200,7 @@ test('预留未来源头但允许封路，第三天仍可修复，失败不能�
   s.phase='lost';assert.equal(enterMorning(s),false);
 });
 test('跨晚击杀只累计一次，不因进入次日重复发钱',()=>{
-  const wave=[{x:15,y:20,hp:2,count:1,first:1,interval:1}];const s=createCampaign(DEFAULTS,[wave,wave,wave]);
+  const wave=[{x:15,y:20,hp:2,count:1,first:1,interval:1}];const s=createCampaign({...DEFAULTS,nightTicks:2},[wave,wave,wave]);
   changeWall(s,key(14,20));s.towers.set(key(14,20),'A');
   for(let day=1;day<=3;day++){beginBattle(s);stepBattle(s);assert.equal(s.earned,day*2);assert.equal(s.nightEarned,2);stepBattle(s);assert.equal(s.earned,day*2);enterMorning(s);assert.equal(s.earned,day*2);}
 });

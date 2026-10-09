@@ -1,4 +1,6 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=57';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=59';
+import {generateEnemySources,sourceCells,sourceMaxHP} from './enemy-sources.js?v=2';
+export {sourceCells} from './enemy-sources.js?v=2';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -70,25 +72,33 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
 }
 
 // 只保留一局实验和一次战前快照；无存档、回放或通用关卡框架。
-export function createCampaign(params=DEFAULTS, waves=WAVES, layout=null) {
+export function createCampaign(params=DEFAULTS, waves=WAVES, layout=null,sourceCatalog=null) {
   if(layout&&(layout.width!==SIZE||layout.height!==SIZE))throw new Error('当前战斗地图须为 60×60；其他尺寸可在布局预览实验。');
   if(layout&&waves===WAVES){
-    // 出怪节奏独立于地图，暂将出生位置吸附到初始可见区北缘道路；正式敌源坐标待地图确认。
-    const used=new Set(),anchors=[layout.camp.x-10,layout.camp.x+10,layout.camp.x].map(x=>{
-      const cells=layout.tiles.flatMap((t,id)=>t==='road'&&Math.floor(id/SIZE)>=SIZE-30&&Math.floor(id/SIZE)<SIZE-24?[id]:[]).filter(id=>!used.has(id)&&id!==key(layout.camp.x,layout.camp.y));
-      cells.sort((a,b)=>Math.abs(a%SIZE-x)+Math.abs(Math.floor(a/SIZE)-(SIZE-30))-Math.abs(b%SIZE-x)-Math.abs(Math.floor(b/SIZE)-(SIZE-30)));
-      used.add(cells[0]);return xy(cells[0]);
-    });
-    waves=waves.map(w=>w.map((source,i)=>({...source,x:anchors[i%anchors.length][0],y:anchors[i%anchors.length][1]})));
+    const initial=createState([],new Map(),new Set(),params,new Map(),layout);
+    const plan=generateEnemySources(layout,params,initial.field);
+    if(plan.sources.length){sourceCatalog=plan.sources;waves=plan.waves;}
+    else{
+      // 极小的规则验证地图没有可放感染据点的街区，沿用道路出兵，不伪造占地。
+      const used=new Set(),anchors=[-10,10,0].map(dx=>{
+        const cells=[...initial.field.distance.keys()].filter(id=>id!==initial.camp&&!used.has(id)&&layout.tiles[id]==='road');
+        cells.sort((a,b)=>Math.abs(a%SIZE-layout.camp.x-dx)+Math.abs(Math.floor(a/SIZE)-layout.camp.y+20)-Math.abs(b%SIZE-layout.camp.x-dx)-Math.abs(Math.floor(b/SIZE)-layout.camp.y+20));
+        used.add(cells[0]);return xy(cells[0]);
+      });
+      waves=waves.map(w=>w.map((s,i)=>({...s,x:anchors[i%anchors.length][0],y:anchors[i%anchors.length][1]})));
+    }
   }
   const state=createState(waves[0],new Map(),new Set(),params,new Map(),layout);
   state.waves=structuredClone(waves).map(sources=>sources.map(s=>({...s,target:s.target??-2})));
+  state.sourceCatalog=structuredClone(sourceCatalog??[]);
+  state.enemySources=new Map(state.sourceCatalog.map(s=>[s.id,{...s,max:sourceMaxHP(s,params),hp:sourceMaxHP(s,params),discovered:false,lastHit:0}]));
   state.sources=state.waves[0];state.lastNight=null;lockAttacks(state);revealControl(state);
   return state;
 }
 export const reservedSources=state=>state.waves?.slice(state.day-1).flat()??state.sources;
-// 按首次出兵日公开敌源；同一坐标视为同一个源头，停兵时保留地标。
+// 固定据点支持提前探索；首次出兵日自动公开，旧规则地图仍按道路坐标记忆。
 export function knownSources(state) {
+  if(state.enemySources?.size)return [...state.enemySources.values()].filter(s=>s.discovered||s.firstNight<=state.day).map(s=>({...s,active:state.sources.some(plan=>plan.sourceId===s.id)}));
   const known=new Map();
   for(const wave of state.waves?.slice(0,state.day)??[state.sources])wave.forEach((source,index)=>{
     if(source.count>0)known.set(key(source.x,source.y),{...source,index});
@@ -99,7 +109,7 @@ export const firstNightReady=state=>state.day!==1||state.towers.size>0;
 export const campaignComplete=state=>state.phase==='won'&&state.day===(state.waves?.length??1);
 export const campCritical=state=>state.hp>0&&state.hp*100<state.params.campHP*state.params.campWarningPercent;
 function clearNight(state) {
-  state.tick=0;state.enemies=[];state.enemyOutcomes=new Map();state.events=[];state.spawned=0;state.removed=0;
+  state.tick=0;state.enemies=[];state.enemyOutcomes=new Map();state.events=[];state.spawned=0;state.removed=0;state.withdrawn=0;
   state.damage=0;state.leaked=0;state.merges=0;state.nightEarned=0;state.nightEconomy=0;state.economySettled=false;state.productionReport=null;
 }
 export function beginBattle(state) {
@@ -111,7 +121,27 @@ export function beginBattle(state) {
 export const restoreNight=snapshot=>structuredClone(snapshot);
 export function restartCampaign(state) {
   // 整局重来保留地图、参数与波次，地块内容恢复生成时的状态。
-  return createCampaign(state.params,state.waves??WAVES,state.layout);
+  return createCampaign(state.params,state.waves??WAVES,state.layout,state.sourceCatalog);
+}
+
+export const enemySourceAt=(state,id)=>[...(state.enemySources?.values()??[])].find(s=>sourceCells(s).includes(id)||key(s.x,s.y)===id);
+export const sourceControlled=(state,source)=>inGroundControl(state,key(source.x,source.y));
+export const sourcePlans=(state,night=state.day)=>(night===state.day?state.sources:state.waves?.[night-1]??[]).filter(s=>!s.sourceId||!state.enemySources?.has(s.sourceId)||state.enemySources.get(s.sourceId).hp>0||night===state.day);
+// 每门炮当拍先打敌人，空闲时只选一个源头；大占地不会让同门炮重复命中。
+export function sourceAttackPlan(state,enemies=state.enemies,towers=state.towers){
+  const damage=new Map(),sources=knownSources(state).filter(s=>s.id&&s.hp>0&&sourceControlled(state,s));
+  for(const [id,type] of towers){
+    const weapon=state.params.weapons[type],cells=new Set(coverage(id,weapon.range,weapon.shape));
+    if(enemies.some(e=>cells.has(e.id)))continue;
+    const targets=sources.filter(s=>sourceCells(s).some(cell=>cells.has(cell)));
+    const [x,y]=xy(id);targets.sort((a,b)=>Math.abs(x-a.bx)+Math.abs(y-a.by)-Math.abs(x-b.bx)-Math.abs(y-b.by)||a.index-b.index);
+    if(targets.length)damage.set(targets[0].id,(damage.get(targets[0].id)||0)+weapon.power);
+  }
+  return damage;
+}
+// 调整最大耐久时保留已造成损伤；归零的源头不能因调参复活。
+export function syncSourceHealth(state){
+  for(const source of state.enemySources?.values()??[]){const max=sourceMaxHP(source,state.params);source.hp=source.hp>0?Math.max(1,max-(source.max-source.hp)):0;source.max=max;}
 }
 
 export function fireField(state) {
@@ -220,7 +250,7 @@ export function repairPath(state,original) {
 }
 export function forecastAttacks(state,night=state.day) {
   if(night===state.day)return state.attacks;
-  return (state.waves?.[night-1]??[]).map((source,index)=>({...source,index,target:state.camp,path:campPath(state,pathFrom(key(source.x,source.y),state.field))}));
+  return sourcePlans(state,night).map((source,index)=>({...source,index,target:state.camp,path:campPath(state,pathFrom(key(source.x,source.y),state.field))}));
 }
 // 来源、目标与初始路线在白天开始锁定；瞭望塔不进入目标池。
 export function lockAttacks(state) {
@@ -261,6 +291,7 @@ export function plotBuildError(state,id) {
   const cells=productionCells(id,state);
   if(!cells.length)return '请选择地块，建筑不能建在道路上。';
   if(productionSite(id,state)?.role==='hospital')return '医院为收复目标，占领机制待实现，不能拆除或换建。';
+  if([...(state.enemySources?.values()??[])].some(s=>s.site===productionId(id,state)))return '感染据点保留，需在周边建筑架炮肃清，不能改建或拆除。';
   if(!isExplored(state,id))return '该地块尚未探索。';
   if(cells.includes(state.camp))return '火光所在地块保留，不能拆除或换建。';
   if(cells.some(cell=>reservedSources(state).some(s=>key(s.x,s.y)===cell)))return '不能覆盖敌人来源。';
@@ -304,9 +335,9 @@ export function removeOutpost(state,id) {
 }
 export function enterMorning(state) {
   if(state.phase!=='won'||state.day>=(state.waves?.length??2))return false;
-  state.lastNight={day:state.day,earned:state.nightEarned,economy:state.nightEconomy,...state.productionReport,leaked:state.leaked};
+  state.lastNight={day:state.day,earned:state.nightEarned,economy:state.nightEconomy,...state.productionReport,leaked:state.leaked,withdrawn:state.withdrawn};
   state.day++;state.phase='build';
-  if(state.waves)state.sources=state.waves[state.day-1];
+  if(state.waves)state.sources=state.waves[state.day-1].filter(s=>!s.sourceId||state.enemySources.get(s.sourceId)?.hp!==0);
   revealControl(state);
   clearNight(state);
   lockAttacks(state);
@@ -384,6 +415,8 @@ export function validateParams(params, state, checkLayout = true) {
   }
   if (!integer(params.productionCostPerCell,1,1000)||!(Number.isFinite(params.productionIncomePerCell)&&params.productionIncomePerCell>=0&&params.productionIncomePerCell<=1000)) return '每格生产新建费用须为 1–1000、每格每晚收入须为 0–1000，可使用小数。';
   if (!integer(params.killReward,0,1000)) return '每个敌人击杀奖励须为 0–1000 整数。';
+  if(!integer(params.sourceCellHPMin,1,10000)||!integer(params.sourceCellHPMax,params.sourceCellHPMin,10000)||!integer(params.sourceRegenHP,0,10000)||!integer(params.nightTicks,1,500))return '源头每格HP下限须为1–10000，上限不得低于下限；每夜回复0–10000、每晚拍数1–500，均为整数。';
+  if(state.waves){const lastSpawn=Math.max(1,...state.waves.flat().map(s=>s.first+(s.count-1)*s.interval));if(params.nightTicks<lastSpawn)return `预设最后一批在第 ${lastSpawn} 拍出场，每晚拍数不能更短；请先调整出兵节拍。`;}
   const candidate={...state,params};
   if(checkLayout&&([...state.playerWalls].some(id=>!inGroundControl(candidate,id))||[...state.towers.keys()].some(id=>!inControl(candidate,id))||[...state.outposts.keys()].some(id=>!inGroundControl(candidate,id))||[...state.production.keys(),...state.housing.keys()].some(id=>!productionControlled(candidate,id))))return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
   if(checkLayout&&disconnectedControlCells(candidate).size)return '新参数会使控制范围失去与篝火的连接，请调整范围或先拆除外围瞭望塔。';
@@ -392,10 +425,11 @@ export function validateParams(params, state, checkLayout = true) {
 }
 // 配置失败时保留原地图和布局，避免静默丢失试玩结果。
 export function validateSources(sources, state) {
-  if (!sources.length || sources.length > 12) return '源头数量应为 1–12。';
+  if ((!sources.length&&!state.enemySources?.size) || sources.length > 12) return '源头数量应为 1–12（固定据点清除后允许无来袭）。';
   const seen = new Set();
   for (let i = 0; i < sources.length; i++) {
     const s = sources[i], id = key(s.x, s.y), prefix = `源头 ${i + 1}：`;
+    if(s.sourceId){const source=state.enemySources?.get(s.sourceId);if(!source||source.x!==s.x||source.y!==s.y)return prefix+'固定据点出兵口不能移动。';}
     if (!['x','y','hp','count','first','interval'].every(k=>Number.isInteger(s[k])) || !Number.isInteger(s.target??-2)) return prefix + '请填写整数。';
     if (!inside(s.x, s.y)) return prefix + `坐标应为 0–${SIZE-1}。`;
     if (state.walls.has(id) || id === state.camp || state.towers.has(id) || state.outposts.has(id)) return prefix + '与障碍、火光、瞭望塔或炮位冲突。';
@@ -403,6 +437,7 @@ export function validateSources(sources, state) {
     if (seen.has(id)) return prefix + '位置不能重复。';
     if (!state.field.distance.has(id)) return prefix + '无法到达篝火。';
     if (s.hp < 1 || s.hp > 999 || s.count < 1 || s.count > 30 || s.first < 1 || s.first > 200 || s.interval < 1 || s.interval > 100) return prefix + '生命 1–999，批数 1–30，首拍 1–200，间隔 1–100。';
+    if(state.waves&&s.first+(s.count-1)*s.interval>state.params.nightTicks)return prefix+'最后一批须在天亮前出场，请调整批数或节拍。';
     seen.add(id);
   }
   return '';
@@ -449,7 +484,8 @@ export function stepBattle(state,actions=null) {
     }
   }
   for(const groupId of merged){const group=groups.get(groupId);state.events.push({type:'merge',id:group.id,target:group.target,value:group.hp,members:group.members,parts:mergeParts.get(groupId)});}
-  const fire=fireField(state),melee=new Map(),campArea=new Set(campCells(state));state.enemies=[];
+  const fire=fireField(state),sourceFire=sourceAttackPlan(state,[...groups.values()]),melee=new Map(),campArea=new Set(campCells(state));state.enemies=[];
+  for(const source of state.enemySources?.values()??[])source.lastHit=0;
   for(const enemy of groups.values()){
     const damage=Math.min(enemy.hp,fire.get(enemy.id)||0);enemy.hp-=damage;state.damage+=damage;
     if(damage)state.events.push({type:'hit',id:enemy.id,target:enemy.target,value:damage});
@@ -482,8 +518,20 @@ export function stepBattle(state,actions=null) {
       state.events.push({type:'wallLost',id,value:0});
     }
   }
+  for(const [sourceId,power] of sourceFire){
+    const source=state.enemySources.get(sourceId),hit=Math.min(source.hp,power);source.hp-=hit;source.lastHit=hit;
+    state.events.push({type:'sourceHit',id:key(source.bx,source.by),sourceId,value:hit});
+    if(!source.hp){source.destroyedDay=state.day;state.events.push({type:'sourceLost',id:key(source.bx,source.by),sourceId,value:0});}
+  }
   if(state.hp<=0)state.phase='lost';
-  else if(state.spawned===state.attacks.reduce((sum,s)=>sum+s.count,0)&&!state.enemies.length){state.phase='won';settleEconomy(state);}
+  else if(state.waves?state.tick>=state.params.nightTicks:state.spawned===state.attacks.reduce((sum,s)=>sum+s.count,0)&&!state.enemies.length){
+    // 最后一拍照常结算炮火与近战；存活至天亮的敌群撤退，不伤火光、不发击杀钱。
+    for(const enemy of state.enemies){
+      for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'withdrawn');
+      state.withdrawn+=enemy.members;state.events.push({type:'withdraw',id:enemy.id,value:enemy.members});
+    }
+    state.enemies=[];state.phase='won';settleEconomy(state);
+  }
 }
 
 // 地块内容与几何分开；修缮与换建共用整块身份，夜末按控制资格结算。
@@ -706,6 +754,7 @@ export function settleEconomy(state) {
   const stopped=[...state.production.keys()].filter(id=>!productionActive(state,id));
   state.productionReport={productive:productive.length,stopped:stopped.length,missed:stopped.reduce((sum,id)=>sum+productionQuote(state,id).income,0)};
   state.nightEconomy=expectedIncome(state);state.economyEarned+=state.nightEconomy;state.economySettled=true;
+  for(const source of state.enemySources?.values()??[])if(source.hp>0)source.hp=Math.min(source.max,source.hp+state.params.sourceRegenHP);
 }
 
 // 预告与实战读取同一份路径；建筑绕行及时显示，破墙不重算题目。
@@ -769,10 +818,12 @@ export function visionField(state,phase=state.phase){
   for(const [id,type] of state.towers)
     for(const cell of coverage(id,p.weapons[type].range,p.weapons[type].shape))seen.add(cell);
   const size=p.sourceRevealSize,offset=Math.floor((size-1)/2);
-  for(const source of knownSources(state))for(let dy=0;dy<size;dy++)for(let dx=0;dx<size;dx++){
+  for(const source of knownSources(state).filter(s=>!s.id||(s.hp>0&&s.firstNight<=state.day)))for(let dy=0;dy<size;dy++)for(let dx=0;dx<size;dx++){
     const x=source.x-offset+dx,y=source.y-offset+dy;if(inside(x,y))seen.add(key(x,y));
   }
   for(const id of controlMask(state))seen.add(id);
+  // 已出兵据点实体公开；侦察发现只保存位置，不把整个周边变为实时视野。
+  for(const source of state.enemySources?.values()??[])if(source.hp>0&&source.firstNight<=state.day)for(const id of sourceCells(source))seen.add(id);
   // 医院中心固定揭示 5×5，仅提供地标信息，不代表已经控制或占领。
   for(const p of state.sites.filter(p=>p.role==='hospital')){
     const cx=p.x+Math.floor((p.width??p.size)/2),cy=p.y+Math.floor((p.height??p.size)/2);
@@ -788,7 +839,8 @@ function initializeExploration(state){
 export const isExplored=(state,id)=>!state.explored||state.explored.has(id);
 export function revealControl(state){
   if(!state.explored)return;
-  for(const id of visionField(state))state.explored.add(id);
+  const seen=visionField(state);for(const id of seen)state.explored.add(id);
+  for(const source of state.enemySources?.values()??[])if(source.firstNight<=state.day||sourceCells(source).some(id=>seen.has(id))||seen.has(key(source.x,source.y))){source.discovered=true;for(const id of sourceCells(source))state.explored.add(id);}
 }
 
 // 测试台仅跳转到指定白天，不模拟略过的夜晚、不发奖励；独立偏移不污染收入账单。
@@ -796,7 +848,7 @@ export function applyTestScenario(state,day,gold,people){
   if(!Number.isInteger(day)||day<1||day>(state.waves?.length??1))return '请选择现有波次范围内的日期。';
   if(![gold,people].every(n=>Number.isInteger(n)&&n>=0&&n<=1000000))return '金币与人口须为 0–1000000 整数。';
   const workers=population(state).working;if(people<workers)return `现有设施用工需要 ${workers} 人，不能设为更低人口。`;
-  const sources=structuredClone(state.waves[day-1]),candidate={...state,sources};
+  const sources=structuredClone(state.waves[day-1].filter(s=>!s.sourceId||state.enemySources.get(s.sourceId)?.hp!==0)),candidate={...state,sources};
   const error=validateSources(sources,candidate);if(error)return error;
   state.debugGold+=gold-funds(state);state.debugPopulation+=people-population(state).total;
   state.day=day;state.phase='build';state.hp=Math.max(1,state.hp);
