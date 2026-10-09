@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=59';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=60';
 import {generateEnemySources,sourceCells,sourceMaxHP} from './enemy-sources.js?v=2';
 export {sourceCells} from './enemy-sources.js?v=2';
 export const key = (x, y) => y * SIZE + x;
@@ -92,6 +92,8 @@ export function createCampaign(params=DEFAULTS, waves=WAVES, layout=null,sourceC
   state.waves=structuredClone(waves).map(sources=>sources.map(s=>({...s,target:s.target??-2})));
   state.sourceCatalog=structuredClone(sourceCatalog??[]);
   state.enemySources=new Map(state.sourceCatalog.map(s=>[s.id,{...s,max:sourceMaxHP(s,params),hp:sourceMaxHP(s,params),discovered:false,lastHit:0}]));
+  // 据点实体接入后重建初始探索，避免留下旧出兵口中心揭示的额外格子。
+  initializeExploration(state);
   state.sources=state.waves[0];state.lastNight=null;lockAttacks(state);revealControl(state);
   return state;
 }
@@ -396,7 +398,7 @@ export function validateParams(params, state, checkLayout = true) {
   if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
   if(!integer(params.campWarningPercent,0,100))return '火光危急阈值须为 0–100% 整数，0 关闭持续警示。';
   if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';
-  if(!integer(params.campSight,0,30)||!integer(params.outpostSight,0,30)||!integer(params.sourceRevealSize,1,5))return '外围视野须为 0–30 整数，敌源揭示边长须为 1–5 整数。';
+  if(!integer(params.campSight,0,30)||!integer(params.outpostSight,0,30)||!integer(params.sourceRevealPadding,0,10))return '外围视野须为 0–30 整数，敌源边缘揭示格数须为 0–10 整数。';
   if(!['daySightMultiplier','nightSightMultiplier','eventSightMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=3))return '视野倍率须为 0–3，可使用小数。';
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
   if(!integer(params.outpostWorkers,0,100))return '每座瞭望塔用工须为0–100人整数。';
@@ -817,13 +819,14 @@ export function visionField(state,phase=state.phase){
   for(const id of state.outposts.keys())station(id,p.outpostRadius,p.outpostSight);
   for(const [id,type] of state.towers)
     for(const cell of coverage(id,p.weapons[type].range,p.weapons[type].shape))seen.add(cell);
-  const size=p.sourceRevealSize,offset=Math.floor((size-1)/2);
-  for(const source of knownSources(state).filter(s=>!s.id||(s.hp>0&&s.firstNight<=state.day)))for(let dy=0;dy<size;dy++)for(let dx=0;dx<size;dx++){
-    const x=source.x-offset+dx,y=source.y-offset+dy;if(inside(x,y))seen.add(key(x,y));
+  // 揭示从整个源头占地向四周外扩，含角落；道路出兵口不是揭雾中心。
+  const padding=p.sourceRevealPadding;
+  for(const source of knownSources(state).filter(s=>!s.id||(s.hp>0&&s.firstNight<=state.day))){
+    const left=source.bx??source.x,top=source.by??source.y,width=source.width??1,height=source.height??1;
+    for(let y=Math.max(0,top-padding);y<=Math.min(SIZE-1,top+height-1+padding);y++)
+      for(let x=Math.max(0,left-padding);x<=Math.min(SIZE-1,left+width-1+padding);x++)seen.add(key(x,y));
   }
   for(const id of controlMask(state))seen.add(id);
-  // 已出兵据点实体公开；侦察发现只保存位置，不把整个周边变为实时视野。
-  for(const source of state.enemySources?.values()??[])if(source.hp>0&&source.firstNight<=state.day)for(const id of sourceCells(source))seen.add(id);
   // 医院中心固定揭示 5×5，仅提供地标信息，不代表已经控制或占领。
   for(const p of state.sites.filter(p=>p.role==='hospital')){
     const cx=p.x+Math.floor((p.width??p.size)/2),cy=p.y+Math.floor((p.height??p.size)/2);

@@ -25,14 +25,43 @@ test('炮塔视野等于射程形状且不受昼夜及事件倍率影响，拆�
  }}
  s.towers.delete(id);assert.ok(!visionField(s).has(id));
 });
-test('敌源揭示尺寸可配置，独立于据点且昼夜保持；前哨外围可单独调大',()=>{
+test('敌源从完整占地边缘揭示，可调外扩且昼夜一致；前哨视野独立',()=>{
  const s=state();s.waves=[s.sources,[{x:50,y:10,count:1}]];s.day=2;
- for(const n of [2,3]){s.params.sourceRevealSize=n;const seen=visionField(s,'battle'),offset=Math.floor((n-1)/2);
- for(const x of [40,50])for(let dy=0;dy<n;dy++)for(let dx=0;dx<n;dx++)assert.ok(seen.has(key(x-offset+dx,10-offset+dy)));
- assert.ok(!seen.has(key(40+n,10+n)));
+ for(const padding of [0,2,3]){s.params.sourceRevealPadding=padding;
+  for(const phase of ['build','battle']){const seen=visionField(s,phase);
+   for(const cx of [40,50])for(let y=10-padding;y<=10+padding;y++)for(let x=cx-padding;x<=cx+padding;x++)assert.ok(seen.has(key(x,y)));
+   assert.ok(!seen.has(key(40+padding+1,10)));assert.ok(!seen.has(key(40,10-padding-1)));
+  }
  }
  s.outposts.set(key(30,40),{});const before=visionField(s);s.params.outpostSight=10;assert.ok(visionField(s).size>before.size);
  assert.match(validateParams({...s.params,nightSightMultiplier:-1},s,false),/视野倍率/);
+ for(const sourceRevealPadding of [-1,1.5,11])assert.match(validateParams({...s.params,sourceRevealPadding},s,false),/敌源边缘揭示格数/);
+});
+
+test('四种敌源及旋转按实体边缘外扩2格，0只露占地；出兵口不偏移揭示',()=>{
+ const s=state();
+ for(const [width,height] of [[1,1],[1,2],[2,1],[1,3],[3,1],[2,2]]){
+  const source={id:'shape',bx:30,by:5,x:29,y:5,width,height,hp:30,firstNight:1,discovered:true};
+  s.enemySources=new Map([[source.id,source]]);
+  for(const padding of [0,2]){s.params.sourceRevealPadding=padding;
+   for(const phase of ['build','battle']){const seen=visionField(s,phase);
+    const area=[...seen].filter(id=>{const [x,y]=xy(id);return x>=26&&x<=36&&y<=12;});
+    assert.equal(area.length,(width+padding*2)*(height+padding*2));
+    for(let y=5-padding;y<5+height+padding;y++)for(let x=30-padding;x<30+width+padding;x++)assert.ok(seen.has(key(x,y)));
+    assert.ok(!seen.has(key(29-padding,5)));assert.ok(!seen.has(key(30+width+padding,5)));
+   }
+  }
+ }
+});
+
+test('揭示在地图边缘裁剪，未知或已消灭源头不提供实时周边',()=>{
+ const s=state(),source={id:'edge',bx:0,by:0,x:2,y:0,width:2,height:2,hp:30,firstNight:1,discovered:true};
+ s.enemySources=new Map([[source.id,source]]);s.params.sourceRevealPadding=2;
+ let seen=visionField(s);assert.equal([...seen].filter(id=>{const [x,y]=xy(id);return x<10&&y<10;}).length,16);
+ assert.ok([...seen].every(id=>id>=0&&id<SIZE*SIZE));
+ source.discovered=false;source.firstNight=5;assert.ok(!visionField(s).has(key(0,0)));
+ source.discovered=true;assert.ok(!visionField(s).has(key(0,0))); // 提前侦察只记身份。
+ source.firstNight=1;source.hp=0;assert.ok(!visionField(s).has(key(0,0)));
 });
 
 test('医院中心固定揭示5×5，昼夜相同且不获得控制权限',()=>{

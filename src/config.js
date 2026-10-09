@@ -3,7 +3,8 @@ export const SIZE = 60;
 export const DEFAULTS = {
   // 每格的现实边长，仅用于地图比例尺；战斗和建设仍按格计算。
   cellMeters: 20,
-  campSight: 6, outpostSight: 9, daySightMultiplier: 1, nightSightMultiplier: 0.6, eventSightMultiplier: 1, sourceRevealSize: 3,
+  // 敌源按完整占地边缘外扩揭雾，0只显示占地；与视野面板同步。
+  campSight: 6, outpostSight: 9, daySightMultiplier: 1, nightSightMultiplier: 0.6, eventSightMultiplier: 1, sourceRevealPadding: 2,
   initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 8,
   // 空地新建为基准；修缮只改变投入，不改变建成后的收入或人口。
   productionCostPerCell: 4, productionIncomePerCell: 0.5, renovationCostPercent: 50, killReward: 2,
