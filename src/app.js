@@ -4,7 +4,7 @@ import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,WATCHTOWER_SVG} from './icons.js?v=2';
 import {createGameAudio} from './audio.js?v=4';
 import { SIZE, DEFAULTS } from './config.js?v=53';
-import { towerBuildCost, towerCapacity, towerSiteError, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=57';
+import { towerBuildCost, towerCapacity, towerSiteError, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingLabor, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=58';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -200,7 +200,7 @@ function draw() {
     const summary=`${hoveredSite.width??hoveredSite.size}×${hoveredSite.height??hoveredSite.size} 地块 · ${quote.area} 格 · ${content.status==='empty'?'空地':content.status==='ruin'?(content.type==='housing'?'住房废墟':'生产废墟'):content.type==='outpost'?'瞭望塔建筑':content.type==='housing'?'住房':'生产建筑'}。`;
     if(hoveredSite.role==='camp'){
       // 修复时保留实际 HP、费用或余额不足提示。
-      if(!repairHover)$('placementInfo').textContent='火光广场 · 3×3 · 篝火位于中心，保留为守护目标。';
+      if(!repairHover)$('placementInfo').textContent='火光广场 · 3×3 · 敌人进入任意一格就会伤害火光。';
     }
     else if(hoveredSite.role==='hospital')$('placementInfo').textContent='医院暂不可操作。';
     else if(tool==='production'){const q=economyBuildQuote(state,hover,'production');$('placementInfo').textContent=summary+(productionError(state,hover)||`新增 ${q.added} 格 · 用工 +${q.labor} 人 · 花费 ${q.cost} · 完成后每天 +${q.income}。`);}
@@ -219,7 +219,7 @@ function draw() {
   const eligibleCells=new Set();
   for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
     const id = key(x, y), power = fire.get(id) || 0;
-    ctx.fillStyle = (x + y) % 2 ? palette.groundA : palette.groundB;
+    ctx.fillStyle = tool!==null&&(x + y) % 2 ? palette.groundA : palette.groundB;
     ctx.fillRect(x, y, 1, 1);
     if(state.layout?.tiles[id]==='road')drawRoadTexture(ctx,state.layout,x,y,nightMix);
     if(productionSite(id,state)&&!state.blocked.has(id)){ctx.fillStyle=nightMix>.5?'#2c4841':'#77967b';ctx.fillRect(x,y,1,1);}
@@ -242,9 +242,11 @@ function draw() {
       const eligible=free&&(tool==='wall'?rawControlled.has(id)&&!state.walls.has(id):['build','long'].includes(tool)&&!state.fixedWalls.has(id)&&!towerSiteError(state,id));
       if((state.phase==='build'||(state.phase==='battle'&&['build','long'].includes(tool)))&&eligible)eligibleCells.add(id);
     }
-    // 道路弱化格线，避免把连续路面割裂成棋盘；悬停和建设范围仍标识具体格子。
-    ctx.save();if(state.layout?.tiles[id]==='road')ctx.globalAlpha=.18;
-    ctx.strokeStyle = palette.grid; ctx.lineWidth = .025; ctx.strokeRect(x, y, 1, 1);ctx.restore();
+    // 小格网仅服务当前工具；取消选择后保留城市地块和控制边界，不显示棋盘。
+    if(tool!==null){
+      ctx.save();if(state.layout?.tiles[id]==='road')ctx.globalAlpha=.18;
+      ctx.strokeStyle = palette.grid; ctx.lineWidth = .025; ctx.strokeRect(x, y, 1, 1);ctx.restore();
+    }
   }
   // 灯光只代表存活设施与生产状态，不表示敌人无法进入的安全区。
   const lamp=(x,y,r,color)=>{

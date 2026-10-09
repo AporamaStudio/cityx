@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {key,createCampaign,plotContent,productionQuote,productionCells,buildProduction,removeProduction,clearPlot,buildOutpost,outpostAt,removeOutpost,inControl,funds,buildTower,removeTower,changeWall,beginBattle,stepBattle,enterMorning,restoreNight,restartCampaign,validateParams,repairQuote} from '../src/model.js';
+import {key,createCampaign,campCells,plotContent,productionQuote,productionCells,buildProduction,removeProduction,clearPlot,buildOutpost,outpostAt,removeOutpost,inControl,funds,buildTower,removeTower,changeWall,beginBattle,stepBattle,enterMorning,restoreNight,restartCampaign,validateParams,repairQuote} from '../src/model.js';
 
 // 地块正好横跨原路线，验证建设后绕行而不禁建；街道仍可放可破坏防线。
 function make(kind='open') {
@@ -19,7 +19,7 @@ test('路线上的空地可建瞭望塔，原路保持通行，无损伤或退�
   assert.ok(inControl(s,key(15,16)));assert.equal(s.attacks[0].target,s.camp);
   assert.equal(s.attacks[0].x,original.x);assert.equal(s.attacks[0].hp,original.hp);assert.equal(s.attacks[0].first,original.first);
   assert.deepEqual(s.attacks[0].path.slice(0,2),original.path.slice(0,2));
-  assert.equal(s.attacks[0].path.at(-1),s.camp);assert.ok(s.attacks[0].path.every(cell=>!s.blocked.has(cell)));
+  assert.ok(campCells(s).includes(s.attacks[0].path.at(-1)));assert.ok(s.attacks[0].path.every(cell=>!s.blocked.has(cell)));
   assert.equal(new Set(s.attacks[0].path).size,s.attacks[0].path.length);
   const post=structuredClone(s.outposts.get(id));assert.ok(!('hp' in post));assert.equal(repairQuote(s,id).missing,0);
   assert.ok(beginBattle(s));run(s);assert.equal(s.hp,24);assert.equal(s.earned,0);assert.deepEqual(s.outposts.get(id),post);
@@ -31,7 +31,7 @@ test('建筑封住狭窄出口时允许退回道路，不因保留路线前缀�
   for(const x of [14,16]){map.blocks.push({x,y:20,width:1,height:2,kind:'building'});for(const y of [20,21])map.tiles[key(x,y)]='block';}
   const wave=[{x:15,y:19,hp:6,count:1,first:1,interval:2}],s=createCampaign({...DEFAULTS,budget:1000},[wave],map);s.day=3;
   assert.ok(s.attacks[0].path.includes(key(15,21)));assert.equal(buildProduction(s,key(15,22)),'');
-  assert.equal(s.attacks[0].path[0],key(15,19));assert.equal(s.attacks[0].path.at(-1),s.camp);
+  assert.equal(s.attacks[0].path[0],key(15,19));assert.ok(campCells(s).includes(s.attacks[0].path.at(-1)));
   assert.ok(s.attacks[0].path.every(id=>!s.blocked.has(id)));assert.equal(new Set(s.attacks[0].path).size,s.attacks[0].path.length);
   beginBattle(s);run(s);assert.equal(s.hp,24);
 });

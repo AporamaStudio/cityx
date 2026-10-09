@@ -26,8 +26,8 @@ test('同时入格先合并再扣一次火力，满值相加且不回血',()=>{
   s.field.next=new Map([[1,3],[2,3]]);s.enemies=[{id:1,hp:3,max:10,members:1,sources:[0]},{id:2,hp:8,max:10,members:1,sources:[1]}];s.towers.set(3,'A');
   stepBattle(s);assert.deepEqual(s.enemies.map(e=>[e.hp,e.max,e.members]),[[9,20,2]]);assert.equal(s.damage,2);assert.equal(s.merges,1);
 });
-test('篝火格先受火力再漏剩余生命，到达者移除，不重复扣命',()=>{
-  const s=createState([{x:15,y:24,hp:5,count:1,first:1,interval:1}]);s.towers.set(key(14,26),'A');s.phase='battle';
+test('火光广场边缘先受火力再漏剩余生命，到达者移除，不重复扣命',()=>{
+  const s=createState([{x:15,y:23,hp:5,count:1,first:1,interval:1}]);s.towers.set(key(14,25),'A');s.phase='battle';
   stepBattle(s);assert.equal(s.hp,30);stepBattle(s);assert.equal(s.hp,27);assert.equal(s.leaked,3);assert.equal(s.phase,'won');stepBattle(s);assert.equal(s.hp,27);
 });
 test('出生入格受伤、击杀后不漏怪、结算后禁止补炮',()=>{
@@ -327,7 +327,7 @@ test('每格收入减半保留小数，整块最终收入向上取整',async()=>
 
 test('敌群预告区分出生批次和抵达结果，重试清空结果',async()=>{
   const {beginBattle,restoreNight}=await import('../src/model.js');
-  const s=createState([{x:15,y:24,hp:2,count:2,first:1,interval:3}]);
+  const s=createState([{x:15,y:23,hp:2,count:2,first:1,interval:3}]);
   const snapshot=beginBattle(s);assert.ok(snapshot);
   stepBattle(s);assert.deepEqual(s.enemies[0].origins,['0:0']);assert.equal(s.enemyOutcomes.size,0);
   for(let i=0;i<5;i++)stepBattle(s);

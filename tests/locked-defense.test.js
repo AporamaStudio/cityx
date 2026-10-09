@@ -1,12 +1,56 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {key,createCampaign,beginBattle,stepBattle,enterMorning,lockAttacks,forecastAttacks,battleRoutes,changeWall,buildTower,buildOutpost,buildProduction,removeOutpost,repairFacility,repairQuote,fireField,funds,restoreNight,restartCampaign,validateParams} from '../src/model.js';
+import {key,createCampaign,campCells,beginBattle,stepBattle,enterMorning,lockAttacks,forecastAttacks,battleRoutes,changeWall,buildTower,buildOutpost,buildProduction,removeOutpost,repairFacility,repairQuote,fireField,funds,restoreNight,restartCampaign,validateParams} from '../src/model.js';
 
 // 路旁保留一栋炮位建筑，敌人的纵向道路不变。
 const layout=()=>({width:SIZE,height:SIZE,camp:{x:15,y:25},tiles:Array(SIZE*SIZE).fill('road'),blocks:[{x:13,y:22,width:2,height:3,kind:'building'}]});
 const make=(hp=40,count=1,first=1,interval=3)=>createCampaign({...DEFAULTS,budget:1000},Array.from({length:5},()=>[{x:15,y:20,hp,count,first,interval,target:-2}]),layout());
 const step=(s,n)=>{for(let i=0;i<n;i++)stepBattle(s);};
+
+// 使用真实的特殊地块占地，外侧与角落都不能被中央图标缩小成一格目标。
+const campMap=()=>({...layout(),blocks:[{x:14,y:24,width:3,height:3,kind:'open',role:'camp'}]});
+const campState=(x,y,hp=5)=>createCampaign(DEFAULTS,[[{x,y,hp,count:1,first:1,interval:3}]],campMap());
+
+test('火光完整3×3占地均受击，地块外不扣血，预告止于首个进入格',()=>{
+  const base=campState(15,23),area=campCells(base);assert.equal(area.length,9);
+  for(const id of area){
+    const s=campState(id%SIZE,Math.floor(id/SIZE));s.phase='battle';stepBattle(s);
+    assert.equal(s.hp,25);assert.equal(s.enemies.length,0);assert.equal(s.earned,0);
+    assert.deepEqual(s.events.filter(e=>e.type==='leak'),[{type:'leak',id,value:5}]);
+    stepBattle(s);assert.equal(s.hp,25);
+  }
+  for(const [x,y] of [[15,23],[13,25],[17,25],[15,27]]){
+    const s=campState(x,y),path=s.attacks[0].path;
+    assert.equal(s.attacks[0].target,s.camp);assert.equal(path.length,2);
+    assert.ok(area.includes(path.at(-1)));assert.ok(!area.includes(path[0]));
+    assert.deepEqual(forecastAttacks(s,1)[0].path,path);
+    s.phase='battle';stepBattle(s);assert.equal(s.hp,30);assert.equal(s.enemies.length,1);
+    stepBattle(s);assert.equal(s.hp,25);assert.equal(s.events.find(e=>e.type==='leak').id,path.at(-1));
+  }
+});
+
+test('广场入口先结算炮火，完全消灭发奖励而不伤火光',()=>{
+  for(const hp of [2,5]){
+    const s=campState(15,23,hp);s.phase='battle';stepBattle(s);s.towers.set(key(14,25),'A');stepBattle(s);
+    assert.equal(s.damage,2);assert.equal(s.hp,hp===2?30:27);assert.equal(s.enemies.length,0);
+    assert.equal(s.earned,hp===2?2:0);assert.equal(s.enemyOutcomes.get('0:0'),hp===2?'killed':'leaked');
+  }
+});
+
+test('广场入口的墙仍拖延进攻，破墙下一拍进入才伤火光',()=>{
+  const s=campState(15,23),wall=key(15,24);assert.equal(changeWall(s,wall),'');s.wallHealth.get(wall).hp=1;s.phase='battle';
+  step(s,2);assert.equal(s.hp,30);assert.equal(s.enemies[0].id,key(15,23));assert.equal(s.wallHealth.get(wall).hp,0);
+  stepBattle(s);assert.equal(s.hp,25);assert.equal(s.enemies.length,0);assert.equal(s.events.find(e=>e.type==='leak').id,wall);
+});
+
+test('同拍合流进入广场只按总剩余HP伤害一次，成员结果保留',()=>{
+  const s=campState(15,23);s.attacks=[];s.phase='battle';
+  s.enemies=[4,5].map((hp,i)=>({id:key(15,23),target:s.camp,hp,max:hp,members:1,sources:[i],origins:[`${i}:0`]}));
+  stepBattle(s);assert.equal(s.merges,1);assert.equal(s.hp,21);assert.equal(s.leaked,9);assert.equal(s.earned,0);assert.equal(s.enemies.length,0);
+  assert.equal(s.events.filter(e=>e.type==='leak').length,1);assert.deepEqual([...s.enemyOutcomes],[['0:0','leaked'],['1:0','leaked']]);
+  stepBattle(s);assert.equal(s.hp,21);
+});
 
 test('造墙、造塔、前哨及经营均不改变已锁定来源、目标、路线',()=>{
   const map=layout();map.tiles[key(17,24)]='open';map.blocks=[...map.blocks,{x:17,y:24,width:1,height:1,kind:'open'},{x:19,y:24,width:2,height:2,kind:'building'}];map.buildings=[{x:19,y:24,width:2,height:2,kind:'building'}];

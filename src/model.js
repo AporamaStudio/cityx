@@ -41,6 +41,15 @@ export function coverage(id, range = 1, shape = 'diamond') {
   return cells;
 }
 
+// 火光的受击区就是特殊广场的完整占地；无地图的规则检查沿用中心 3×3。
+export function campCells(state) {
+  return productionSite(state.camp,state)?.role==='camp'?productionCells(state.camp,state):coverage(state.camp,1,'square');
+}
+function campPath(state,path) {
+  const cells=new Set(campCells(state)),at=path.findIndex(id=>cells.has(id));
+  return at<0?path:path.slice(0,at+1);
+}
+
 // 新一轮保留已应用参数、玩家墙和炮台；集合复制避免重试修改旧布局。
 export function createState(sources = DEFAULTS.sources, towers = new Map(), playerWalls = new Set(), params = DEFAULTS, outposts = new Map(), layout = null) {
   const sites=layout?(layout.blocks??layout.buildings??[]):PRODUCTION_SITES;
@@ -170,7 +179,7 @@ export function repairPath(state,original) {
   let path=[...original];
   for(let attempts=0;attempts<SIZE*SIZE;attempts++){
     const blockedAt=path.findIndex(id=>state.terrainWalls.has(id));
-    if(blockedAt<0)return path;
+    if(blockedAt<0)return campPath(state,path);
     if(blockedAt===0)return [];
     const start=path[blockedAt-1],goals=new Map(path.slice(blockedAt+1).map((id,i)=>[id,blockedAt+1+i]));
     const visited=new Map(path.slice(0,blockedAt-1).map(id=>[id,null]));visited.set(start,null);
@@ -184,7 +193,7 @@ export function repairPath(state,original) {
       }
     }
     // 狭窄出口被建筑堵住时允许退回路口；仍只按通行距离走向原目标。
-    if(goal===undefined){const fallback=pathFrom(path[0],state.field);return fallback.at(-1)===state.camp?fallback:[];}
+    if(goal===undefined){const fallback=pathFrom(path[0],state.field);return fallback.at(-1)===state.camp?campPath(state,fallback):[];}
     const detour=[];for(let id=goal;id!==null;id=visited.get(id))detour.push(id);
     path=[...path.slice(0,blockedAt-1),...detour.reverse(),...path.slice(goals.get(goal)+1)];
   }
@@ -192,11 +201,11 @@ export function repairPath(state,original) {
 }
 export function forecastAttacks(state,night=state.day) {
   if(night===state.day)return state.attacks;
-  return (state.waves?.[night-1]??[]).map((source,index)=>({...source,index,target:state.camp,path:pathFrom(key(source.x,source.y),state.field)}));
+  return (state.waves?.[night-1]??[]).map((source,index)=>({...source,index,target:state.camp,path:campPath(state,pathFrom(key(source.x,source.y),state.field))}));
 }
 // 来源、目标与初始路线在白天开始锁定；瞭望塔不进入目标池。
 export function lockAttacks(state) {
-  state.attacks=state.sources.map((source,index)=>{const path=pathFrom(key(source.x,source.y),state.field);return {...structuredClone(source),index,target:state.camp,originalPath:[...path],path};});
+  state.attacks=state.sources.map((source,index)=>{const path=campPath(state,pathFrom(key(source.x,source.y),state.field));return {...structuredClone(source),index,target:state.camp,originalPath:[...path],path};});
 }
 export const enemyKey=(enemy)=>`${enemy.id}:${enemy.target}`;
 // 火光按余额购买整数 HP，余款保留；墙仍一次修满，瞭望塔无需维修。
@@ -368,6 +377,7 @@ export function validateSources(sources, state) {
 
 // 建筑炮位不受击，敌人只攻击挡住下一格的墙。
 export function enemyAction(state,enemy) {
+  if(campCells(state).includes(enemy.id))return {to:enemy.id};
   let path=enemy.path||pathFrom(enemy.id,state.field);
   if(path.some(id=>state.terrainWalls.has(id))){path=repairPath(state,path.slice(Math.max(0,path.indexOf(enemy.id))));enemy.path=path;}
   const at=path.indexOf(enemy.id);
@@ -406,7 +416,7 @@ export function stepBattle(state,actions=null) {
     }
   }
   for(const groupId of merged){const group=groups.get(groupId);state.events.push({type:'merge',id:group.id,target:group.target,value:group.hp,members:group.members,parts:mergeParts.get(groupId)});}
-  const fire=fireField(state),melee=new Map();state.enemies=[];
+  const fire=fireField(state),melee=new Map(),campArea=new Set(campCells(state));state.enemies=[];
   for(const enemy of groups.values()){
     const damage=Math.min(enemy.hp,fire.get(enemy.id)||0);enemy.hp-=damage;state.damage+=damage;
     if(damage)state.events.push({type:'hit',id:enemy.id,target:enemy.target,value:damage});
@@ -416,8 +426,8 @@ export function stepBattle(state,actions=null) {
       state.earned+=reward;state.nightEarned+=reward;state.removed+=enemy.members;state.killed+=enemy.members;
       for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'killed');
       state.events.push({type:'kill',id:enemy.id,target:enemy.target,value:reward,members:enemy.members});
-    }else if(enemy.id===enemy.target){
-      // 战略目标暂沿用剩余 HP 的一次性伤害；攻击完成退场，绝不换目标。
+    }else if(campArea.has(enemy.id)){
+      // 进入火光广场任意格即以剩余 HP 造成一次伤害，攻击后退场、不再走向中央。
       state.hp=Math.max(0,state.hp-enemy.hp);state.leaked+=enemy.hp;
       for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'leaked');
       state.events.push({type:'leak',id:enemy.id,value:enemy.hp});
