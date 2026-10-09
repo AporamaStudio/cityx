@@ -67,7 +67,7 @@ test('测试台设定的是当前资源，保留布局且不伪造经营收入�
   const s=createCampaign({...DEFAULTS,controlRadius:30});s.day=2;buildProduction(s,factory);
   assert.equal(applyTestScenario(s,8,1234,20),'');assert.equal(s.day,8);assert.equal(s.phase,'build');
   assert.equal(funds(s),1234);assert.equal(population(s).total,20);assert.equal(s.production.size,1);assert.equal(s.economyEarned,0);
-  assert.match(applyTestScenario(s,1,1,0),/生产需要/);assert.equal(s.day,8);assert.equal(funds(s),1234);
+  assert.match(applyTestScenario(s,1,1,0),/设施用工需要/);assert.equal(s.day,8);assert.equal(funds(s),1234);
   assert.equal(applyTestScenario(s,2,500,10),'');assert.equal(funds(s),500);assert.equal(population(s).total,10);
 });
 test('开局火光居于3×3广场中心，两块2×2教学废墟完整受控且不重叠',()=>{

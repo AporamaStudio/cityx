@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=56';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=57';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -278,6 +278,7 @@ export function outpostError(state,id) {
   if(state.towers.has(id)||state.playerWalls.has(id)||state.outposts.has(id)||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '该格已有设施或保留目标。';
   const [x,y]=xy(id),distance=state.params.outpostMinDistance;
   if([...state.outposts.keys()].some(anchor=>{const [ax,ay]=xy(anchor);return Math.hypot(x-ax,y-ay)<distance;}))return `瞭望塔间距至少 ${distance} 格。`;
+  if(population(state).free<state.params.outpostWorkers)return `劳动力不足：瞭望塔需要 ${state.params.outpostWorkers} 人，空闲 ${population(state).free} 人；请先建设住房。`;
   return funds(state)<state.params.outpostCost?'资金不足，无法建造瞭望塔。':'';
 }
 export function buildOutpost(state,id) {
@@ -367,7 +368,8 @@ export function validateParams(params, state, checkLayout = true) {
   if(!integer(params.campSight,0,30)||!integer(params.outpostSight,0,30)||!integer(params.sourceRevealSize,1,5))return '外围视野须为 0–30 整数，敌源揭示边长须为 1–5 整数。';
   if(!['daySightMultiplier','nightSightMultiplier','eventSightMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=3))return '视野倍率须为 0–3，可使用小数。';
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
-  if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产或增加住房。';
+  if(!integer(params.outpostWorkers,0,100))return '每座瞭望塔用工须为0–100人整数。';
+  if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产、瞭望塔或增加住房。';
   if(!integer(params.demolitionRefundPercent,0,100))return '拆除返还比例须为 0–100 整数。';
   if(!integer(params.renovationCostPercent,1,100))return '修缮费用占新建价须为 1–100% 整数。';
   if(!integer(params.productionBaseArea,1,SIZE*SIZE)||!integer(params.productionDensityGrowthArea,1,SIZE*SIZE)||!Number.isFinite(params.productionSmallCostFloor)||params.productionSmallCostFloor<=0||params.productionSmallCostFloor>1||!Number.isFinite(params.productionMaxDensity)||params.productionMaxDensity<1||params.productionMaxDensity>10)return '经营曲线：基准/增长面积须为 1–3600，低面积成本倍率大于 0 且不超过 1，产出密度上限为 1–10。';
@@ -593,8 +595,8 @@ function embeddingError(state,id){
   const p=productionSite(id,state);if(!p)return '';
   const error=plotBuildError(state,id);if(error)return error;
   const q=embeddingQuote(state,id);
-  // 只检查经营依赖，不能因改建住房让已有生产缺人。
-  return q.freeAfter<0?`改建后经营劳动力不足：住房减少 ${q.residents} 人，生产释放 ${q.released} 人；还缺 ${-q.freeAfter} 人。`:'';
+  // 只检查经营依赖，不能因改建住房让已有生产或瞭望塔缺人。
+  return q.freeAfter<0?`改建后劳动力不足：住房减少 ${q.residents} 人，生产释放 ${q.released} 人；还缺 ${-q.freeAfter} 人。`:'';
 }
 function applyEmbedding(state,id,preserveBuilding=false){
   const c=plotContent(state,id),cells=contentCells(state,id),footprint=new Set(buildingCells(state,id));if(!footprint.has(id))return;
@@ -608,7 +610,8 @@ function applyEmbedding(state,id,preserveBuilding=false){
 }
 export function population(state){
   const total=state.params.initialPopulation+(state.debugPopulation??0)+[...state.housing.keys()].reduce((n,id)=>n+housingQuote(state,id).residents,0);
-  const working=[...state.production.keys()].reduce((n,id)=>n+productionLabor(state,id),0);
+  // 用工随设施持续占用，拆除即时释放；不另存分配记录，避免重试或改建漏结算。
+  const working=[...state.production.keys()].reduce((n,id)=>n+productionLabor(state,id),0)+state.outposts.size*state.params.outpostWorkers;
   return {total,working,free:total-working};
 }
 export function housingError(state,id){
@@ -633,7 +636,7 @@ export function housingRemovalError(state,id){
   if(state.phase!=='build')return '防守中不能拆除住房。';
   if(!state.housing.has(productionId(id,state)))return '这里没有住房。';
   const support=buildingRemovalError(state,id);if(support)return support;
-  return population(state).free<housingQuote(state,id).residents?'现有生产依赖这些居民，请先拆除生产设施或补建住房。':'';
+  return population(state).free<housingQuote(state,id).residents?'现有生产或瞭望塔依赖这些居民，请先拆除用工设施或补建住房。':'';
 }
 export function removeHousing(state,id){
   const error=housingRemovalError(state,id);if(error)return error;
@@ -792,7 +795,7 @@ export function revealControl(state){
 export function applyTestScenario(state,day,gold,people){
   if(!Number.isInteger(day)||day<1||day>(state.waves?.length??1))return '请选择现有波次范围内的日期。';
   if(![gold,people].every(n=>Number.isInteger(n)&&n>=0&&n<=1000000))return '金币与人口须为 0–1000000 整数。';
-  const workers=population(state).working;if(people<workers)return `现有生产需要 ${workers} 人，不能设为更低人口。`;
+  const workers=population(state).working;if(people<workers)return `现有设施用工需要 ${workers} 人，不能设为更低人口。`;
   const sources=structuredClone(state.waves[day-1]),candidate={...state,sources};
   const error=validateSources(sources,candidate);if(error)return error;
   state.debugGold+=gold-funds(state);state.debugPopulation+=people-population(state).total;

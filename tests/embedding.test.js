@@ -20,7 +20,7 @@ test('住房改建仍检查人口下降的经营依赖，不额外收施工人�
  const s=createCampaign(base.params,base.waves,{...base.layout,blocks:[...base.sites,factory,small]});s.day=3;assert.equal(buildHousing(s,id),'');
  assert.equal(buildProduction(s,key(factory.x,factory.y)),'');assert.equal(population(s).working,4);
  assert.equal(housingQuote(s,id).residents,5);assert.equal(buildProduction(s,key(small.x,small.y)),'');assert.equal(population(s).free,0);
- const before=structuredClone(s);assert.match(buildTower(s,id,'A'),/经营劳动力不足/);assert.deepEqual(s,before);
+ const before=structuredClone(s);assert.match(buildTower(s,id,'A'),/劳动力不足/);assert.deepEqual(s,before);
  assert.equal(removeProduction(s,key(small.x,small.y)),'');const q=embeddingQuote(s,id);assert.equal(q.residents,1);assert.equal(q.freeAfter,0);
  const cash=funds(s);assert.equal(buildTower(s,id,'A'),'');assert.equal(population(s).free,0);assert.equal(funds(s),cash-10+q.refund);assert.equal(housingQuote(s,id).residents,4);
 });

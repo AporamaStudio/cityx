@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {createCampaign,key,buildOutpost,removeOutpost,outpostRemovalPreview,rawControlMask,controlMask,buildProduction,productionActive,validateParams,funds,beginBattle,restoreNight} from '../src/model.js';
+import {createCampaign,population,buildHousing,removeHousing,buildTower,applyTestScenario,key,buildOutpost,removeOutpost,outpostRemovalPreview,rawControlMask,controlMask,buildProduction,productionActive,validateParams,funds,beginBattle,restoreNight} from '../src/model.js';
 
 function setup(blocks=[],params={}){
  const layout={width:SIZE,height:SIZE,camp:{x:15,y:25},blocks,tiles:Array(SIZE*SIZE).fill('road')};
@@ -63,4 +63,29 @@ test('远端塔互相覆盖的闭环也必须连接篝火；重试保留拆除�
 test('缩小参数导致孤岛时拒绝，即使每座瞭望塔都能覆盖自己',()=>{
  const s=setup();chain(s,[24,30]);
  assert.equal(validateParams(s.params,s),'');assert.match(validateParams({...s.params,controlRadius:1},s),/失去与篝火的连接/);
+});
+
+test('瞭望塔持续占人，缺人拒建且无副作用，拆除释放，重试保留用工',()=>{
+ const s=setup([],{initialPopulation:1});assert.equal(buildOutpost(s,key(24,25)),'');
+ assert.deepEqual(population(s),{total:1,working:1,free:0});
+ const before=structuredClone(s);assert.match(buildOutpost(s,key(26,25)),/劳动力不足/);assert.deepEqual(s,before);
+ const retry=restoreNight(beginBattle(s));assert.deepEqual(population(retry),population(s));
+ assert.equal(removeOutpost(retry,key(24,25)),'');assert.equal(population(retry).free,1);
+ assert.equal(buildOutpost(retry,key(24,25)),'');
+ assert.match(validateParams({...retry.params,outpostWorkers:2},retry),/劳动力不足/);
+ assert.match(applyTestScenario(retry,3,1000,0),/设施用工需要/);
+});
+
+test('瞭望用工纳入住房拆除、架炮改建与生产用工依赖',()=>{
+ const s=setup([{x:17,y:27,width:2,height:2,kind:'building',ruinType:'housing'},
+ {x:20,y:27,width:2,height:2,kind:'building',ruinType:'production'}],{initialPopulation:0,housingCellsPerResident:1,productionCellsPerWorker:2});
+ assert.equal(buildHousing(s,key(17,27)),'');assert.equal(buildProduction(s,key(20,27)),'');
+ assert.equal(buildOutpost(s,key(24,25)),'');assert.equal(buildOutpost(s,key(26,25)),'');assert.equal(population(s).free,0);
+ const before=structuredClone(s);assert.match(removeHousing(s,key(17,27)),/依赖/);assert.deepEqual(s,before);
+ assert.match(buildTower(s,key(17,27),'A'),/劳动力不足/);assert.deepEqual(s,before);
+});
+
+test('默认最小间距2格，间距不足拒建，等于2格可建',()=>{
+ const s=setup();assert.equal(s.params.outpostMinDistance,2);assert.equal(buildOutpost(s,key(24,25)),'');
+ assert.match(buildOutpost(s,key(25,25)),/间距/);assert.equal(buildOutpost(s,key(26,25)),'');
 });
