@@ -1,26 +1,38 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {createCampaign,key,buildTower,removeTower,buildOutpost,removeOutpost,buildProduction,buildHousing,contentCells,productionQuote,housingQuote,economyBuildQuote,embeddingQuote,population,funds,inControl,inGroundControl,productionControlled,beginBattle,restoreNight,clearPlot,plotContent,demolitionQuote} from '../src/model.js';
+import {createCampaign,key,buildTower,removeTower,buildOutpost,removeOutpost,buildProduction,removeProduction,buildHousing,contentCells,productionQuote,housingQuote,economyBuildQuote,embeddingQuote,population,funds,inControl,inGroundControl,productionControlled,beginBattle,restoreNight,clearPlot,plotContent,demolitionQuote} from '../src/model.js';
 function setup(kind='building',ruinType='production',people=20){
  const p={x:15,y:22,width:3,height:3,kind,ruinType},layout={width:SIZE,height:SIZE,camp:{x:15,y:27},blocks:[p],tiles:Array(SIZE*SIZE).fill('road')};
  const wave=[{x:10,y:10,hp:6,count:1,first:1,interval:2}];
  const s=createCampaign({...DEFAULTS,budget:1000,initialPopulation:people},[wave,wave,wave],layout);s.day=3;return s;
 }
 const id=key(15,22);
-test('废墟嵌入一次完成清场与建炮，保留物理建筑；拆炮不自动补建经营',()=>{
+test('废墟架炮不占人力，保留物理建筑；拆炮不自动补建经营',()=>{
  const s=setup(),cash=funds(s);assert.equal(buildTower(s,id,'A'),'');
- assert.equal(s.clearingWorkers,1);assert.equal(funds(s),cash-10);assert.equal(contentCells(s,id).length,8);assert.ok(s.blocked.has(id));
+ assert.equal(funds(s),cash-10);assert.equal(contentCells(s,id).length,8);assert.ok(s.blocked.has(id));
  assert.equal(buildProduction(s,id),'');assert.equal(productionQuote(s,id).area,8);assert.ok(s.blocked.has(id));
  const before=funds(s);assert.equal(removeTower(s,id),'');assert.equal(funds(s),before+10);assert.equal(productionQuote(s,id).area,8);
  const q=economyBuildQuote(s,id,'production');assert.equal(q.added,1);assert.equal(buildProduction(s,id),'');assert.equal(funds(s),before+10-q.cost);assert.equal(productionQuote(s,id).area,9);
 });
-test('完好住房改建人口与清场一起检查，失败不扣钱不改地图，允许恰好用尽空闲',()=>{
- const s=setup('building','housing',0);assert.equal(buildHousing(s,id),'');
- assert.equal(housingQuote(s,id).residents,5);s.clearingWorkers=4;
- const before=structuredClone(s);assert.match(buildTower(s,id,'A'),/人力不足/);assert.deepEqual(s,before);
- s.clearingWorkers=3;const q=embeddingQuote(s,id);assert.equal(q.residents,1);assert.equal(q.freeAfter,0);
+test('住房改建仍检查人口下降的经营依赖，不额外收施工人力',()=>{
+ const base=setup('building','housing',0),factory={x:19,y:22,width:4,height:4,kind:'building',ruinType:'production'},small={x:24,y:22,width:2,height:2,kind:'building',ruinType:'production'};
+ const s=createCampaign(base.params,base.waves,{...base.layout,blocks:[...base.sites,factory,small]});s.day=3;assert.equal(buildHousing(s,id),'');
+ assert.equal(buildProduction(s,key(factory.x,factory.y)),'');assert.equal(population(s).working,4);
+ assert.equal(housingQuote(s,id).residents,5);assert.equal(buildProduction(s,key(small.x,small.y)),'');assert.equal(population(s).free,0);
+ const before=structuredClone(s);assert.match(buildTower(s,id,'A'),/经营劳动力不足/);assert.deepEqual(s,before);
+ assert.equal(removeProduction(s,key(small.x,small.y)),'');const q=embeddingQuote(s,id);assert.equal(q.residents,1);assert.equal(q.freeAfter,0);
  const cash=funds(s);assert.equal(buildTower(s,id,'A'),'');assert.equal(population(s).free,0);assert.equal(funds(s),cash-10+q.refund);assert.equal(housingQuote(s,id).residents,4);
+});
+test('零人口仍可在废墟架炮，不改变人口',()=>{
+ const s=setup('building','production',0),before=population(s),cash=funds(s);
+ assert.equal(buildTower(s,id,'A'),'');assert.deepEqual(population(s),before);assert.equal(funds(s),cash-10);
+});
+test('生产用工已满仍可架炮，占经营面积释放用工与收入变化保留',()=>{
+ const s=setup('building','production',3);assert.equal(buildProduction(s,id),'');assert.equal(population(s).free,0);
+ const quote=embeddingQuote(s,id),income=productionQuote(s,id).income;
+ assert.equal(quote.released,1);assert.equal(quote.incomeLoss,1);assert.equal(buildTower(s,id,'A'),'');
+ assert.deepEqual(population(s),{total:3,working:2,free:1});assert.equal(productionQuote(s,id).income,income-1);
 });
 test('建筑整体控制可架炮，瞭望塔独立占地且不减少经营面积',()=>{
  const s=setup();s.params.controlRadius=3;s.params.outpostRadius=1;const anchor=key(15,24),ground=key(15,25);
@@ -30,7 +42,7 @@ test('建筑整体控制可架炮，瞭望塔独立占地且不减少经营面�
  assert.equal(productionQuote(s,id).area,8);assert.equal(removeOutpost(s,ground),'');assert.equal(productionQuote(s,id).area,8);
 });
 
-test('夜间补炮可清场；重试保留原缺口，有炮必须先拆再换经营用途',()=>{
+test('夜间补炮不占人力；重试保留原缺口，有炮必须先拆再换经营用途',()=>{
  const s=setup();assert.equal(buildTower(s,id,'A'),'');assert.match(buildHousing(s,id),/生产废墟|其他设施/);
  const snap=beginBattle(s),before=funds(s);assert.equal(buildTower(s,key(16,22),'A'),'');assert.equal(funds(s),before-20);
  const retry=restoreNight(snap);assert.equal(contentCells(retry,id).length,8);assert.match(clearPlot(retry,key(16,22)),/先拆除炮塔/);

@@ -2,7 +2,7 @@ import {generateCityMap} from '../src/city-map.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS} from '../src/config.js';
-import {createState,key,population,housingQuote,buildHousing,removeHousing,buildProduction,removeProduction,productionError,funds,demolitionQuote,beginBattle,restoreNight,restartCampaign,validateParams,clearPlot,plotContent,clearingLabor,applyTestScenario,createCampaign,enterMorning,productionControlled} from '../src/model.js';
+import {createState,key,population,housingQuote,buildHousing,removeHousing,buildProduction,removeProduction,productionError,funds,demolitionQuote,beginBattle,restoreNight,restartCampaign,validateParams,clearPlot,plotContent,applyTestScenario,createCampaign,enterMorning,productionControlled} from '../src/model.js';
 const home=key(11,24),factory=key(19,26);
 function setup(initialPopulation=0){const s=createState(undefined,undefined,undefined,{...DEFAULTS,controlRadius:30,budget:1000,initialPopulation});s.plotContents.set(home,{status:'ruin',type:'housing'});s.day=2;return s;}
 test('住房当天入住，人口独立于 HP；生产占用、拆除释放劳动力',()=>{
@@ -45,12 +45,23 @@ test('seed 固定两类废墟，起步保留生产；重开还原用途',()=>{
   assert.equal(plotContent(restartCampaign(s),id).type,'housing');
 });
 
-test('清理即时生效、不改金币，占用当日人力；不足不清理，次日释放',()=>{
-  const s=setup(4),before=funds(s);assert.equal(clearingLabor(s,home),4);
-  assert.equal(clearPlot(s,home),'');assert.equal(funds(s),before);assert.equal(population(s).total,4);assert.equal(population(s).free,0);
-  assert.match(clearPlot(s,factory),/需要 4 人/);assert.equal(plotContent(s,factory).status,'ruin');
-  const snap=beginBattle(s);assert.equal(restoreNight(snap).clearingWorkers,4);
-  s.waves=[[],[],[]];s.phase='won';assert.equal(enterMorning(s),true);assert.equal(population(s).free,4);
+test('零人口也可连续清理废墟，不改金币与人口；重试保留空地',()=>{
+  const s=setup(0),before=funds(s),people=population(s);
+  assert.equal(clearPlot(s,home),'');assert.equal(clearPlot(s,factory),'');
+  assert.equal(funds(s),before);assert.deepEqual(population(s),people);
+  assert.equal(plotContent(s,home).status,'empty');assert.equal(plotContent(s,factory).status,'empty');
+  const snap=beginBattle(s),retry=restoreNight(snap);assert.deepEqual(population(retry),people);
+  assert.equal(plotContent(retry,home).status,'empty');assert.equal(plotContent(retry,factory).status,'empty');
+  s.waves=[[],[],[]];s.phase='won';assert.equal(enterMorning(s),true);assert.deepEqual(population(s),people);
+});
+test('生产用工已满仍可清理废墟，生产占用与住房依赖保持不变',()=>{
+  const s=setup();assert.equal(buildHousing(s,home),'');
+  s.params.productionCellsPerWorker=2;assert.equal(buildProduction(s,factory),'');
+  assert.equal(population(s).free,0);
+  const site=s.sites.find(p=>![home,factory].includes(key(p.x,p.y))&&productionControlled(s,key(p.x,p.y)));
+  assert.ok(site);const ruin=key(site.x,site.y),before=population(s),cash=funds(s);
+  assert.equal(clearPlot(s,ruin),'');assert.deepEqual(population(s),before);assert.equal(funds(s),cash);
+  assert.match(removeHousing(s,home),/依赖/);
 });
 test('测试台设定的是当前资源，保留布局且不伪造经营收入，生产依赖不足则拒绝',()=>{
   const s=createCampaign({...DEFAULTS,controlRadius:30});s.day=2;buildProduction(s,factory);

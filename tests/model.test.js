@@ -208,18 +208,18 @@ test('跨晚击杀只累计一次，不因进入次日重复发钱',()=>{
 // 经营投资跨晚固定；收益必须和真实控制及重试快照一致。
 test('生产建设、当天全返、跨天返还一半，资金不足不改变设施',async()=>{
   const {buildProduction,removeProduction,productionError}=await import('../src/model.js');
-  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1}),id=key(11,24);s.day=2;
+  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,renovationCostPercent:100,productionIncomePerCell:1}),id=key(11,24);s.day=2;
   assert.equal(buildProduction(s,id),'');assert.equal(funds(s),80);
   assert.equal(removeProduction(s,id),'');assert.equal(funds(s),100);
   assert.ok(productionError(s,key(3,17)));assert.equal(changeWall(s,id),'');assert.equal(buildProduction(s,id),'');changeWall(s,id,true);
   buildProduction(s,id);const snapshot=beginBattle(s);assert.ok(removeProduction(s,id));
   s.phase='build';s.day=3;const prior=funds(s);assert.equal(removeProduction(s,id),'');assert.equal(funds(s),prior+10);assert.equal(removeProduction(restoreNight(snapshot),id),'');
-  const poor=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1,budget:19});assert.ok(buildProduction(poor,id));assert.equal(poor.production.size,0);
+  const poor=createCampaign({...DEFAULTS,productionCostPerCell:8,renovationCostPercent:100,productionIncomePerCell:1,budget:19});assert.ok(buildProduction(poor,id));assert.equal(poor.production.size,0);
 });
 test('经营胜利结算一次、跨晚继承，失败不发钱，重试不复制收益',async()=>{
   const {createCampaign,buildProduction,beginBattle,restoreNight,settleEconomy,enterMorning}=await import('../src/model.js');
   const waves=Array.from({length:3},()=>[{x:15,y:24,hp:1,count:1,first:1,interval:1,target:-1}]);
-  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1},waves);s.day=2;buildProduction(s,key(11,24));buildProduction(s,key(19,26));
+  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,renovationCostPercent:100,productionIncomePerCell:1},waves);s.day=2;buildProduction(s,key(11,24));buildProduction(s,key(19,26));
   const snap=beginBattle(s);while(s.phase==='battle')stepBattle(s);
   assert.equal(s.phase,'won');assert.equal(s.nightEconomy,8);assert.equal(funds(s),68);settleEconomy(s);assert.equal(funds(s),68);
   assert.equal(funds(restoreNight(snap)),60);enterMorning(s);assert.equal(s.lastNight.economy,8);assert.equal(s.nightEconomy,0);
@@ -230,14 +230,14 @@ test('经营胜利结算一次、跨晚继承，失败不发钱，重试不复�
 
 test('多格街区任意格操作同一投资，建筑至少碰一格才有生产资格',async()=>{
   const {productionCells,productionError,buildProduction,removeProduction,expectedIncome}=await import('../src/model.js');
-  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1,budget:70,controlRadius:30});s.day=2;
+  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,renovationCostPercent:100,productionIncomePerCell:1,budget:70,controlRadius:30});s.day=2;
   assert.equal(productionCells(key(12,25)).length,4);assert.equal(buildProduction(s,key(12,25)),'');
   assert.equal(s.production.size,1);assert.equal(funds(s),50);assert.ok(buildProduction(s,key(11,24)));
   assert.ok(changeWall(s,key(12,25)));assert.ok(buildOutpost(s,key(12,25)));
   assert.equal(removeProduction(s,key(11,25)),'');assert.equal(funds(s),70);
   assert.equal(buildProduction(s,key(4,24)),'');assert.equal(funds(s),14);assert.equal(expectedIncome(s),9);
   assert.match(productionError(s,key(11,24)),/资金不足/);
-  const partial=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1,controlRadius:1});partial.day=2;assert.match(productionError(partial,key(11,24)),/碰到建筑至少一格/);
+  const partial=createCampaign({...DEFAULTS,productionCostPerCell:8,renovationCostPercent:100,productionIncomePerCell:1,controlRadius:1});partial.day=2;assert.match(productionError(partial,key(11,24)),/碰到建筑至少一格/);
 });
 test('街区布局不重叠、不覆盖源头，报价按基准单价和面积曲线计算',async()=>{
   const {PRODUCTION_SITES}=await import('../src/config.js');
@@ -245,7 +245,7 @@ test('街区布局不重叠、不覆盖源头，报价按基准单价和面积�
   const s=createCampaign(),seen=new Set();s.day=2;
   for(const p of PRODUCTION_SITES)for(const id of productionCells(key(p.x,p.y))){assert.ok(!seen.has(id));assert.ok(s.blocked.has(id));assert.notEqual(id,s.camp);seen.add(id);}
   for(const source of s.waves.flat())assert.ok(!seen.has(key(source.x,source.y)));
-  const params={...DEFAULTS,productionCostPerCell:9,productionIncomePerCell:2};
+  const params={...DEFAULTS,productionCostPerCell:9,renovationCostPercent:100,productionIncomePerCell:2};
   assert.deepEqual(productionQuote({...s,params},key(2,22)),{area:9,cost:63,income:18});
   assert.deepEqual(productionQuote({...s,params},key(11,24)),{area:4,cost:23,income:8});
   buildProduction(s,key(11,24));assert.equal(validateParams({...DEFAULTS,controlRadius:3},s),'');assert.ok(validateParams({...DEFAULTS,controlRadius:1},s));
@@ -267,7 +267,7 @@ test('自定义击杀金币按原始成员累计，奖励金额与消灭数量�
 
 test('各类设施跨天返还50%，地块换建与重试不制造资金',async()=>{
   const {demolitionQuote,buildProduction,removeProduction}=await import('../src/model.js');
-  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1,budget:200,controlRadius:30}),wall=key(14,18),tower=key(2,22),post=key(19,26);s.day=3;
+  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,renovationCostPercent:100,productionIncomePerCell:1,budget:200,controlRadius:30}),wall=key(14,18),tower=key(2,22),post=key(19,26);s.day=3;
   changeWall(s,wall);buildTower(s,tower,'A');clearPlot(s,post);buildOutpost(s,post);buildProduction(s,key(11,24));
   const prior=funds(s);s.day=4;assert.equal(demolitionQuote(s,post).refund,12);
   assert.equal(removeTower(s,tower),'');assert.equal(changeWall(s,wall,true),'');assert.equal(removeOutpost(s,post),'');assert.equal(removeProduction(s,key(12,25)),'');
@@ -289,7 +289,7 @@ test('夜间建筑补炮建造日保留到次日，返还使用白天基价',()=
 
 test('默认十五晚可完整推进，最后一晚只结算一次',async()=>{
   const {buildProduction,settleEconomy}=await import('../src/model.js');
-  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1,campHP:10000});assert.equal(s.waves.length,15);
+  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,renovationCostPercent:100,productionIncomePerCell:1,campHP:10000});assert.equal(s.waves.length,15);
   for(let day=1;day<=15;day++){
     if(day===2)assert.equal(buildProduction(s,key(11,24)),'');
     assert.equal(validateSources(s.sources,s),'');beginBattle(s);
@@ -302,7 +302,7 @@ test('默认十五晚可完整推进，最后一晚只结算一次',async()=>{
 
 test('昨夜经营报告固定控制不足的停产数量，次日拆建不改写历史',async()=>{
   const {buildProduction,settleEconomy,removeProduction}=await import('../src/model.js');
-  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1});s.day=2;buildProduction(s,key(11,24));buildProduction(s,key(19,26));
+  const s=createCampaign({...DEFAULTS,productionCostPerCell:8,renovationCostPercent:100,productionIncomePerCell:1});s.day=2;buildProduction(s,key(11,24));buildProduction(s,key(19,26));
   const snapshot=beginBattle(s);s.params.controlRadius=4;s.camp=key(19,25);s.phase='won';s.nightEarned=3;
   settleEconomy(s);
   assert.equal(s.nightEconomy,4);assert.deepEqual(s.productionReport,{productive:1,stopped:1,missed:4});
@@ -317,12 +317,12 @@ test('昨夜经营报告固定控制不足的停产数量，次日拆建不改�
 
 test('每格收入减半保留小数，整块最终收入向上取整',async()=>{
   const {productionQuote}=await import('../src/model.js');
-  assert.equal(DEFAULTS.productionCostPerCell,2);assert.equal(DEFAULTS.productionIncomePerCell,0.5);
+  assert.equal(DEFAULTS.productionCostPerCell,4);assert.equal(DEFAULTS.productionIncomePerCell,0.5);
   const s=createCampaign();assert.equal(validateParams(s.params,s),'');
   const quote=(width,height)=>productionQuote({...s,sites:[{x:0,y:0,width,height}]},0);
-  assert.deepEqual(quote(2,2),{area:4,cost:5,income:2});
+  assert.deepEqual(quote(2,2),{area:4,cost:10,income:2});
   assert.equal(quote(3,3).income,5);
-  assert.deepEqual(quote(5,5),{area:25,cost:76,income:19});
+  assert.deepEqual(quote(5,5),{area:25,cost:152,income:19});
 });
 
 test('敌群预告区分出生批次和抵达结果，重试清空结果',async()=>{

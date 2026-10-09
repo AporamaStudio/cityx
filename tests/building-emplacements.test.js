@@ -37,14 +37,13 @@ test('瞭望塔仅用地面控制、保持通行与路径、遵守欧氏间距',
 test('夜间架炮默认只加倍金币，拆返按白天基价，重试撤销加急支出',async()=>{
  const {beginBattle,restoreNight,funds,embeddingQuote,demolitionQuote,enterMorning}=await import('../src/model.js');
  const s=setup();s.day=1;const snapshot=beginBattle(s),before=funds(s);
- assert.equal(embeddingQuote(s,origin).labor,1);assert.equal(buildTower(s,origin,'A'),'');assert.equal(funds(s),before-20);assert.equal(s.clearingWorkers,1);
- assert.equal(demolitionQuote(s,origin).refund,10);s.phase='won';enterMorning(s);assert.equal(s.clearingWorkers,0);
+ assert.equal(buildTower(s,origin,'A'),'');assert.equal(funds(s),before-20);
+ assert.equal(demolitionQuote(s,origin).refund,10);s.phase='won';enterMorning(s);
  assert.equal(demolitionQuote(s,origin).refund,5);removeTower(s,origin);assert.equal(funds(s),before-15);
  const retry=restoreNight(snapshot);assert.equal(funds(retry),before);assert.equal(retry.nightBuildSpent,0);
- const poor=setup();poor.phase='battle';poor.debugPopulation=-30;const saved=structuredClone(poor);
- assert.match(buildTower(poor,origin,'A'),/人力不足/);assert.deepEqual(poor,saved);
- poor.debugPopulation=-29;assert.equal(buildTower(poor,origin,'A'),'');assert.equal(poor.clearingWorkers,1);
- assert.match(buildTower(poor,key(16,22),'A'),/人力不足/);
- poor.debugPopulation=0;poor.params.nightTowerCostMultiplier=1.5;poor.params.nightClearingLaborMultiplier=1.5;
- assert.equal(embeddingQuote(poor,key(16,22)).labor,2);const cash=funds(poor);assert.equal(buildTower(poor,key(16,22),'A'),'');assert.equal(funds(poor),cash-15);assert.equal(poor.clearingWorkers,3);
+ const poor=setup();poor.phase='battle';poor.debugPopulation=-30;
+ assert.equal(buildTower(poor,origin,'A'),'');
+ assert.equal(buildTower(poor,key(16,22),'A'),'');assert.equal(embeddingQuote(poor,key(17,22)).freeAfter,0);
+ poor.params.nightTowerCostMultiplier=1.5;
+ const cash=funds(poor);assert.equal(buildTower(poor,key(17,22),'A'),'');assert.equal(funds(poor),cash-15);
 });

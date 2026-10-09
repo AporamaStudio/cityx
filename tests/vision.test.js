@@ -1,8 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {knownSources,firstNightReady,createState,key,xy,visionField,inControl,coverage,validateParams,revealControl} from '../src/model.js';
+import {knownSources,firstNightReady,createState,key,xy,visionField,inControl,coverage,validateParams,revealControl,buildOutpost,removeOutpost,funds} from '../src/model.js';
 function state(){return createState([{x:40,y:10,hp:6,count:1,first:1,interval:12}],undefined,undefined,{...DEFAULTS,controlRadius:3});}
+test('瞭望塔当天拆返全部投入、收回独占视野，保留探索及重叠视野',()=>{
+ const s=state();s.day=3;const id=key(15,27),before=visionField(s),cash=funds(s);s.explored=new Set(before);
+ assert.equal(buildOutpost(s,id),'');const withTower=visionField(s),extra=[...withTower].filter(cell=>!before.has(cell));assert.ok(extra.length>0);
+ assert.ok(extra.every(cell=>s.explored.has(cell)));assert.equal(removeOutpost(s,id),'');
+ assert.equal(funds(s),cash);assert.deepEqual(visionField(s),before);
+ assert.ok(extra.every(cell=>s.explored.has(cell)&&!visionField(s).has(cell)));
+});
 test('夜晚缩小外围视野，不缩控制区；探索记忆保留，未见地形不预开矩形',()=>{
  const s=state(),day=visionField(s),night=visionField(s,'battle'),[cx,cy]=xy(s.camp),edge=key(cx,cy-8);
  assert.ok(night.has(key(cx,cy-7)));assert.ok(!night.has(edge));

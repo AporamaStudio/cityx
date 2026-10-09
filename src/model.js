@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, PRODUCTION_CURVE } from './config.js?v=53';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=56';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -58,7 +58,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
   const blocked=new Set(layout?layout.tiles.flatMap((t,id)=>t==='block'?[id]:[]):[]),walls=new Set([...fixedWalls,...blocked,...playerWalls]);
   const terrainWalls=new Set([...fixedWalls,...blocked]);
   const camp = layout?key(layout.camp.x,layout.camp.y):key(...DEFAULTS.camp), field = routeField(camp, terrainWalls);
-  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), clearingWorkers:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, nightBuildSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
+  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, nightBuildSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
     layout, blocked, terrainWalls, sites, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
@@ -276,7 +276,7 @@ export function removeOutpost(state,id) {
 export function enterMorning(state) {
   if(state.phase!=='won'||state.day>=(state.waves?.length??2))return false;
   state.lastNight={day:state.day,earned:state.nightEarned,economy:state.nightEconomy,...state.productionReport,leaked:state.leaked};
-  state.day++;state.phase='build';state.clearingWorkers=0;
+  state.day++;state.phase='build';
   if(state.waves)state.sources=state.waves[state.day-1];
   revealControl(state);
   clearNight(state);
@@ -338,19 +338,21 @@ export function validateParams(params, state, checkLayout = true) {
   if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';
   if(!integer(params.campSight,0,30)||!integer(params.outpostSight,0,30)||!integer(params.sourceRevealSize,1,5))return '外围视野须为 0–30 整数，敌源揭示边长须为 1–5 整数。';
   if(!['daySightMultiplier','nightSightMultiplier','eventSightMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=3))return '视野倍率须为 0–3，可使用小数。';
-  if(!integer(params.clearingCellsPerWorker,1,100))return '清理每名工人承担格数须为 1–100 整数。';
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
   if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产或增加住房。';
   if(!integer(params.demolitionRefundPercent,0,100))return '拆除返还比例须为 0–100 整数。';
+  if(!integer(params.renovationCostPercent,1,100))return '修缮费用占新建价须为 1–100% 整数。';
+  if(!integer(params.productionBaseArea,1,SIZE*SIZE)||!integer(params.productionDensityGrowthArea,1,SIZE*SIZE)||!Number.isFinite(params.productionSmallCostFloor)||params.productionSmallCostFloor<=0||params.productionSmallCostFloor>1||!Number.isFinite(params.productionMaxDensity)||params.productionMaxDensity<1||params.productionMaxDensity>10)return '经营曲线：基准/增长面积须为 1–3600，低面积成本倍率大于 0 且不超过 1，产出密度上限为 1–10。';
+  if(!integer(params.stepMs,50,5000))return '移动节拍须为 50–5000 毫秒整数。';
   if(!integer(params.outpostCost,1,1000)||!integer(params.outpostRadius,1,30)||!integer(params.campRepairCost,1,1000))return '瞭望塔价格 1–1000、半径 1–30；火光每 HP 修复单价 1–1000。';
-  if(!['nightTowerCostMultiplier','nightClearingLaborMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=1&&params[k]<=10))return '夜间加急倍率须为1–10。';
+  if(!Number.isFinite(params.nightTowerCostMultiplier)||params.nightTowerCostMultiplier<1||params.nightTowerCostMultiplier>10)return '夜间金币加急倍率须为1–10。';
   if(!integer(params.outpostMinDistance,1,30))return '瞭望塔最小间距须为1–30格。';
   if(checkLayout){const ids=[...state.outposts.keys()];for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){const [x,y]=xy(ids[i]),[a,b]=xy(ids[j]);if(Math.hypot(x-a,y-b)<params.outpostMinDistance)return '现有瞭望塔不满足新间距，请先拆除或减小间距。';}}
   for (const type of ['A','B']) {
     const w=params.weapons[type];
     if (!w || !['square','diamond'].includes(w.shape) || !integer(w.range,1,8) || !integer(w.power,1,99) || !integer(w.cost,1,1000)) return `武器 ${type}：范围 1–8、火力 1–99、价格 1–1000，均为整数。`;
   }
-  if (!integer(params.productionCostPerCell,1,1000)||!(Number.isFinite(params.productionIncomePerCell)&&params.productionIncomePerCell>=0&&params.productionIncomePerCell<=1000)) return '每格生产恢复费用须为 1–1000、每格每晚收入须为 0–1000，可使用小数。';
+  if (!integer(params.productionCostPerCell,1,1000)||!(Number.isFinite(params.productionIncomePerCell)&&params.productionIncomePerCell>=0&&params.productionIncomePerCell<=1000)) return '每格生产新建费用须为 1–1000、每格每晚收入须为 0–1000，可使用小数。';
   if (!integer(params.killReward,0,1000)) return '每个敌人击杀奖励须为 0–1000 整数。';
   const candidate={...state,params};
   if(checkLayout&&([...state.playerWalls].some(id=>!inGroundControl(candidate,id))||[...state.towers.keys()].some(id=>!inControl(candidate,id))||[...state.outposts.keys()].some(id=>!inGroundControl(candidate,id))||[...state.production.keys(),...state.housing.keys()].some(id=>!productionControlled(candidate,id))))return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
@@ -474,31 +476,48 @@ const economyCells=(state,id)=>plotContent(state,id).status==='building'?content
 function areaQuote(state,id,area){
   const original=productionCells(id,state).length;
   if(!original)return {area:0,cost:0,income:0};
-  const {baseArea,smallCostFloor,densityGrowthArea,maxDensity}=PRODUCTION_CURVE;
+  const {productionBaseArea:baseArea,productionSmallCostFloor:smallCostFloor,productionDensityGrowthArea:densityGrowthArea,productionMaxDensity:maxDensity}={...DEFAULTS,...state.params};
   const density=original<=baseArea?1:1+(maxDensity-1)*(1-2**(-(original-baseArea)/densityGrowthArea));
   const unitCost=original<=baseArea?state.params.productionCostPerCell*(smallCostFloor+(1-smallCostFloor)*original/baseArea):Math.round(original*density)*state.params.productionCostPerCell/original;
-  return {area,cost:Math.round(area*unitCost),income:Math.ceil(area*state.params.productionIncomePerCell*density)};
+  return {area,cost:area*unitCost,income:Math.ceil(area*state.params.productionIncomePerCell*density)};
 }
-export const productionQuote=(state,id)=>areaQuote(state,id,economyCells(state,id).length);
+// 修缮资格属于仍保留的原用途结构；整栋清空即失去，不从地图原始类型恢复。
+function renovationCells(state,id,type){
+  const c=plotContent(state,id);
+  if(c.type!==type||c.status==='empty')return new Set();
+  return c.renovationCells??(c.status==='ruin'?new Set(buildingCells(state,id)):new Set());
+}
+// 整块先取整，再按固定格序分摊；拆同一格与补同一格共用价格，避免取整套利。
+function economyCellCosts(state,id,type){
+  const cells=productionCells(id,state),n=cells.length;if(!n)return new Map();
+  const raw=type==='housing'?n*state.params.housingCostPerCell:areaQuote(state,id,n).cost;
+  const fresh=Math.round(raw),restored=Math.round(raw*(state.params.renovationCostPercent??DEFAULTS.renovationCostPercent)/100),eligible=renovationCells(state,id,type);
+  return new Map(cells.map((cell,i)=>{const total=eligible.has(cell)?restored:fresh;return [cell,Math.floor(total/n)+(i<total%n?1:0)];}));
+}
+function economyAreaCost(state,id,type,cells){
+  const prices=economyCellCosts(state,id,type);return cells.reduce((sum,cell)=>sum+(prices.get(cell)??0),0);
+}
+export const productionQuote=(state,id)=>({...areaQuote(state,id,economyCells(state,id).length),cost:economyAreaCost(state,id,'production',economyCells(state,id))});
 export const productionLabor=(state,id)=>Math.ceil(economyCells(state,id).length/state.params.productionCellsPerWorker);
 export function housingQuote(state,id){
   const area=economyCells(state,id).length;
-  return {cost:area*state.params.housingCostPerCell,residents:Math.ceil(area/state.params.housingCellsPerResident)};
+  return {cost:economyAreaCost(state,id,'housing',economyCells(state,id)),residents:Math.ceil(area/state.params.housingCellsPerResident)};
 }
 // 补建只收新增面积费用；累计实付金额用于拆返，避免切割/补建凭空产生金币。
 export function economyBuildQuote(state,id,type){
   const plot=productionId(id,state),map=type==='housing'?state.housing:state.production;
   const before=map.has(plot)?contentCells(state,id).length:0,after=availableCells(state,id).length,added=after-before;
-  const cost=type==='housing'?added*state.params.housingCostPerCell:areaQuote(state,id,after).cost-areaQuote(state,id,before).cost;
-  return {added,cost,labor:type==='production'?Math.ceil(after/state.params.productionCellsPerWorker)-Math.ceil(before/state.params.productionCellsPerWorker):0,residents:type==='housing'?Math.ceil(after/state.params.housingCellsPerResident)-Math.ceil(before/state.params.housingCellsPerResident):0,income:areaQuote(state,id,after).income};
+  const existing=new Set(map.has(plot)?contentCells(state,id):[]),cells=availableCells(state,id).filter(cell=>!existing.has(cell));
+  const cost=economyAreaCost(state,id,type,cells),restored=cells.filter(cell=>renovationCells(state,id,type).has(cell)).length;
+  return {added,cost,mode:restored===added&&added>0?'renovation':restored?'mixed':'new',labor:type==='production'?Math.ceil(after/state.params.productionCellsPerWorker)-Math.ceil(before/state.params.productionCellsPerWorker):0,residents:type==='housing'?Math.ceil(after/state.params.housingCellsPerResident)-Math.ceil(before/state.params.housingCellsPerResident):0,income:areaQuote(state,id,after).income};
 }
 // 每格保留投入日期，次日补建不会把旧建筑的投资变成当天全返。
 function addEconomyInvestment(state,id,type,quote){
   const plot=productionId(id,state),map=type==='housing'?state.housing:state.production,old=map.get(plot);
   const paid=new Map(old?.paid??[]),existing=new Set(old?contentCells(state,id):[]);
   const added=availableCells(state,id).filter(cell=>!existing.has(cell));
-  const base=Math.floor(quote.cost/added.length),remainder=quote.cost%added.length;
-  added.forEach((cell,i)=>paid.set(cell,{cost:base+(i<remainder?1:0),day:state.day}));
+  const prices=economyCellCosts(state,id,type);
+  added.forEach(cell=>paid.set(cell,{cost:prices.get(cell),day:state.day}));
   map.set(plot,{day:old?.day??state.day,cost:(old?.cost??0)+quote.cost,paid});
 }
 function investmentRefund(state,entries){
@@ -506,10 +525,9 @@ function investmentRefund(state,entries){
   for(const entry of entries)if(entry.day===state.day)today+=entry.cost;else older+=entry.cost;
   return today+Math.floor(older*state.params.demolitionRefundPercent/100);
 }
-// 嵌入报价没有副作用：人口减少、释放工人、清场占用与退款一并预览。
+// 架炮不收施工人力；只预览占经营面积带来的人口、用工、收入和退款变化。
 export function embeddingQuote(state,id){
   const c=plotContent(state,id),cells=contentCells(state,id),occupied=cells.includes(id),plot=productionId(id,state);
-  const labor=buildingCells(state,id).includes(id)?Math.ceil(Math.ceil(1/state.params.clearingCellsPerWorker)*(state.phase==='battle'?state.params.nightClearingLaborMultiplier:1)):0;
   const building=occupied&&c.status==='building',home=building&&c.type==='housing',factory=building&&c.type==='production';
   const residents=home?Math.ceil(cells.length/state.params.housingCellsPerResident)-Math.ceil((cells.length-1)/state.params.housingCellsPerResident):0;
   const released=factory?Math.ceil(cells.length/state.params.productionCellsPerWorker)-Math.ceil((cells.length-1)/state.params.productionCellsPerWorker):0;
@@ -517,7 +535,7 @@ export function embeddingQuote(state,id){
   const invested=record?.cost??(home?housingQuote(state,id).cost:factory?productionQuote(state,id).cost:0);
   const investment=record?.paid?.get(id),cost=building?(investment?.cost??Math.floor(invested/cells.length)):0,refund=investmentRefund(state,[{cost,day:investment?.day??record?.day??0}]);
   const incomeLoss=factory?areaQuote(state,id,cells.length).income-areaQuote(state,id,cells.length-1).income:0;
-  return {labor,residents,released,cost,refund,incomeLoss,freeAfter:population(state).free-residents+released-labor};
+  return {residents,released,cost,refund,incomeLoss,freeAfter:population(state).free-residents+released};
 }
 // 边缘按原始街区边界判定，内部缺口不会制造新边缘；邻接建筑接缝不算入口。
 // 炮位资格由原始街区与街道决定，临时墙、清场缺口不改变边缘资格。
@@ -546,14 +564,13 @@ function embeddingError(state,id){
   const p=productionSite(id,state);if(!p)return '';
   const error=plotBuildError(state,id);if(error)return error;
   const q=embeddingQuote(state,id);
-  if(q.labor&&!streetEdgeAccess(state,id))return '炮塔须位于原始街区的临路边缘；内部缺口不算边缘。';
-  return q.freeAfter<0?`人力不足：清场占用 ${q.labor} 人，住房减少 ${q.residents} 人，生产释放 ${q.released} 人；还缺 ${-q.freeAfter} 人。`:'';
+  // 只检查经营依赖，不能因改建住房让已有生产缺人。
+  return q.freeAfter<0?`改建后经营劳动力不足：住房减少 ${q.residents} 人，生产释放 ${q.released} 人；还缺 ${-q.freeAfter} 人。`:'';
 }
 function applyEmbedding(state,id,preserveBuilding=false){
   const c=plotContent(state,id),cells=contentCells(state,id),footprint=new Set(buildingCells(state,id));if(!footprint.has(id))return;
   const q=embeddingQuote(state,id),plot=productionId(id,state),map=c.type==='housing'?state.housing:state.production,record=map.get(plot);
   if(c.status==='building'&&record){record.cost=(record.cost??(c.type==='housing'?housingQuote(state,id).cost:productionQuote(state,id).cost))-q.cost;record.paid?.delete(id);retainDemolitionCost(state,q);}
-  state.clearingWorkers+=q.labor;
   const remaining=new Set(cells.filter(cell=>cell!==id));
   if(!preserveBuilding)footprint.delete(id);
   state.plotContents.set(plot,{...c,cells:remaining,footprint});
@@ -563,7 +580,7 @@ function applyEmbedding(state,id,preserveBuilding=false){
 export function population(state){
   const total=state.params.initialPopulation+(state.debugPopulation??0)+[...state.housing.keys()].reduce((n,id)=>n+housingQuote(state,id).residents,0);
   const working=[...state.production.keys()].reduce((n,id)=>n+productionLabor(state,id),0);
-  return {total,working,free:total-working-(state.clearingWorkers??0)};
+  return {total,working,free:total-working};
 }
 export function housingError(state,id){
   if(state.phase!=='build'||state.day<2)return '第 2 天起可在白天建设住房。';
@@ -577,7 +594,7 @@ export function housingError(state,id){
 export function buildHousing(state,id){
   const error=housingError(state,id);if(error)return error;
   const plot=productionId(id,state),q=economyBuildQuote(state,id,'housing');addEconomyInvestment(state,id,'housing',q);
-  state.plotContents.set(plot,{status:'building',type:'housing',cells:new Set(availableCells(state,id)),footprint:new Set([...buildingCells(state,id),...availableCells(state,id)])});rebuildTerrain(state);return '';
+  state.plotContents.set(plot,{status:'building',type:'housing',renovationCells:new Set(renovationCells(state,id,'housing')),cells:new Set(availableCells(state,id)),footprint:new Set([...buildingCells(state,id),...availableCells(state,id)])});rebuildTerrain(state);return '';
 }
 export function buildingRemovalError(state,id) {
   const cells=new Set(buildingCells(state,id));
@@ -615,7 +632,7 @@ export function productionError(state,id) {
 export function buildProduction(state,id) {
   const error=productionError(state,id);if(error)return error;
   const plot=productionId(id,state),q=economyBuildQuote(state,id,'production');addEconomyInvestment(state,id,'production',q);
-  state.plotContents.set(plot,{status:'building',type:'production',cells:new Set(availableCells(state,id)),footprint:new Set([...buildingCells(state,id),...availableCells(state,id)])});rebuildTerrain(state);return '';
+  state.plotContents.set(plot,{status:'building',type:'production',renovationCells:new Set(renovationCells(state,id,'production')),cells:new Set(availableCells(state,id)),footprint:new Set([...buildingCells(state,id),...availableCells(state,id)])});rebuildTerrain(state);return '';
 }
 export function removeProduction(state,id) {
   if(state.phase!=='build')return '防守中不能撤销生产设施。';
@@ -625,16 +642,14 @@ export function removeProduction(state,id) {
   retainDemolitionCost(state,demolitionQuote(state,contentCells(state,id)[0]));
   state.production.delete(id);state.plotContents.set(id,{status:'empty',type:null});rebuildTerrain(state);return '';
 }
-// 清理当天立即完成，但人员当天已参与作业；次日释放，不消耗人口。
-export const clearingLabor=(state,id)=>Math.ceil(buildingCells(state,id).length/state.params.clearingCellsPerWorker);
+// 清理不占人口；这里只校验阶段、控制和建筑炮位依附。
 export function clearingError(state,id){
   if(state.phase!=='build'||state.day<2)return '第 2 天起可在白天清理废墟。';
   const error=plotBuildError(state,id);if(error)return error;
   if(!inControl(state,id))return '请在已有控制范围内清理废墟。';
   if(plotContent(state,id).status!=='ruin')return '这里不是废墟。';
   const support=buildingRemovalError(state,id);if(support)return support;
-  const needed=clearingLabor(state,id),free=population(state).free;
-  return free<needed?`清理需要 ${needed} 人，当前空闲 ${free} 人；次日释放。`:'';
+  return '';
 }
 // 清理废墟免费且即时完成；拆除建筑按现有当天退款/旧投资保留处理。
 export function clearPlot(state,id) {
@@ -647,8 +662,7 @@ export function clearPlot(state,id) {
   if(content.type==='housing'&&content.status==='building')return removeHousing(state,id);
   if(content.type==='outpost')return removeOutpost(state,id);
   if(state.production.has(productionId(id,state)))return removeProduction(state,id);
-  const laborError=clearingError(state,id);if(laborError)return laborError;
-  state.clearingWorkers+=clearingLabor(state,id);
+  const clearing=clearingError(state,id);if(clearing)return clearing;
   state.plotContents.set(productionId(id,state),{status:'empty',type:null});rebuildTerrain(state);return '';
 }
 // 只在守住当晚时入账一次；失败不结算，重试由完整战前快照回滚。
@@ -675,7 +689,7 @@ export function battleRoutes(state) {
   return routes;
 }
 
-// 当天投入全返，旧投入按配置比例返还；维修与清场人力不因拆除撤销。
+// 当天投入全返，旧投入按配置比例返还；维修费不因拆除撤销。
 export function demolitionQuote(state,id) {
   const production=state.production.get(productionId(id,state)),tower=state.towers.get(id),post=state.outposts.get(outpostAt(state,id));
   let cost=0,day=1,type='';
@@ -703,7 +717,7 @@ export function removeTower(state,id) {
 }
 
 
-// 迷雾只隐藏未探索信息；探索过的格子不会因拆瞭望塔重新变黑。
+// 当前视野可收回；探索过的地形保留暗淡记忆，不继续展示实时敌人与路线。
 export function initialView(state){
   const [cx,cy]=xy(state.camp);
   return {x:Math.max(0,Math.min(SIZE-30,cx-15)),y:state.layout?SIZE-30:Math.max(0,Math.min(SIZE-30,cy-27)),width:30,height:30};
@@ -753,6 +767,6 @@ export function applyTestScenario(state,day,gold,people){
   const sources=structuredClone(state.waves[day-1]),candidate={...state,sources};
   const error=validateSources(sources,candidate);if(error)return error;
   state.debugGold+=gold-funds(state);state.debugPopulation+=people-population(state).total;
-  state.day=day;state.phase='build';state.clearingWorkers=0;state.hp=Math.max(1,state.hp);
+  state.day=day;state.phase='build';state.hp=Math.max(1,state.hp);
   state.sources=sources;state.lastNight=null;clearNight(state);lockAttacks(state);revealControl(state);return '';
 }

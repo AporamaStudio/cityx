@@ -4,11 +4,13 @@ export const DEFAULTS = {
   // 每格的现实边长，仅用于地图比例尺；战斗和建设仍按格计算。
   cellMeters: 20,
   campSight: 6, outpostSight: 9, daySightMultiplier: 1, nightSightMultiplier: 0.6, eventSightMultiplier: 1, sourceRevealSize: 3,
-  clearingCellsPerWorker: 1,
-  initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 4,
-  productionCostPerCell: 2, productionIncomePerCell: 0.5, killReward: 2,
-  // 夜间只默认加收金币，清场人数保持白天标准；倍率仍可独立调节。
-  nightTowerCostMultiplier: 2, nightClearingLaborMultiplier: 1,
+  initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 8,
+  // 空地新建为基准；修缮只改变投入，不改变建成后的收入或人口。
+  productionCostPerCell: 4, productionIncomePerCell: 0.5, renovationCostPercent: 50, killReward: 2,
+  // 面积曲线：大地块产出密度逐渐趋近上限；同组参数在实验面板可调。
+  productionBaseArea: 16, productionSmallCostFloor: 0.5, productionDensityGrowthArea: 9, productionMaxDensity: 2,
+  // 架炮不占用施工人力；夜间只加收金币，倍率仍可调节。
+  nightTowerCostMultiplier: 2,
   budget: 100, wallCost: 2, wallHP: 12, enemyPower: 1, defenseRepairPercent: 50, demolitionRefundPercent: 50, controlRadius: 9, campHP: 30, stepMs: 450,
   // 火光危急提示按最大 HP 百分比判断，0 关闭持续警示；受击仍短暂泛红。
   campWarningPercent: 30,
@@ -38,9 +40,6 @@ const OPENING_WAVES = [
 export const WAVES = [...OPENING_WAVES, ...Array.from({length:10},(_,i)=>
   OPENING_WAVES[4].map(source=>({...source,hp:source.hp+Math.floor((i+1)/2),count:source.count+Math.floor((i+1)/3)}))
 )];
-
-// 经营曲线以面积衡量；大地块产出密度逐渐趋近上限，不无限增长。
-export const PRODUCTION_CURVE = {baseArea:16,smallCostFloor:.5,densityGrowthArea:9,maxDensity:2};
 
 // 固定街区占用整片土地；外围两侧均有大小街区可比较。
 export const PRODUCTION_SITES = [

@@ -1,4 +1,5 @@
-// 雾纹缓慢流动；逻辑视野仍是稳定格集合，不让装饰动画改变敌人显隐。
+// 当前视野移除后立即重新罩雾；探索记忆只保留地形，不维持实时可见。
+// 雾纹缓慢流动，不让装饰动画改变敌人显隐。
 export function drawFog(ctx,size,seen,explored,night,time){
   const rgb=night>.5?'20,32,48':'64,81,87';
   // 未探索区域一次填充，避免缩放时逐格绘制造成接缝漏出地形。
@@ -8,7 +9,7 @@ export function drawFog(ctx,size,seen,explored,night,time){
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const id=y*size+x;if(seen.has(id))continue;
     const known=explored.has(id),wave=(Math.sin(x*.65+y*.24+time*.32)+Math.cos(y*.53-x*.21-time*.21))*.025;
-    ctx.fillStyle=known?`rgba(${rgb},${.60+wave})`:`rgb(${Math.round(32+night*-12+wave*80)},${Math.round(48-night*15+wave*80)},${Math.round(57-night*10+wave*80)})`;
+    ctx.fillStyle=known?`rgba(${rgb},${.80+wave})`:`rgb(${Math.round(32+night*-12+wave*80)},${Math.round(48-night*15+wave*80)},${Math.round(57-night*10+wave*80)})`;
     ctx.fillRect(x,y,1.01,1.01);
   }
   // 只在已见一侧柔化边缘；未知格始终不透明，不能从羽化边缘偷看敌人或建筑。
