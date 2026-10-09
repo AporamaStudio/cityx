@@ -137,18 +137,24 @@ export function rawControlMask(state,radius=state.params.controlRadius) {
   for(let id=0;id<SIZE*SIZE;id++)if(inGroundControl(state,id,radius))mask.add(id);
   return mask;
 }
-// 仅沿基础覆盖格四向连通；建筑整体归属、视野与物理可通行性都不参与连接。
-function disconnectedControlCells(state){
-  const mask=rawControlMask(state),connected=new Set(),queue=[];
-  if(state.hp>0&&mask.has(state.camp)){connected.add(state.camp);queue.push(state.camp);}
+// 从篝火逐塔扩展：只有落点被已连接据点覆盖的塔才可继续传递，不允许自连或孤立闭环。
+function connectedOutposts(state){
+  const connected=new Set(),queue=state.hp>0?[{id:state.camp,radius:state.params.controlRadius}]:[];
   for(let i=0;i<queue.length;i++){
-    const [x,y]=xy(queue[i]);
-    for(const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]){
-      if(!inside(nx,ny))continue;
-      const id=key(nx,ny);if(mask.has(id)&&!connected.has(id)){connected.add(id);queue.push(id);}
+    const {id,radius}=queue[i];
+    for(const anchor of state.outposts.keys())if(!connected.has(anchor)&&inStationRange(anchor,id,radius)){
+      connected.add(anchor);queue.push({id:anchor,radius:state.params.outpostRadius});
     }
   }
-  return new Set([...mask].filter(id=>!connected.has(id)));
+  return connected;
+}
+// 高亮失联塔独占的基础范围；建筑归属、视野和地面通行性不参与连接。
+function disconnectedControlCells(state){
+  const connected=connectedOutposts(state);
+  if(connected.size===state.outposts.size)return new Set();
+  const active={...state,outposts:new Map([...state.outposts].filter(([id])=>connected.has(id)))};
+  const mask=rawControlMask(active);
+  return new Set([...rawControlMask(state)].filter(id=>!mask.has(id)));
 }
 export function inControl(state,id,radius=state.params.controlRadius) {
   if(inGroundControl(state,id,radius))return true;
@@ -265,7 +271,8 @@ export function outpostError(state,id) {
   if(state.phase!=='build')return '防守中不能建设瞭望塔。';
   if(!Number.isInteger(id)||!inside(...xy(id)))return '请选择地图内的格子。';
   if(!isExplored(state,id))return '该位置尚未探索。';
-  if(!inGroundControl(state,id))return '瞭望塔须建在已有基础地面控制范围内。';
+  const connected=connectedOutposts(state);
+  if(!(state.hp>0&&inStationRange(id,state.camp,state.params.controlRadius))&&![...connected].some(anchor=>inStationRange(id,anchor,state.params.outpostRadius)))return '瞭望塔落点须被篝火或已连接篝火的瞭望塔基础地面控制范围覆盖。';
   if(productionSite(id,state)?.role==='hospital')return '医院为保留目标，不能建设瞭望塔。';
   if(!terrainTraversable(state,id))return '瞭望塔只能建在可通行的道路、空地或自然地面。';
   if(state.towers.has(id)||state.playerWalls.has(id)||state.outposts.has(id)||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '该格已有设施或保留目标。';
@@ -285,7 +292,7 @@ export function outpostRemovalPreview(state,id){
   const anchor=outpostAt(state,id);if(anchor===undefined)return {error:'这里没有瞭望塔。',disconnected};
   const posts=new Map(state.outposts);posts.delete(anchor);const candidate={...state,outposts:posts};
   const isolated=disconnectedControlCells(candidate);
-  if(isolated.size)return {error:'拆除会使红色区域失去与篝火的连接，请先建立其他连接或拆除外围瞭望塔。',disconnected:isolated};
+  if(isolated.size)return {error:'拆除会使红色区域的瞭望塔失去与篝火的连接；塔的落点须被已连接据点覆盖，请先补建连接或拆除外围塔。',disconnected:isolated};
   if([...state.playerWalls].some(cell=>inGroundControl(state,cell)&&!inGroundControl(candidate,cell))||[...state.towers.keys()].some(cell=>inControl(state,cell)&&!inControl(candidate,cell))||[...state.production.keys(),...state.housing.keys()].some(cell=>productionControlled(state,cell)&&!productionControlled(candidate,cell)))return {error:'其他设施依赖此瞭望塔的控制范围，请先拆除外围设施。',disconnected};
   return {error:'',disconnected};
 }
