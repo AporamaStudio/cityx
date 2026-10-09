@@ -137,6 +137,19 @@ export function rawControlMask(state,radius=state.params.controlRadius) {
   for(let id=0;id<SIZE*SIZE;id++)if(inGroundControl(state,id,radius))mask.add(id);
   return mask;
 }
+// 仅沿基础覆盖格四向连通；建筑整体归属、视野与物理可通行性都不参与连接。
+function disconnectedControlCells(state){
+  const mask=rawControlMask(state),connected=new Set(),queue=[];
+  if(state.hp>0&&mask.has(state.camp)){connected.add(state.camp);queue.push(state.camp);}
+  for(let i=0;i<queue.length;i++){
+    const [x,y]=xy(queue[i]);
+    for(const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]){
+      if(!inside(nx,ny))continue;
+      const id=key(nx,ny);if(mask.has(id)&&!connected.has(id)){connected.add(id);queue.push(id);}
+    }
+  }
+  return new Set([...mask].filter(id=>!connected.has(id)));
+}
 export function inControl(state,id,radius=state.params.controlRadius) {
   if(inGroundControl(state,id,radius))return true;
   const cells=buildingCells(state,id);
@@ -265,12 +278,20 @@ export function buildOutpost(state,id) {
   // 挑高瞭望塔只提供控制和视野，地面保持通行，不参与建筑清场。
   state.outposts.set(id,{day:state.day});revealControl(state);return '';
 }
+// 拆除预览与实际操作共用校验，失败时不改变控制、探索、设施或金币。
+export function outpostRemovalPreview(state,id){
+  const disconnected=new Set();
+  if(state.phase!=='build')return {error:'只能在建设阶段拆除瞭望塔。',disconnected};
+  const anchor=outpostAt(state,id);if(anchor===undefined)return {error:'这里没有瞭望塔。',disconnected};
+  const posts=new Map(state.outposts);posts.delete(anchor);const candidate={...state,outposts:posts};
+  const isolated=disconnectedControlCells(candidate);
+  if(isolated.size)return {error:'拆除会使红色区域失去与篝火的连接，请先建立其他连接或拆除外围瞭望塔。',disconnected:isolated};
+  if([...state.playerWalls].some(cell=>inGroundControl(state,cell)&&!inGroundControl(candidate,cell))||[...state.towers.keys()].some(cell=>inControl(state,cell)&&!inControl(candidate,cell))||[...state.production.keys(),...state.housing.keys()].some(cell=>productionControlled(state,cell)&&!productionControlled(candidate,cell)))return {error:'其他设施依赖此瞭望塔的控制范围，请先拆除外围设施。',disconnected};
+  return {error:'',disconnected};
+}
 export function removeOutpost(state,id) {
-  if(state.phase!=='build')return '只能在建设阶段拆除瞭望塔。';
-  const anchor=outpostAt(state,id);if(anchor===undefined)return '这里没有瞭望塔。';
-  const posts=new Map(state.outposts),post=posts.get(anchor);posts.delete(anchor);const candidate={...state,outposts:posts};
-  if([...state.playerWalls].some(cell=>inGroundControl(state,cell)&&!inGroundControl(candidate,cell))||[...state.towers.keys()].some(cell=>inControl(state,cell)&&!inControl(candidate,cell))||[...posts.keys()].some(cell=>inGroundControl(state,cell)&&!inGroundControl(candidate,cell))||[...state.production.keys(),...state.housing.keys()].some(cell=>productionControlled(state,cell)&&!productionControlled(candidate,cell)))return '其他设施依赖此瞭望塔的控制范围，请先拆除外围设施。';
-  retainDemolitionCost(state,demolitionQuote(state,id));state.outposts=posts;
+  const {error}=outpostRemovalPreview(state,id);if(error)return error;
+  retainDemolitionCost(state,demolitionQuote(state,id));state.outposts.delete(outpostAt(state,id));
   rebuildTerrain(state);return '';
 }
 export function enterMorning(state) {
@@ -356,6 +377,7 @@ export function validateParams(params, state, checkLayout = true) {
   if (!integer(params.killReward,0,1000)) return '每个敌人击杀奖励须为 0–1000 整数。';
   const candidate={...state,params};
   if(checkLayout&&([...state.playerWalls].some(id=>!inGroundControl(candidate,id))||[...state.towers.keys()].some(id=>!inControl(candidate,id))||[...state.outposts.keys()].some(id=>!inGroundControl(candidate,id))||[...state.production.keys(),...state.housing.keys()].some(id=>!productionControlled(candidate,id))))return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
+  if(checkLayout&&disconnectedControlCells(candidate).size)return '新参数会使控制范围失去与篝火的连接，请调整范围或先拆除外围瞭望塔。';
   if (checkLayout && funds({...state,params}) < 0) return '按新价格计算，现有布局超出预算（含经营与瞭望塔）。请提高资金，或取消预览后拆除设施。';
   return '';
 }
