@@ -3,7 +3,7 @@ import {createTowerOverlay} from './tower-overlay.js?v=3';
 import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-textures.js?v=5';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG} from './icons.js?v=6';
-import {createGameAudio} from './audio.js?v=6';
+import {createGameAudio} from './audio.js?v=7';
 import { SIZE, DEFAULTS } from './config.js?v=63';
 import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=75';
 import {generateCityMap} from './city-map.js?v=8';
@@ -58,11 +58,13 @@ const canBuildWeapon = () => !nightOutro&&['build','battle'].includes(state.phas
 const weaponPlacementError=id=>placementError(state,id,weaponType())||(motion?.actors.some(e=>e.to===id)?'敌人正进入该格，请选择其他炮位。':'');
 let motion = null, impactAge = 1000, incoming = new Map(), sourceCleanup = false, nightOutro = null;
 const MOVE_MS = 160, IMPACT_MS = 220;
+const DAWN_MS=900; // 沿用原有夜末停留，不因动效增加等待。
 const moveDuration=()=>Math.min(MOVE_MS,state.params.stepMs*.36);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let placementFx = null, playbackSpeed = 1, recentGain = 0, gainUntil = 0, dawnAt = 0, receiptUntil = 0;
 let nightMix = 0, sight=visionField(state), lastFogFrame=0;
 let dayEndHold=null,skipStartClick=false;
+let nightVisualTick=0;
 const effectiveSpeed=()=>sourceCleanup?Math.max(playbackSpeed,state.params.nightCleanupSpeed):playbackSpeed;
 // 只对环境配色插值，敌人、路线、血条等决策信息不经过压暗滤镜。
 const terrainColors={groundA:[[88,99,88],[21,32,49]],groundB:[[94,105,94],[25,37,54]],grid:[[114,125,112],[43,58,77]],wall:[[130,137,124],[69,82,101]],fog:[[86,103,98],[20,32,45]]};
@@ -697,7 +699,11 @@ function paintMap() {
 }
 // 动画只刷新显示值，不把插值后的拍数写回战斗状态。
 function updateNightProgress(){
-  const elapsed=nightOutro?nightOutro.from+(state.params.nightTicks-nightOutro.from)*Math.min(1,nightOutro.elapsed/nightOutro.duration):Math.min(state.tick,state.params.nightTicks),progress=elapsed/state.params.nightTicks*100;
+  const fraction=state.phase==='battle'&&!nightOutro?Math.min(.999,(timer+(motion?.elapsed??0))/state.params.stepMs):0;
+  const elapsed=nightOutro?nightOutro.from+(state.params.nightTicks-nightOutro.from)*Math.min(1,nightOutro.elapsed/nightOutro.duration):Math.min(state.tick+fraction,state.params.nightTicks);
+  // 暂停会重置等待计时，显示值只前进；重试/新夜由原有重置入口归零。
+  nightVisualTick=state.phase==='build'?0:Math.max(nightVisualTick,elapsed);
+  const progress=Math.min(100,nightVisualTick/state.params.nightTicks*100);
   $('nightProgress').hidden=state.phase==='build';
   $('nightProgressText').textContent=`${Math.floor(progress)}%`;
   $('nightProgressBar').setAttribute('aria-valuenow',String(Math.floor(progress)));
@@ -705,11 +711,19 @@ function updateNightProgress(){
   $('nightProgressBar').setAttribute('aria-valuetext',`${Math.floor(progress)}%`);
   $('nightProgressFill').style.width=`${progress}%`;
   $('start').setAttribute('aria-label',`${$('startLabel').textContent}${state.phase==='build'?'，长按确认':`，夜晚已过 ${Math.floor(progress)}%`}`);
+  const dawn=dawnAt?Math.max(0,Math.min(1,1-(dawnAt-performance.now())/DAWN_MS)):0;
+  const sky=state.phase==='battle',button=$('start');
+  $('nightScene').hidden=!sky;button.classList.toggle('has-night-sky',sky);button.classList.toggle('night-idle',!!nightOutro);
+  button.classList.toggle('rising-day',!!dawnAt);
+  button.classList.toggle('night-paused',paused&&state.phase==='battle'&&!nightOutro);
+  button.style.setProperty('--night-travel',progress/100);button.style.setProperty('--night-morning',Math.max(0,(progress/100-.65)/.35)*.45);
+  // 黎明直接反向播放白天组件：终点的太阳、底色与轮廓就是白天未按状态。
+  if(dawnAt)showDayEndCharge(1-dawn);
 }
 function update() {
   // 所有建设、收支、参数、阶段和敌人移动更新都经此入口；镜头操作不失效缓存。
   mapView=null;
-  sound.setScene(state.phase,paused);
+  sound.setScene(state.phase,paused,!!nightOutro);
   sight=visionField(state);revealControl(state);
   fire = fireField({...state,params:previewParams()});
   // 夜晚聚焦补炮；资金不足仍显示灰色炮台，区别于阶段不允许的工具。
@@ -756,7 +770,7 @@ function update() {
   const active = state.phase === 'battle'&&!nightOutro, build = state.phase === 'build';
   if(!build)cancelDayEnd();
   if(build&&!dayEndHold)showDayEndCharge(0);
-  $('start').classList.toggle('day-end',build);$('dayEndVisual').hidden=!build;$('dayEndHint').hidden=!build;
+  $('start').classList.toggle('day-end',build||!!dawnAt);$('dayEndVisual').hidden=!build&&!dawnAt;$('dayEndHint').hidden=!build;
   document.body.dataset.phase=state.phase;
   sourceCleanup=nightCleanupState(state)==='source';
   $('speedLabel').textContent=sourceCleanup?`清源 ${effectiveSpeed()}×`:'速度';
@@ -772,7 +786,7 @@ function update() {
   $('phase').textContent=`第 ${state.day} 天`;
   $('start').disabled = !build && !active;
   $('retry').disabled=!preparation; $('step').disabled = !active || !paused || !!motion?.singleStep;
-  $('startLabel').textContent = nightOutro?'迎来黎明':active ? (paused ? '继续夜晚' : '暂停夜晚') : state.result?.type==='victory'?'收复成功':state.result?.type==='deadline'?'收复未完成':state.result?.type==='experiment'?'实验完成':build?'结束白天':state.phase==='won'?'守住了':'防守结束';
+  $('startLabel').textContent = nightOutro||dawnAt?'迎来黎明':active ? (paused ? '继续夜晚' : '暂停夜晚') : state.result?.type==='victory'?'收复成功':state.result?.type==='deadline'?'收复未完成':state.result?.type==='experiment'?'实验完成':build?'结束白天':state.phase==='won'?'守住了':'防守结束';
   updateNightProgress();
   for (const id of ['build','long','wall','outpost','production','housing','repair','erase','apply','addSource','applyParams','cancelParams','defaults']) $(id).disabled = !build;
   // 通用建造交互：不足价即禁用，退款或应用参数后立即恢复。
@@ -994,6 +1008,7 @@ function refreshParams(){
 }
 function clearPlayback() {
   cancelDayEnd();
+  nightVisualTick=0;
   forecastPointerSource=null;forecastFocusSource=null;mapPointerSource=null;
   sourceHighlightId=null;sourceHighlightAt=null;
   $('campHitFlash').getAnimations().forEach(animation=>animation.cancel());
@@ -1277,7 +1292,8 @@ function presentNightEnd(){
     if(state.nightEconomy>0)sound.play('coin',.38);
     // 经营单独说明来源，不与最后一次击杀的括号金额相加，也不重复发钱。
     if(state.nightEconomy>0)pulse($('budget'),'#ffe1a0');
-    dawnAt=campaignComplete(state)?0:performance.now()+900;
+    dawnAt=campaignComplete(state)?0:performance.now()+DAWN_MS;
+    if(dawnAt)sound.play('dawn');
   }
   if(['won','lost'].includes(state.phase))notify('');
   if(state.result){tool=null;hover=null;selectedSource=null;}
@@ -1291,7 +1307,6 @@ function presentNightEnd(){
 function finishDawn(){
   dawnAt=0;
   if(!enterMorning(state))return;
-  sound.play('dawn');
   preparation=null;paused=false;timer=0;motion=null;impactAge=1000;incoming.clear();
   $('forecastDay').value=String(state.day-1);resetSourceEditors();
   notify('');
@@ -1299,20 +1314,21 @@ function finishDawn(){
   // 回到钱包与报告，避免浏览器滚动锚定把新插入的收入卡藏在上方。
   document.querySelector('.build-sidebar').scrollTop=0;
 }
+function rejectNightStart(message){sound.play('deny');showTopNotice(message);return false;}
 function nightStartAllowed(){
   if(state.phase!=='build'||nightOutro||campaignComplete(state))return false;
   if(!firstNightReady(state)){
-    showTopNotice('请先建造一座炮塔');
-    return false;
+    return rejectNightStart('请先建造一座炮塔');
   }
-  if(paramsDirty()){ $('experiments').open=true;showTopNotice('实验参数有未应用修改，请先应用或取消预览。');return false; }
-  if(sourceConfigurationDirty()){ $('settings').open=true;showTopNotice('来袭配置有未应用修改，请先应用或取消。');return false; }
-  const error=validateSources(state.sources,state);if(error){showTopNotice(error);return false;}
+  if(paramsDirty()){ $('experiments').open=true;return rejectNightStart('实验参数有未应用修改，请先应用或取消预览。'); }
+  if(sourceConfigurationDirty()){ $('settings').open=true;return rejectNightStart('来袭配置有未应用修改，请先应用或取消。'); }
+  const error=validateSources(state.sources,state);if(error)return rejectNightStart(error);
   return true;
 }
 function startNight(){
   if(!nightStartAllowed())return;
   preparation=beginBattle(state);if(!preparation)return;
+  nightVisualTick=0;
   // 开战成功后撤下白天建设的失败提醒，避免被误认为夜间状态。
   $('firstNightNotice').hidden=true;
   sound.play('sunset');
@@ -1377,7 +1393,7 @@ startButton.onclick=()=>{
   // 吃掉长按结束后的那次原生click，避免刚入夜就被同一次松手暂停。
   if(skipStartClick){skipStartClick=false;return;}
   if(nightOutro||campaignComplete(state)||dayEndHold)return;
-  if(state.phase==='battle'){paused=!paused;timer=0;update();}
+  if(state.phase==='battle'){paused=!paused;timer=0;sound.play(paused?'switchOff':'switchOn');update();}
 };
 // 简单的逐格滑动：动画结束才提交一步战斗，无独立动画框架。
 function beginMotion(singleStep=false){
@@ -1396,10 +1412,10 @@ function frame(now){
   const elapsed=Math.min(now-last,100);last=now;
   if(dayEndHold&&!document.hidden){const progress=Math.min(1,(now-dayEndHold.at)/dayEndHold.duration);showDayEndCharge(progress);if(progress>=1)finishDayEnd();}
   const dt=elapsed*(motion?.singleStep?playbackSpeed:effectiveSpeed());
-  const targetMix=document.body.dataset.time==='day'?0:1;
+  const targetMix=dawnAt&&!reducedMotion.matches?Math.max(0,(dawnAt-now)/DAWN_MS):document.body.dataset.time==='day'?0:1;
   if(nightMix!==targetMix){
     const shift=reducedMotion.matches?1:elapsed/600;
-    nightMix=targetMix>nightMix?Math.min(targetMix,nightMix+shift):Math.max(targetMix,nightMix-shift);draw();
+    nightMix=dawnAt?targetMix:targetMix>nightMix?Math.min(targetMix,nightMix+shift):Math.max(targetMix,nightMix-shift);draw();
   }
   if(($('showFog').checked||knownSources(state).some(s=>s.hp>0&&s.active))&&!reducedMotion.matches&&now-lastFogFrame>120){lastFogFrame=now;draw();}
   // 即使夜晚暂停或白天待修，低血量篝火仍提示；减少动态偏好改用常亮红色。
@@ -1409,7 +1425,6 @@ function frame(now){
   if(nightOutro&&!document.hidden){
     nightOutro.elapsed=Math.min(nightOutro.duration,nightOutro.elapsed+elapsed);
     if(nightOutro.elapsed>=nightOutro.duration){nightOutro=null;if(finishIdleNight(state))presentNightEnd();else update();}
-    else updateNightProgress();
   }
   if(dawnAt&&now>=dawnAt)finishDawn();
   if(receiptUntil&&now>=receiptUntil){receiptUntil=0;$('economyReceipt').hidden=true;}
@@ -1420,6 +1435,7 @@ function frame(now){
     if(motion){motion.elapsed+=dt;if(motion.elapsed>=moveDuration())advance();else draw();}
     else{timer+=dt;if(timer>=state.params.stepMs-moveDuration())beginMotion();}
   }
+  if(state.phase==='battle'||dawnAt)updateNightProgress();
   if(drawPending){drawPending=false;paintMap();}
   requestAnimationFrame(frame);
 }

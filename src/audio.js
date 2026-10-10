@@ -20,7 +20,7 @@ export function createGameAudio(options={}) {
   const settings=readAudioSettings(storage),createContext=options.createContext??(()=>new (globalThis.AudioContext||globalThis.webkitAudioContext)());
   const repeat=options.repeat??setInterval,cancelRepeat=options.cancelRepeat??clearInterval;
   let ctx,music,effects,day,night,master,noise,wet,timer=null,nextBeat=0,beat=0;
-  let mode='day',hidden=false,paused=false,unlocked=false,unavailable=false,waking=null;
+  let mode='day',hidden=false,paused=false,idle=false,unlocked=false,unavailable=false,waking=null;
   const lastEffect=new Map();
   let dayEnd=null;
 
@@ -33,7 +33,7 @@ export function createGameAudio(options={}) {
   function syncLevels() {
     level(music,settings.music?settings.musicVolume:0);
     level(effects,settings.effects?settings.effectsVolume:0,.015);
-    level(day,mode==='day'?(dayEnd ? .2 : 1):0,.5);level(night,mode==='night'?1:0,.5);
+    level(day,mode==='day'?(dayEnd ? .2 : 1):0,.5);level(night,mode==='night'&&!idle?1:0,idle ? .15 : .5);
     level(master,hidden?0:1,.025);
   }
   function tone(bus,note,at,duration,volume=.08,type='sine',attack=.012,endFrequency=null) {
@@ -71,7 +71,7 @@ export function createGameAudio(options={}) {
   }
   function stopClock() {if(timer!==null){cancelRepeat(timer);timer=null;}}
   function tickMusic() {
-    if(!ctx||ctx.state!=='running'||hidden||!settings.music||settings.musicVolume===0||mode==='silent')return;
+    if(!ctx||ctx.state!=='running'||hidden||idle||!settings.music||settings.musicVolume===0||mode==='silent')return;
     if(nextBeat<ctx.currentTime-.2)nextBeat=ctx.currentTime+.05;
     while(nextBeat<ctx.currentTime+.18){
       const tense=mode==='night',bus=tense?night:day,seconds=60/(tense?108:72);
@@ -97,7 +97,7 @@ export function createGameAudio(options={}) {
     }
   }
   function startClock() {
-    if(!unlocked||!ctx||hidden||!settings.music||settings.musicVolume===0||mode==='silent'){stopClock();return;}
+    if(!unlocked||!ctx||hidden||idle||!settings.music||settings.musicVolume===0||mode==='silent'){stopClock();return;}
     if(timer===null){nextBeat=ctx.currentTime+.06;tickMusic();timer=repeat(tickMusic,80);}
   }
   async function unlock() {
@@ -117,10 +117,10 @@ export function createGameAudio(options={}) {
     if(dayEnd&&(!settings.effects||settings.effectsVolume===0))endDayEnd();
     syncLevels();startClock();
   }
-  function setScene(phase,isPaused=false) {
+  function setScene(phase,isPaused=false,isIdle=false) {
     const next=phase==='build'?'day':['won','lost'].includes(phase)?'silent':'night';
     if(next!==mode){endDayEnd();mode=next;beat=0;nextBeat=(ctx?.currentTime??0)+.06;}
-    paused=isPaused;syncLevels();startClock();
+    paused=isPaused;idle=isIdle&&next==='night';syncLevels();startClock();
   }
   function setHidden(value) {
     if(value)endDayEnd();
@@ -166,7 +166,15 @@ export function createGameAudio(options={}) {
     if(!unlocked||ctx.state!=='running'){if(waking)waking.then(()=>play(name,delay)).catch(()=>{});return;}
     const now=ctx.currentTime;if(now-(lastEffect.get(name)??-Infinity)<.075)return;
     lastEffect.set(name,now);const at=now+.008+delay;
-    if(name==='coin'){
+    if(name==='switchOn'||name==='switchOff'){
+      // 干脆的机械触点与短共振：开稍亮、关稍低，不做音阶提示。
+      const on=name==='switchOn';rustle(effects,at,.027,.16,on?5200:3800,900);
+      tone(effects,on?72:65,at,.06,.13,'triangle',.002,on?240:150);
+      rustle(effects,at+.032,.023,.06,1800,500);
+    }else if(name==='deny'){
+      // 未能入夜是一声低沉扣合，与成功开关区分，原因仍由顶栏解释。
+      tone(effects,45,at,.10,.2,'sine',.002,55);rustle(effects,at,.045,.09,950,280);
+    }else if(name==='coin'){
       tone(effects,88,at,.12,.16);tone(effects,95,at+.065,.16,.12);tone(effects,100,at+.12,.19,.06);
     }else if(name==='kill'){
       tone(effects,52,at,.14,.24,'sine',.004,55);rustle(effects,at,.10,.09,1800);

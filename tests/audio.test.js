@@ -103,3 +103,20 @@ test('蓄力等待首次解锁时松手，不会迟到播放；关闭音效停�
   s.ctx.currentTime=.25;s.sound.configure({effects:false});assert.ok(s.calls.every(c=>c.end<=.34));
   await s.sound.beginDayEnd(1000);assert.equal(s.calls.length,4);s.sound.endDayEnd();
 });
+
+test('开关与入夜拒绝声音保持短促，遵守静音且能在首次点击后解锁播放',async()=>{
+  const s=setup();s.sound.configure({music:false});const ready=s.sound.unlock();s.sound.play('deny');await ready;await Promise.resolve();
+  assert.ok(s.calls.length>0);
+  for(const name of ['switchOn','switchOff','deny']){
+    s.ctx.currentTime+=1;s.calls.length=0;s.sound.play(name);
+    assert.ok(s.calls.length>0);assert.ok(s.calls.every(call=>call.end-call.at<.15));
+  }
+  s.sound.configure({effects:false});s.calls.length=0;s.sound.play('switchOn');s.sound.play('switchOff');s.sound.play('deny');assert.equal(s.calls.length,0);
+});
+
+test('空闲夜末收起配乐时钟，恢复战斗或白天时只恢复一个时钟',async()=>{
+  const s=setup();await s.sound.unlock();const queuedTick=[...s.timers][0];s.sound.setScene('battle',false,true);assert.equal(s.timers.size,0);
+  const before=s.calls.length;s.ctx.currentTime=5;queuedTick();assert.equal(s.calls.length,before);
+  s.sound.setScene('battle',false,false);assert.equal(s.timers.size,1);
+  s.sound.setScene('build');assert.equal(s.timers.size,1);
+});

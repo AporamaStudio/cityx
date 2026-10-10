@@ -81,7 +81,7 @@ header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320
 /* 长按落日只渲染按钮，蓄满才改变地图昼夜；松手平滑回到日色。 */
 #start{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #startLabel{position:relative;z-index:3}
-#start.day-end{--day-end-progress:0;--day-end-dusk:0;--day-end-dark:0;background:linear-gradient(165deg,#fff0b5,#e5be72);color:#3b3025;border-color:#d7b778;box-shadow:inset 0 1px 0 #fff6d5aa,0 3px 12px #c1974220;transition:box-shadow .18s,border-color .18s}
+#start.day-end,#start.day-end.rising-day:disabled{--day-end-progress:0;--day-end-dusk:0;--day-end-dark:0;background:linear-gradient(165deg,#fff0b5,#e5be72);color:#3b3025;border-color:#d7b778;box-shadow:inset 0 1px 0 #fff6d5aa,0 3px 12px #c1974220;transition:box-shadow .18s,border-color .18s}
 #start.day-end::before,#start.day-end::after{content:'';position:absolute;inset:0;pointer-events:none;transition:opacity .22s ease-out}
 #start.day-end::before{background:linear-gradient(170deg,#de8952,#974834 65%,#5c4146);opacity:var(--day-end-dusk)}
 #start.day-end::after{background:linear-gradient(170deg,#494a50,#1b202b 70%,#10151e);opacity:var(--day-end-dark)}
@@ -95,9 +95,24 @@ header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320
 #start.charging .day-end-sun{transition:none}
 .day-end-fill{position:absolute;left:0;right:0;bottom:0;height:3px;background:#ffca8b;box-shadow:0 0 8px #f59a56;transform:scaleX(var(--day-end-progress));transform-origin:left;transition:transform .22s ease-out}
 #start.charging .day-end-fill{transition:none}
+#start.day-end.rising-day:disabled{opacity:1;color:var(--day-end-ink)}
+#start.rising-day::before,#start.rising-day::after,#start.rising-day .day-end-sun{transition:none}
+/* 黎明保留夜晚100%进度，白天蓄力条此时隐藏，避免出现倒退的第二条进度。 */
+#start.rising-day .day-end-fill{display:none}
 body[data-phase="battle"] #start{background:linear-gradient(160deg,#39414c,#1b2330);border-color:#6c707b;color:#f3e8d2;box-shadow:inset 0 1px 0 #b2b5c022}
 body[data-phase="battle"] .night-progress-track{background:#0c142b80}body[data-phase="battle"] .night-progress-track i{background:#c59a66}
 @media(prefers-reduced-motion:reduce){#start.day-end::before,#start.day-end::after,.day-end-sun,.day-end-fill{transition:none}.day-end-sun{transform:none}}
+/* 夜空仅随同一进度插值；空闲快进共用它，暂停时不跑独立循环动画。 */
+#nightScene{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none}#nightScene[hidden]{display:none}
+#start.has-night-sky,#start.has-night-sky:disabled,body[data-phase="battle"] #start.has-night-sky{background:linear-gradient(160deg,#23334d,#101a2b);border-color:#6d7b8c;color:#f3e8d2;opacity:1;box-shadow:inset 0 1px 0 #b2c8e022}
+.night-morning-glow{position:absolute;inset:0;opacity:var(--night-morning,0);background:linear-gradient(180deg,#60799b00,#8195b8);pointer-events:none}
+.night-moon{position:absolute;left:19px;top:15px;width:21px;height:21px;color:#d7e6f4;filter:drop-shadow(0 0 4px #b3cfe548);transform:translateY(calc(var(--night-travel,0)*27px));opacity:max(0,calc(1 - var(--night-travel,0)*1.1))}
+.night-horizon{position:absolute;left:12px;top:42px;width:34px;height:17px;border-top:1px solid #bbd0df55;background:linear-gradient(180deg,#6686a533,#45617b00)}
+.night-star{position:absolute;width:2px;height:2px;border-radius:50%;background:#e3edf8;opacity:.4}.night-star-a{left:49px;top:15px}.night-star-b{right:20px;top:21px}
+#start.night-idle .night-star{width:12px;height:1px;transform:translateX(calc(var(--night-travel)*-12px));opacity:.25}
+#start.has-night-sky #nightProgressText,#start.rising-day #nightProgressText{z-index:3;color:inherit}#start.has-night-sky #nightProgress,#start.rising-day #nightProgress{z-index:3}
+#start.night-paused{border-color:#adbac9}
+@media(prefers-reduced-motion:reduce){.night-moon,#start.night-idle .night-star{transform:none}#start.night-idle .night-star{width:2px;height:2px}}
 @media(max-width:900px){header{display:grid;grid-template-columns:auto auto minmax(0,1fr);height:auto;gap:10px;min-height:0}.brand{font-size:21px}header #phase{font-size:19px;padding:7px 10px}.objective{order:0;grid-column:1/-1}.daily-objective{font-size:13px}.map-tools{gap:6px;right:8px;bottom:8px;padding:6px}.maplegend{bottom:62px}}
 @media(max-width:420px){header{grid-template-columns:auto auto}.daily-objective{grid-column:1/-1}.map-tools{gap:4px}.map-tools button{padding:7px}.map-tools label{font-size:11px}}
 
