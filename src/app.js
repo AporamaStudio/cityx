@@ -759,6 +759,15 @@ function appendForecastOutcome(block,status){
   }
 }
 document.querySelectorAll('#forecastLegend .forecast-enemy').forEach(block=>appendForecastOutcome(block,block.dataset.status));
+// 手册复用玩家已经见过的图形，避免用开发术语或另一套符号解释规则。
+const manualIcons={wall:$('wall').querySelector('.tool-name>span').outerHTML,cannon:$('build').querySelector('svg').outerHTML,coin:$('wall').querySelector('.price-coin').outerHTML,housing:'⌂',worker:WORKER_SVG,watch:WATCHTOWER_SVG,destroyed:SOURCE_DESTROYED_SVG};
+document.querySelectorAll('[data-manual-icon]').forEach(icon=>{
+  const type=icon.dataset.manualIcon;
+  if(type==='camp'){
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=24;drawCampfire(canvas.getContext('2d'),3,3,18);icon.append(canvas);
+  }else if(type==='route'||type==='futureRoute')icon.innerHTML=`<svg viewBox="0 0 24 12"><path d="M1 6h22" fill="none" stroke="currentColor" stroke-width="2"${type==='futureRoute'?' stroke-dasharray="3 2"':''}/></svg>`;
+  else icon.innerHTML=manualIcons[type];
+});
 function updateForecast() {
   const selectable=$('allowForecastSelection').checked;
   $('forecastDay').hidden=!selectable;
@@ -800,7 +809,6 @@ function sourceEditor(sources) {
     for(const [name,label,max] of [['x','X',SIZE-1],['y','Y',SIZE-1],['hp','敌人HP',999],['count','批数',30],['first','首拍',200],['interval','间隔',100]]){
       const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('input');input.type='number';input.name=name;input.value=s[name];if(s.sourceId&&['x','y'].includes(name))input.disabled=true;input.min=['x','y'].includes(name)?0:1;input.max=max;input.step=['productionIncomePerCell','productionSmallCostFloor','productionMaxDensity'].includes(name)||name.endsWith('Multiplier')?0.1:1;input.setAttribute('aria-label',`源头${i+1} ${label}`);wrap.append(input);fields.append(wrap);
     }
-    const target=document.createElement('p');target.className='muted';target.textContent='攻击目标：火光（瞭望塔不可受击）';fields.append(target);
     card.append(fields);$('sources').append(card);
   });
 }
