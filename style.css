@@ -120,7 +120,7 @@ header{grid-template-columns:auto auto minmax(140px,1fr) minmax(240px,1.4fr) aut
 #outpost .tool-name{display:inline-flex;align-items:center;gap:5px}#outpost .tool-name svg{width:18px;height:18px;flex:none}
 
 /* 危急提示只缓慢闪烁火光和地图边缘，保留战场的可读性与鼠标操作。 */
-.camp-warning{display:block;margin-top:10px;color:#ffaaa0;font-size:12px}.camp-warning[hidden],#showDefeat[hidden]{display:none}
+.camp-warning{display:block;margin-top:10px;color:#ffaaa0;font-size:12px}.camp-warning[hidden],#showDefeat[hidden],#showVictory[hidden]{display:none}
 #campPanel.camp-critical{border-color:#cf7068}.camp-critical .camp-title h1{color:#ffaaa0;animation:camp-danger 1.4s ease-in-out infinite}.camp-critical #campBar{background:#f5847c}
 #viewport.camp-critical::after{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;box-shadow:inset 0 0 70px 12px #cf403754;animation:camp-danger 1.4s ease-in-out infinite}
 #campHitFlash{position:absolute;inset:0;z-index:3;pointer-events:none;opacity:0;background:#e5413324;box-shadow:inset 0 0 90px 20px #ed453a99}
@@ -133,18 +133,18 @@ header{grid-template-columns:auto auto minmax(140px,1fr) minmax(240px,1.4fr) aut
 #campBarPreview{position:absolute;top:0;height:100%;box-sizing:border-box;border:1px dashed var(--teal);background:repeating-linear-gradient(135deg,#85e0c166 0 3px,#85e0c1bb 3px 5px);transition:none}
 #campHPPreview[hidden],#campBarPreview[hidden]{display:none}
 @keyframes camp-danger{0%,100%{opacity:1}50%{opacity:.6}}
-#showDefeat{width:100%;margin-top:12px;border-color:#a56762;color:#ffc4bb}
+:is(#showDefeat,#showVictory){width:100%;margin-top:12px;border-color:#a56762;color:#ffc4bb}
 /* 结算保留失守地图作背景，优先让玩家回到战前重新布防。 */
-#defeat{width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:30px;border:1px solid #a8655e;border-radius:16px;color:#e5edeb;background:radial-gradient(ellipse at 50% 0,#49312e,#1c252b 65%);box-shadow:0 24px 90px #0008;text-align:center}
-#defeat::backdrop{background:#091015b3}
+:is(#defeat,#victory){width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:30px;border:1px solid #a8655e;border-radius:16px;color:#e5edeb;background:radial-gradient(ellipse at 50% 0,#49312e,#1c252b 65%);box-shadow:0 24px 90px #0008;text-align:center}
+:is(#defeat,#victory)::backdrop{background:#091015b3}
 .defeat-symbol{width:90px;height:90px;margin:0 auto 16px;border:1px solid #b878624d;border-radius:50%;background:radial-gradient(circle,#d0773626,#171e2444)}
-#defeatIcon{width:100%;height:100%}.defeat-night{margin:0 0 10px;color:#c5a69d;font-size:12px;letter-spacing:2px}
-#defeatTitle{margin:0;color:#ffb2a4;font-size:34px;letter-spacing:4px}.defeat-subtitle{margin:7px 0 24px;color:#baada8;letter-spacing:5px}
+:is(#defeatIcon,#victoryIcon){width:100%;height:100%}.defeat-night{margin:0 0 10px;color:#c5a69d;font-size:12px;letter-spacing:2px}
+.settlement-title{margin:0;color:#ffb2a4;font-size:34px;letter-spacing:4px}.defeat-subtitle{margin:7px 0 24px;color:#baada8;letter-spacing:5px}
 .defeat-stats{display:grid;grid-template-columns:1fr 1fr;gap:18px 12px;margin:0;padding:20px 0;border-top:1px solid #92706740;border-bottom:1px solid #92706740}.defeat-stats dt{color:#acb8bb;font-size:12px}.defeat-stats dd{margin:6px 0 0;font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}.defeat-stats div:nth-child(n+3) dd{color:#f1ce79}
 .defeat-receipt{display:flex;justify-content:center;gap:24px;margin:18px 0;color:#acb8bb;font-size:12px}.defeat-receipt b{margin-left:5px;color:#f1ce79;font-weight:600}
 .defeat-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.defeat-actions .primary{font-size:13px}.defeat-inspect{margin-top:14px;border-color:transparent;background:transparent;color:#acb8bb;padding:6px 12px}
 @media(prefers-reduced-motion:reduce){.camp-critical .camp-title h1,#viewport.camp-critical::after{animation:none}}
-@media(max-width:540px){#defeat{padding:24px}.defeat-symbol{width:70px;height:70px;margin-bottom:12px}#defeatTitle{font-size:29px}}
+@media(max-width:540px){:is(#defeat,#victory){padding:24px}.defeat-symbol{width:70px;height:70px;margin-bottom:12px}.settlement-title{font-size:29px}}
 
 .population-summary{user-select:none}.population-summary #populationTotalMetric{color:#f4d3a2}.population-summary .population-symbol,.population-summary .population-value{color:inherit}
 /* 两种资源都按可用宽度缩放，绝不换行或省略数值；图标缩放幅度小于数字。 */
@@ -167,3 +167,12 @@ header{grid-template-columns:auto auto minmax(140px,1fr) minmax(240px,1.4fr) aut
 @media(max-width:540px){.daily-status{grid-column:1/-1}}
 #routeAudit{width:min(880px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:20px;border:1px solid #657c83;border-radius:12px;color:#e5edeb;background:#1c252b;box-shadow:0 24px 90px #0008}
 #routeAudit::backdrop{background:#091015b3}.audit-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}.audit-heading h2{margin:0;font-size:20px}#routeAudit p{line-height:1.6}#routeAuditSummary{color:#f1ce79;font-weight:600}.audit-table{overflow:auto}.audit-table table{width:100%;border-collapse:collapse;white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums}.audit-table th,.audit-table td{padding:9px 10px;border-bottom:1px solid #657c8333;text-align:right}.audit-table th:first-child,.audit-table td:first-child{text-align:left}.audit-table thead{color:#acb8bb}.audit-night{background:#657c831a}.audit-late{color:#ffab96;background:#bc594410}
+
+/* 收复与失败共用结算布局，胜利保留明亮火光与重建色彩。 */
+#victory{border-color:#a7bd82;background:radial-gradient(ellipse at 50% 0,#3d5145,#1c252b 65%)}
+#victory .settlement-title{color:#f4dda0}#victory .defeat-night{color:#bdcfae}
+#victory .defeat-subtitle{color:#c6d6c5;letter-spacing:1px;font-size:13px}
+#victory .defeat-symbol{border-color:#d8bc735e;background:radial-gradient(circle,#efc45b30,#25352b44)}
+#victory .primary{background:#485c47;border-color:#91b581;color:#f4edcb}
+#showVictory{border-color:#88a879;color:#d5e9bc}
+#defeatReason{letter-spacing:1px;font-size:14px;line-height:1.6}

@@ -66,7 +66,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
     hp: params.campHP, enemies: [], enemyOutcomes:new Map(), events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
   // 本局成果独立于金币倍率和测试台日期；战前快照同时回滚这些计数。
-  state.killed=0;state.survivedNights=0;
+  state.killed=0;state.survivedNights=0;state.result=null;
   state.plotContents=new Map(state.sites.map(p=>[key(p.x,p.y),{status:p.kind==='open'?'empty':'ruin',type:p.kind==='open'?null:(p.ruinType??'production')}]));
   initializeExploration(state);rebuildTerrain(state);lockAttacks(state);return state;
 }
@@ -108,14 +108,31 @@ export function knownSources(state) {
   return [...known.values()].map(source=>({...source,active:state.sources.some(s=>s.count>0&&s.x===source.x&&s.y===source.y)}));
 }
 export const firstNightReady=state=>state.day!==1||state.towers.size>0;
-export const campaignComplete=state=>state.phase==='won'&&state.day===(state.waves?.length??1);
+export const campaignComplete=state=>!!state.result;
+// 医院沿用建筑碰到即归属；只读取连回火光的基础范围，发现地标不算收复。
+export function campaignGoals(state){
+  const connected=connectedOutposts(state),active={...state,outposts:new Map([...state.outposts].filter(([id])=>connected.has(id)))};
+  const hospitals=state.sites.filter(p=>p.role==='hospital'),sources=[...(state.enemySources?.values()??[])];
+  return {enabled:hospitals.length>0,hospital:hospitals.length>0&&hospitals.every(p=>buildingCells(state,key(p.x,p.y)).some(id=>inGroundControl(active,id))),
+    sources:sources.length>0&&sources.every(s=>s.hp===0),cleared:sources.filter(s=>s.hp===0).length,total:sources.length};
+}
+// 只在夜末调用：先发正常经营收入，再确认胜利或期限失败，不开放额外一天。
+function settleCampaign(state){
+  const goals=campaignGoals(state),last=state.day>=(state.waves?.length??1);
+  const type=goals.enabled?(goals.hospital&&goals.sources?'victory':last?'deadline':null):last?'experiment':null;
+  if(!type)return;
+  const connected=connectedOutposts(state),active={...state,outposts:new Map([...state.outposts].filter(([id])=>connected.has(id)))};
+  state.result={type,day:state.day,hospital:goals.hospital,cleared:goals.cleared,total:goals.total,population:population(state).total,
+    buildings:state.sites.filter(p=>p.role!=='camp'&&buildingCells(state,key(p.x,p.y)).some(id=>inGroundControl(active,id))).length};
+  if(type==='deadline')state.phase='lost';
+}
 export const campCritical=state=>state.hp>0&&state.hp*100<state.params.campHP*state.params.campWarningPercent;
 function clearNight(state) {
   state.tick=0;state.enemies=[];state.enemyOutcomes=new Map();state.events=[];state.spawned=0;state.removed=0;state.withdrawn=0;
   state.damage=0;state.leaked=0;state.merges=0;state.nightEarned=0;state.nightEconomy=0;state.economySettled=false;state.productionReport=null;
 }
 export function beginBattle(state) {
-  if(state.phase!=='build'||state.hp<=0||validateSources(state.sources,state))return null;
+  if(state.result||state.phase!=='build'||state.hp<=0||validateSources(state.sources,state))return null;
   clearNight(state);
   const snapshot=structuredClone(state);
   state.phase='battle';return snapshot;
@@ -319,7 +336,7 @@ export const outpostAt=(state,id)=>state.outposts.has(id)?id:undefined;
 export function plotBuildError(state,id) {
   const cells=productionCells(id,state);
   if(!cells.length)return '请选择地块，建筑不能建在道路上。';
-  if(productionSite(id,state)?.role==='hospital')return '医院为收复目标，占领机制待实现，不能拆除或换建。';
+  if(productionSite(id,state)?.role==='hospital')return '医院为收复目标，连接控制范围即可收复，不能拆除或换建。';
   if([...(state.enemySources?.values()??[])].some(s=>s.site===productionId(id,state)))return '感染据点保留，需在周边建筑架炮肃清，不能改建或拆除。';
   if(!isExplored(state,id))return '该地块尚未探索。';
   if(cells.includes(state.camp))return '火光所在地块保留，不能拆除或换建。';
@@ -363,7 +380,7 @@ export function removeOutpost(state,id) {
   rebuildTerrain(state);return '';
 }
 export function enterMorning(state) {
-  if(state.phase!=='won'||state.day>=(state.waves?.length??2))return false;
+  if(state.result||state.phase!=='won'||state.day>=(state.waves?.length??2))return false;
   state.lastNight={day:state.day,earned:state.nightEarned,economy:state.nightEconomy,...state.productionReport,leaked:state.leaked,withdrawn:state.withdrawn};
   state.day++;state.phase='build';
   if(state.waves)state.sources=state.waves[state.day-1].filter(s=>!s.sourceId||state.enemySources.get(s.sourceId)?.hp!==0);
@@ -553,7 +570,7 @@ export function stepBattle(state,actions=null) {
     state.events.push({type:'sourceHit',id:key(source.bx,source.by),sourceId,value:hit});
     if(!source.hp){source.destroyedDay=state.day;state.events.push({type:'sourceLost',id:key(source.bx,source.by),sourceId,value:0});}
   }
-  if(state.hp<=0){state.phase='lost';return;}
+  if(state.hp<=0){state.phase='lost';state.result={type:'campLost',day:state.day};return;}
   if(state.tick<state.params.nightTicks&&nightCleanupState(state)==='idle'){
     // 没有未出生敌人、存活敌人或可攻击源头时，余下拍数才完全没有战斗结果。
     // 保留本拍事件的真实时刻；只略过空闲等待，经营与回复仍到黎明结算一次。
@@ -567,7 +584,7 @@ export function stepBattle(state,actions=null) {
       for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'withdrawn');
       state.withdrawn+=enemy.members;state.events.push({type:'withdraw',id:enemy.id,value:enemy.members});
     }
-    state.enemies=[];state.phase='won';settleEconomy(state);
+    state.enemies=[];state.phase='won';settleEconomy(state);if(state.waves)settleCampaign(state);
   }
 }
 
@@ -782,7 +799,7 @@ export function clearPlot(state,id) {
   const clearing=clearingError(state,id);if(clearing)return clearing;
   state.plotContents.set(productionId(id,state),{status:'empty',type:null});rebuildTerrain(state);return '';
 }
-// 只在守住当晚时入账一次；失败不结算，重试由完整战前快照回滚。
+// 只在守住当晚时入账一次；火光熄灭不结算，期限失败保留已经入账的收入。
 export function settleEconomy(state) {
   if(state.phase!=='won'||state.economySettled)return;
   state.survivedNights++;
@@ -889,6 +906,6 @@ export function applyTestScenario(state,day,gold,people){
   const sources=structuredClone(state.waves[day-1].filter(s=>!s.sourceId||state.enemySources.get(s.sourceId)?.hp!==0)),candidate={...state,sources};
   const error=validateSources(sources,candidate);if(error)return error;
   state.debugGold+=gold-funds(state);state.debugPopulation+=people-population(state).total;
-  state.day=day;state.phase='build';state.hp=Math.max(1,state.hp);
+  state.day=day;state.phase='build';state.hp=Math.max(1,state.hp);state.result=null;
   state.sources=sources;state.lastNight=null;clearNight(state);lockAttacks(state);revealControl(state);return '';
 }

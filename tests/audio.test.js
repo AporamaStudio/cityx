@@ -78,3 +78,11 @@ test('落日与天亮是舒展的场景音效，音乐关闭仍可播放，音�
   s.sound.configure({effects:false});s.calls.length=0;
   s.sound.play('sunset');s.sound.play('dawn');assert.equal(s.calls.length,0);
 });
+
+
+test('收复完成音效保持舒展，冻结配乐并遵守音效关闭',async()=>{
+  const s=setup();await s.sound.unlock();s.sound.setScene('won');s.calls.length=0;
+  assert.equal(s.timers.size,0);s.sound.play('victory');
+  assert.ok(s.calls.length>=7);assert.ok(s.calls.filter(c=>c.kind==='tone').every(c=>c.end-c.at>2));
+  s.calls.length=0;s.ctx.currentTime=5;s.sound.configure({effects:false});s.sound.play('victory');assert.equal(s.calls.length,0);
+});

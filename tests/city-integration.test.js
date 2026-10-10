@@ -45,14 +45,14 @@ test('生成地图接入路线、矩形经营、建设限制及重试',()=>{
   const restarted=restartCampaign(restored);assert.deepEqual(restarted.layout,layout);assert.equal(restarted.production.size,0);assert.deepEqual(restarted.sources,s.sources);
   restored.day=2;assert.equal(removeProduction(restored,id),'');assert.ok(!restored.blocked.has(id));
 });
-test('新地图完成十五晚，敌人每步只进入道路或开放场地',()=>{
+test('新地图十五晚保持物理通路，目标未达成则期限失败',()=>{
   const s=createCampaign({...DEFAULTS,campHP:10000},undefined,generateCityMap(MAP_DEFAULTS));
   for(let day=1;day<=15;day++){
     assert.ok(beginBattle(s));
     for(let i=0;i<250&&s.phase==='battle';i++){
       stepBattle(s);for(const enemy of s.enemies)assert.ok(['road','open'].includes(s.layout.tiles[enemy.id]));
     }
-    assert.equal(s.phase,'won');assert.equal(enterMorning(s),day<15);
+    assert.equal(s.phase,day<15?'won':'lost');if(day===15)assert.equal(s.result.type,'deadline');assert.equal(enterMorning(s),day<15);
   }
 });
 

@@ -159,6 +159,11 @@ export function createGameAudio(options={}) {
       [50,57,62,66,69].forEach((note,i)=>tone(effects,note,at+i*.025,2.7+i*.1,.085,'sine',.42));
       tone(effects,74,at+.3,2.8,.035,'triangle',.6);
       rustle(effects,at+.15,1.7,.035,600,1800,.5);
+    }else if(name==='victory'){
+      // 收复完成：保留黎明的舒展，增加低音与高声部，避免通知式短音。
+      [43,50,55,59,62,67].forEach((note,i)=>tone(effects,note,at+i*.065,3.2,.09,'sine',.35));
+      tone(effects,74,at+.45,3,.045,'triangle',.5);
+      rustle(effects,at+.2,2,.035,700,2200,.5);
     }else if(name==='lost'){
       [50,45,38].forEach((note,i)=>tone(effects,note,at+i*.16,.65,.11,'triangle',.025));
     }
