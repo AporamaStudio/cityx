@@ -259,6 +259,28 @@ export function forecastAttacks(state,night=state.day) {
   if(night===state.day)return state.attacks;
   return sourcePlans(state,night).map((source,index)=>({...source,index,target:state.camp,path:campPath(state,pathFrom(key(source.x,source.y),state.field))}));
 }
+// 只读校验出兵表：出生当拍不移动，进入火光任意一格即到达；不计墙与炮火。
+export function routeTimingReport(state) {
+  const deadline=state.params.nightTicks,camp=new Set(campCells(state)),nights=[];
+  let farthest=null,latest=null,total=0,late=0,unreachable=0;
+  for(let night=1;night<=(state.waves?.length??1);night++){
+    const rows=forecastAttacks(state,night).map((attack,index)=>{
+      const path=attack.path,reaches=path.length>0&&camp.has(path.at(-1));
+      const steps=reaches?path.length-1:null,lastSpawn=attack.first+(attack.count-1)*attack.interval;
+      const lastArrival=reaches?lastSpawn+steps:null;
+      let lateCount=0;
+      for(let i=0;i<attack.count;i++)if(!reaches||attack.first+i*attack.interval+steps>deadline)lateCount++;
+      const row={night,sourceId:attack.sourceId,sourceNumber:(state.enemySources?.get(attack.sourceId)?.index??index)+1,
+        cells:reaches?path.length:null,steps,lastSpawn,lastArrival,count:attack.count,lateCount,margin:reaches?deadline-lastArrival:null};
+      if(reaches&&(!farthest||steps>farthest.steps))farthest=row;
+      if(reaches&&(!latest||lastArrival>latest.lastArrival))latest=row;
+      total+=attack.count;late+=lateCount;if(!reaches)unreachable+=attack.count;
+      return row;
+    });
+    nights.push({night,rows,total:rows.reduce((sum,row)=>sum+row.count,0),late:rows.reduce((sum,row)=>sum+row.lateCount,0)});
+  }
+  return {nightTicks:deadline,stepMs:state.params.stepMs,farthest,latest,total,late,unreachable,nights};
+}
 // 来源、目标与初始路线在白天开始锁定；瞭望塔不进入目标池。
 export function lockAttacks(state) {
   state.attacks=state.sources.map((source,index)=>{const path=campPath(state,pathFrom(key(source.x,source.y),state.field));return {...structuredClone(source),index,target:state.camp,originalPath:[...path],path};});

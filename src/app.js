@@ -4,7 +4,7 @@ import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,WATCHTOWER_SVG} from './icons.js?v=3';
 import {createGameAudio} from './audio.js?v=4';
 import { SIZE, DEFAULTS } from './config.js?v=61';
-import { nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, towerCapacity, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=68';
+import { routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, towerCapacity, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=69';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -453,17 +453,17 @@ function draw() {
     label(alive?source.index+1:'×',x+w/2,y+h/2,alive?'#edd4ca':'#b9d8c1',Math.max(.4,8/size));
     ctx.restore();
     if(!alive||!source.id)continue;
-    // 小核心的徽记放在边缘外，避免为了塞数字把形状盖住；只写当前剩余量。
+    // 所有核心的徽记统一放占地下沿外，与中心编号分开，放大后也不会遮挡。
     ctx.save();ctx.globalAlpha=danger?1:.72;ctx.font=`600 ${Math.max(.44,10/size)}px system-ui`;ctx.textAlign='left';ctx.textBaseline='middle';
     const shield=Math.max(.48,10/size),badgeWidth=shield+.18+ctx.measureText(String(source.hp)).width+.22;
-    const outsideBadge=badgeWidth>w-.16||shield*1.24>h-.16,cx=x+w/2,cy=outsideBadge?y+h+shield*.65:y+h/2;
+    const cx=x+w/2,cy=y+h+shield*.65;
     ctx.fillStyle='#211d24ee';ctx.fillRect(cx-badgeWidth/2-.10,cy-shield*.62,badgeWidth+.20,shield*1.24);
     ctx.strokeStyle=danger?'#bb7865':'#6b5655';ctx.lineWidth=Math.max(.05,.7/size);ctx.strokeRect(cx-badgeWidth/2-.10,cy-shield*.62,badgeWidth+.20,shield*1.24);
     drawShield(ctx,cx-badgeWidth/2,cy-shield/2,shield);ctx.fillStyle='#ffe6cc';ctx.fillText(source.hp,cx-badgeWidth/2+shield+.18,cy);
     const value=sourceDamage.get(source.id)||0;
     if(($('heat').checked||selectedSource===source.id)&&value){
       ctx.font=`600 ${Math.max(.4,9/size)}px system-ui`;ctx.textAlign='center';ctx.lineWidth=.16;ctx.strokeStyle='#172429';
-      const dy=outsideBadge?cy+shield*1.25:y+h+.48;ctx.strokeText(`−${value}/拍`,cx,dy);ctx.fillStyle='#f8c39f';ctx.fillText(`−${value}/拍`,cx,dy);
+      const dy=cy+shield*1.25;ctx.strokeText(`−${value}/拍`,cx,dy);ctx.fillStyle='#f8c39f';ctx.fillText(`−${value}/拍`,cx,dy);
     }
     ctx.restore();
   }
@@ -799,6 +799,26 @@ $('applyTest').onclick=()=>{
   notify(`测试台：已进入第 ${state.day} 天白天，现有布局保留；跳过夜晚不发收入。人口填写的是总人口。`);
 };
 $('retry').onclick=()=>reset();$('clear').onclick=()=>reset(false);
+// 测试台读取当前已应用参数与建筑空间；打开时暂停夜晚，避免报告与战场同时变化。
+$('auditRoutes').onclick=()=>{
+  if(state.phase==='battle'){paused=true;timer=0;if(motion)motion.singleStep=false;update();}
+  const report=routeTimingReport(state),f=report.farthest,l=report.latest;
+  $('routeAuditSummary').textContent=`夜长 ${report.nightTicks} 拍（1× ${(report.nightTicks*report.stepMs/1000).toFixed(1)} 秒） · 超时 ${report.late}/${report.total} 个敌人${report.unreachable?` · 其中不可达 ${report.unreachable} 个`:''}`;
+  $('routeAuditLongest').textContent=f?`最远：敌源 ${f.sourceNumber}，移动 ${f.steps} 格 / ${f.steps} 拍（路径含起终点 ${f.cells} 格）。最晚到达：第 ${l.night} 晚敌源 ${l.sourceNumber}，末批第 ${l.lastSpawn} 拍出生 → 第 ${l.lastArrival} 拍到达。`:'没有可到达火光的路线。';
+  const rows=[];
+  for(const night of report.nights){
+    const group=document.createElement('tr'),cell=document.createElement('th');cell.colSpan=7;cell.scope='rowgroup';cell.textContent=`第 ${night.night} 晚 · 超时 ${night.late}/${night.total} 个`;group.append(cell);group.className=night.late?'audit-late':'audit-night';rows.push(group);
+    for(const row of night.rows){
+      const tr=document.createElement('tr');if(row.lateCount)tr.className='audit-late';
+      for(const value of [row.sourceNumber,row.steps===null?'不可达':`${row.steps} / ${row.steps}`,row.cells??'—',row.lastSpawn,row.lastArrival??'不可达',row.margin===null?'—':`${row.margin>=0?'+':''}${row.margin}`,`${row.lateCount}/${row.count}`]){
+        const td=document.createElement('td');td.textContent=value;tr.append(td);
+      }
+      rows.push(tr);
+    }
+  }
+  $('routeAuditRows').replaceChildren(...rows);$('routeAudit').showModal();
+};
+$('closeRouteAudit').onclick=()=>$('routeAudit').close();
 $('applyParams').onclick=()=>{
   if(state.phase!=='build'||state.day!==1)return;
   const params=readParams(),error=validateParams(params,state);$('paramStatus').textContent=error;if(error)return;
