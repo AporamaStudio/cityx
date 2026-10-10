@@ -13,5 +13,8 @@ export function drawShield(ctx,x,y,size){
   ctx.beginPath();ctx.moveTo(.5,.19);ctx.lineTo(.5,.79);ctx.stroke();ctx.restore();
 }
 
+// 群体代表城市人口，戴帽单人代表可分配工人；资源栏、报价和地图共用。
+export const POPULATION_SVG='<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="currentColor" opacity=".55"><circle cx="6" cy="11" r="4"/><circle cx="26" cy="11" r="4"/><path d="M0 29v-8a6 6 0 0 1 12 0v8zm20 0v-8a6 6 0 0 1 12 0v8z"/></g><g fill="currentColor"><circle cx="16" cy="8" r="5"/><path d="M7 29v-8a9 9 0 0 1 18 0v8z"/></g></svg>';
+export const WORKER_SVG='<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="currentColor"><circle cx="16" cy="12" r="5"/><path d="M5 29v-6a11 11 0 0 1 22 0v6zM9 9a7 7 0 0 1 14 0z"/></g><path d="M8 9h16M16 2v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 // 挑高支架与平台，工具栏和地图使用同一份图形。
 export const WATCHTOWER_SVG='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><path d="M9 29 12 13h8l3 16M11 21l11 8M21 21l-11 8" fill="none" stroke="#9bddec" stroke-width="2"/><path d="M6 12h20v4H6zM5 9 16 2 27 9z" fill="#b3e8f2"/><path d="M10 9v3m12-3v3" stroke="#9bddec" stroke-width="2"/></svg>';

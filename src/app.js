@@ -1,7 +1,7 @@
 import {drawFog} from './fog.js?v=2';
 import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-textures.js?v=5';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
-import {drawCampfire,drawShield,WATCHTOWER_SVG} from './icons.js?v=3';
+import {drawCampfire,drawShield,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG} from './icons.js?v=4';
 import {createGameAudio} from './audio.js?v=4';
 import { SIZE, DEFAULTS } from './config.js?v=61';
 import { routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, towerCapacity, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=69';
@@ -13,8 +13,11 @@ const cityLayout=generateCityMap(mapSettings);
 const $ = id => document.getElementById(id);
 // Canvas 报价直接复用钱包与工具 SVG，资源和炮图标不另建一套图形。
 document.querySelector('#outpost .tool-name').innerHTML=WATCHTOWER_SVG+' 瞭望塔';
+document.querySelector('#populationTotalMetric .population-symbol').innerHTML=POPULATION_SVG;
+document.querySelector('#populationFreeMetric .population-symbol').innerHTML=WORKER_SVG;
+$('outpostWorkerIcon').innerHTML=WORKER_SVG;
 const resourceIcons={};
-for(const [name,selector] of [['coin','.wallet .coin-icon'],['people','.population-main svg'],['watch','#outpost svg'],['military','#build .weapon-icon']]){
+for(const [name,selector] of [['coin','.wallet .coin-icon'],['people','#populationFreeMetric svg'],['residents','#populationTotalMetric svg'],['watch','#outpost svg'],['military','#build .weapon-icon']]){
   const svg=document.querySelector(selector).cloneNode(true);
   svg.setAttribute('xmlns','http://www.w3.org/2000/svg');svg.setAttribute('width','32');svg.setAttribute('height','32');svg.style.color='#f4d3a2';
   if(name==='military')svg.setAttribute('fill','currentColor');
@@ -64,16 +67,68 @@ function terrainColor(name){
 const colors = ['#df9989', '#a6a1e9', '#d5bd79', '#78bcd3', '#bd98c8', '#b7c77d', '#dc9fb1', '#87c4af'];
 const notify = message => { $('notice').textContent = message; };
 let topNoticeTimer=null;
-// 操作失败的顶栏提示只短暂显示；下次点击先清除，首晚教学提示保持原规则。
+// 拒绝操作统一在顶栏短暂显示；下次点击可提前清除，不占左下说明区。
 function dismissTopNotice(){
   if(topNoticeTimer===null)return;
   clearTimeout(topNoticeTimer);topNoticeTimer=null;
-  if($('notice').textContent===$('firstNightNotice').textContent)notify('');
   $('firstNightNotice').hidden=true;
 }
 document.addEventListener('pointerdown',dismissTopNotice,{capture:true});
 const weaponType = () => tool === 'long' ? 'B' : 'A';
 const viewedSources = () => sourcePlans(state,Number($('forecastDay').value)+1);
+let populationPinned=false;
+function showPopulationDetails(open){
+  $('populationDetails').hidden=!open;$('populationSummary').setAttribute('aria-expanded',String(open));
+}
+// 鼠标悬停与键盘聚焦暂显明细；点击固定展开，触屏也能查看，外部点击或Escape关闭。
+$('population').addEventListener('pointerenter',event=>{if(event.pointerType!=='touch')showPopulationDetails(true);});
+$('population').addEventListener('pointerleave',()=>{if(!populationPinned)showPopulationDetails(false);});
+$('populationSummary').addEventListener('focus',()=>showPopulationDetails(true));
+$('populationSummary').addEventListener('blur',()=>{if(!populationPinned)showPopulationDetails(false);});
+$('populationSummary').onclick=()=>{populationPinned=!populationPinned;showPopulationDetails(populationPinned);};
+document.addEventListener('click',event=>{if(!$('population').contains(event.target)){populationPinned=false;showPopulationDetails(false);}});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'){populationPinned=false;showPopulationDetails(false);}});
+const resourceChange=delta=>`(${delta>0?'+':delta<0?'−':''}${Math.abs(delta)})`;
+// 金币与人口都保留当前值，括号只表达本次变化；真实分配与明细不变。
+function previewPopulation(totalDelta=0,freeDelta=0){
+  const people=population(state);
+  for(const [name,value,delta,label] of [['Total',people.total,totalDelta,'总人口'],['Free',people.free,freeDelta,'可用工人']]){
+    const preview=$(`population${name}Preview`);preview.firstElementChild.textContent=delta?resourceChange(delta):'';
+    preview.classList.toggle('population-decrease',delta<0);
+    $(`population${name}Metric`).setAttribute('aria-label',`${label} ${value}${delta?`，预计 ${value+delta}`:''}`);
+  }
+  $('populationSummary').setAttribute('aria-label',`总人口 ${people.total}${totalDelta?`，预计 ${people.total+totalDelta}`:''}；可用工人 ${people.free}${freeDelta?`，预计 ${people.free+freeDelta}`:''}`);
+}
+const resourceFitCache=new WeakMap();
+// 预览槽始终占位；当前值与宽度不变时，不因悬停内容重新缩放或移动资源。
+function fitResourceLine(row){
+  const content=row.querySelector('.resource-content'),width=row.clientWidth;
+  if(!width)return;
+  const signature=`${width}:${[...content.querySelectorAll('strong')].map(el=>el.textContent).join(',')}`;
+  if(resourceFitCache.get(row)===signature)return;
+  resourceFitCache.set(row,signature);row.style.setProperty('--resource-scale','1');
+  if(content.getBoundingClientRect().width<=width)return;
+  let low=0,high=1;
+  for(let i=0;i<9;i++){
+    const scale=(low+high)/2;row.style.setProperty('--resource-scale',String(scale));
+    if(content.getBoundingClientRect().width<=width)low=scale;else high=scale;
+  }
+  row.style.setProperty('--resource-scale',String(low));
+}
+// 超长增减量只缩小槽内文字，不能侵占当前数字或推动相邻人口项。
+function fitResourcePreview(slot){
+  const value=slot.firstElementChild,width=slot.clientWidth;
+  if(!width)return;
+  const signature=`${width}:${getComputedStyle(slot).fontSize}:${value.textContent}`;
+  if(resourceFitCache.get(slot)===signature)return;
+  resourceFitCache.set(slot,signature);value.style.setProperty('--preview-scale','1');
+  const measured=value.getBoundingClientRect().width;
+  if(measured>width)value.style.setProperty('--preview-scale',String(Math.max(0,width-1)/measured));
+}
+function fitResources(){
+  for(const row of document.querySelectorAll('.resource-line'))fitResourceLine(row);
+  for(const slot of document.querySelectorAll('.resource-preview'))fitResourcePreview(slot);
+}
 let selectedSource=null;
 const sourceNumber=plan=>state.enemySources?.get(plan?.sourceId)?.index??state.sources.indexOf(plan);
 const selectedWeapon = () => previewParams().weapons[weaponType()];
@@ -150,6 +205,14 @@ function draw() {
   const weapon=selectedWeapon();
   const previewError=weaponHover ? (paramsDirty()?'请先应用或取消实验参数预览。':weaponPlacementError(hover)) : '';
   const ghost=weaponHover&&!previewError;
+  let totalDelta=0,freeDelta=0,goldDelta=null,blockedPreview='';
+  if(!paramsDirty()&&hover!==null&&(state.phase==='build'||ghost)){
+    if(postGhost){freeDelta=-state.params.outpostWorkers;goldDelta=-state.params.outpostCost;}
+    else if(tool==='production'&&!productionError(state,hover)){const q=economyBuildQuote(state,hover,'production');freeDelta=-q.labor;goldDelta=-q.cost;}
+    else if(tool==='housing'&&!housingError(state,hover)){const q=economyBuildQuote(state,hover,'housing');totalDelta=freeDelta=q.residents;goldDelta=-q.cost;}
+    else if(ghost){const q=embeddingQuote(state,hover);totalDelta=-q.residents;freeDelta=q.released-q.residents;goldDelta=q.refund-towerBuildCost(state,weaponType());}
+    else if(tool==='wall'&&candidate&&!candidate.error)goldDelta=-state.params.wallCost;
+  }
   const added=new Set(ghost?coverage(hover,weapon.range,weapon.shape):[]);
   const sourceDamage=sourceAttackPlan({...previewState,params:controlState.params},motion?[...incoming.values()]:state.enemies,new Map([...state.towers,...(ghost?[[hover,weaponType()]]:[])]));
   const sourceFootprint=new Set([...state.enemySources.values()].flatMap(sourceCells));
@@ -189,8 +252,7 @@ function draw() {
       }
       // 只把可执行修复的扣款和恢复段叠在资源上，真实余额、HP 与危急状态不变。
       if(!error&&quote.cost>0){
-        refundPreview.hidden=false;refundPreview.classList.add('spend-preview');$('moneyGain').hidden=true;
-        refundPreview.textContent=`−${quote.cost}`;refundPreview.setAttribute('aria-label',`预计花费 ${quote.cost} 金币，余额将为 ${funds(state)-quote.cost}`);
+        goldDelta=-quote.cost;
         if(quote.type==='camp'){
           campHPPreview.hidden=false;campHPPreview.textContent=`+${quote.restore}`;
           campHPPreview.setAttribute('aria-label',`预计恢复 ${quote.restore} HP，修复后 ${state.hp+quote.restore} / ${state.params.campHP}`);
@@ -202,11 +264,14 @@ function draw() {
   if(tool==='erase'&&hover!==null&&state.phase==='build'){
     const quote=demolitionQuote(state,hover);
     const error=quote.type==='outpost'?postRemoval?.error:quote.type==='housing'?housingRemovalError(state,hover):quote.type==='production'?buildingRemovalError(state,hover):quote.type==='ruin'?clearingError(state,hover):quote.type==='wall'?wallPreview(state,hover,true).error:'';
+    blockedPreview=error||(!quote.type?'这里没有可拆设施。':'');
     $('placementInfo').textContent=error||(!quote.type?'这里没有可拆设施。':quote.type==='ruin'?'清理为空地，不占人口。':quote.type==='outpost'?`拆除释放 ${state.params.outpostWorkers} 人。`:'');
-    if(quote.type&&!error){
+    if(quote.type&&!error&&!paramsDirty()){
+      if(quote.type==='outpost')freeDelta=state.params.outpostWorkers;
+      else if(quote.type==='production')freeDelta=productionLabor(state,hover);
+      else if(quote.type==='housing')totalDelta=freeDelta=-housingQuote(state,hover).residents;
       // 预览独立于已到账提示，不改真实余额，也不覆盖战斗收入动画。
-      refundPreview.hidden=false;erasePreview.hidden=false;$('moneyGain').hidden=true;
-      refundPreview.textContent=`+${quote.refund}`;refundPreview.setAttribute('aria-label',`预计返还 ${quote.refund} 金币，余额将为 ${funds(state)+quote.refund}`);
+      goldDelta=quote.refund;erasePreview.hidden=false;
       if(erasePreview.dataset.refund!==String(quote.refund)){
         erasePreview.dataset.refund=String(quote.refund);erasePreview.textContent=`↩${quote.refund}`;
         erasePreview.append(document.querySelector('.price-coin').cloneNode(true));
@@ -228,6 +293,17 @@ function draw() {
 
   if(weaponHover&&productionSite(hover,state)){const capacity=towerCapacity(state,hover);$('placementInfo').textContent+=` · 炮位 ${capacity.used}/${capacity.max}`;}
   if(weaponHover&&!previewError){const q=embeddingQuote(state,hover);$('placementInfo').textContent+=`${q.residents||q.released?` · 空闲 ${population(state).free} → ${q.freeAfter}`:''}${q.residents?` · 人口 −${q.residents}`:''}${q.released?` · 释放用工 ${q.released} 人`:''}${q.incomeLoss?` · 每天收入 −${q.incomeLoss}`:''}${q.refund?` · 拆返 +${q.refund} 金币`:''}`;}
+  // 无效悬停只保留地图上的禁用反馈；点击尝试时才在顶栏解释，避免逐帧闪烁。
+  if(hover!==null&&tool){
+    blockedPreview||=paramsDirty()?'请先应用参数。':weaponHover?previewError:tool==='wall'?candidate?.error:postHover?postError:repairHover?repairError(state,hover):tool==='housing'?housingError(state,hover):tool==='production'?productionError(state,hover):'';
+    if(blockedPreview)$('placementInfo').textContent='';
+  }
+  if(goldDelta!==null){
+    refundPreview.hidden=false;refundPreview.classList.toggle('spend-preview',goldDelta<0);$('moneyGain').hidden=true;
+    refundPreview.firstElementChild.textContent=resourceChange(goldDelta);refundPreview.setAttribute('aria-label',`预计${goldDelta<0?'花费':'返还'} ${Math.abs(goldDelta)} 金币，余额将为 ${funds(state)+goldDelta}`);
+  }
+  previewPopulation(totalDelta,freeDelta);
+  fitResources();
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
   drawCitySurroundings(ctx,cityLayout,nightMix,$('showFog').checked?state.explored:null,backdrop);
@@ -517,9 +593,9 @@ function draw() {
       rows.push({text:`${capacity.used}/${capacity.max}`,icon:'military',suffix:'',color:capacity.used>=capacity.max?'#f3a49c':productionControlled(state,id)?'#c4f4df':'#a5afa9'});
     }else if(!home){
       // 建成后仅显示占用人数与收入图标；未建成仍保留费用和产出报价。
-      rows.push({text:`${complete?'':'−'}${productionLabor(state,id)}`,icon:'people',suffix:'',color:'#f4d3a2'});
-      rows.push({text:`+${complete&&!active?0:quote.income}`,icon:'coin',suffix:complete?'':'/天',color:'#bff5ce'});
-    }else rows.push({text:`+${quote.residents}`,icon:'people',suffix:'',color:'#f4d3a2'});
+      rows.push({text:`${productionLabor(state,id)}`,icon:'people',suffix:'',color:'#f4d3a2'});
+      rows.push({text:`+${complete&&!active?0:quote.income}`,icon:'coin',suffix:'',color:'#bff5ce'});
+    }else rows.push({text:`+${quote.residents}`,icon:'residents',suffix:'',color:'#f4d3a2'});
     ctx.save();ctx.font='600 10px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
     const iconSize=11,rowHeight=14;
     const widths=rows.map(row=>ctx.measureText(row.text).width+iconSize+3+ctx.measureText(row.suffix).width);
@@ -603,11 +679,17 @@ function update() {
   $('mapConfigLink').href=`map-preview.html?${new URLSearchParams(mapSettings)}`;
   // 金币总额仍由模型结算；夜间按钮拆成白天基价 + 实际加急差额。
   const towerPrice=type=>{const base=state.params.weapons[type].cost,cost=towerBuildCost(state,type);return state.phase==='battle'?`${base}+${cost-base}`:base;};
-  const prices={wall:state.params.wallCost,build:towerPrice('A'),long:towerPrice('B'),outpost:`${state.params.outpostCost} · ${state.params.outpostWorkers} 人`,production:'按地块报价',housing:'按地块报价'};
+  const prices={wall:state.params.wallCost,build:towerPrice('A'),long:towerPrice('B'),outpost:state.params.outpostCost,production:'按地块报价',housing:'按地块报价'};
   for(const [id,price] of Object.entries(prices))$('price-'+id).textContent=String(price);
+  $('outpostWorkers').textContent=state.params.outpostWorkers;
+  $('outpost').setAttribute('aria-label',`瞭望塔，花费 ${state.params.outpostCost} 金币，持续占用 ${state.params.outpostWorkers} 名工人`);
   $('budget').textContent = funds(state);
   const people=population(state);$('population').hidden=false;
-  $('populationTotal').textContent=`${people.total}`;$('populationUse').textContent=`空闲 ${people.free} · 生产 ${people.working-state.outposts.size*state.params.outpostWorkers} · 瞭望 ${state.outposts.size*state.params.outpostWorkers}`;
+  $('populationTotal').textContent=people.total;$('populationFree').textContent=people.free;
+  $('populationFreeMetric').classList.toggle('no-workers',people.free===0);
+  const watchWorkers=state.outposts.size*state.params.outpostWorkers;
+  $('populationDetailTotal').textContent=`${people.total} 人`;$('populationDetailFree').textContent=`${people.free} 人`;
+  $('populationDetailProduction').textContent=`${people.working-watchWorkers} 人`;$('populationDetailWatch').textContent=`${watchWorkers} 人`;
   $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
   const critical=campCritical(state);
   $('campPanel').classList.toggle('camp-critical',critical);viewport.classList.toggle('camp-critical',critical);
@@ -753,7 +835,8 @@ function readParams() {
 }
 function refreshParams(){
   const error=validateParams(readParams(),state);
-  $('paramStatus').textContent=error || (paramsDirty()?'正在预览未应用参数，建设与开战前请应用。':'当前参数已应用。');
+  $('paramStatus').textContent=paramsDirty()?'正在预览未应用参数，建设与开战前请应用。':'当前参数已应用。';
+  if(error)showTopNotice(error);
   update();
 }
 function clearPlayback() {
@@ -793,7 +876,7 @@ for(const id of ['wall','build','long','outpost','production','housing','repair'
 $('testDay').replaceChildren(...state.waves.map((_,i)=>{const o=document.createElement('option');o.value=i+1;o.textContent=`第 ${i+1} 天`;return o;}));
 $('applyTest').onclick=()=>{
   const error=applyTestScenario(state,Number($('testDay').value),Number($('testGold').value),Number($('testPeople').value));
-  if(error){notify(error);return;}
+  if(error){showTopNotice(error);return;}
   preparation=null;clearPlayback();$('firstNightNotice').hidden=true;hover=null;tool='wall';$('forecastDay').value=String(state.day-1);
   sourceEditor(state.sources);paramsEditor(state.params);refreshParams();
   notify(`测试台：已进入第 ${state.day} 天白天，现有布局保留；跳过夜晚不发收入。人口填写的是总人口。`);
@@ -821,7 +904,7 @@ $('auditRoutes').onclick=()=>{
 $('closeRouteAudit').onclick=()=>$('routeAudit').close();
 $('applyParams').onclick=()=>{
   if(state.phase!=='build'||state.day!==1)return;
-  const params=readParams(),error=validateParams(params,state);$('paramStatus').textContent=error;if(error)return;
+  const params=readParams(),error=validateParams(params,state);if(error){showTopNotice(error);return;}
   state.params=structuredClone(params);state.hp=params.campHP;syncSourceHealth(state);
   for(const body of state.wallHealth.values())body.hp=body.max=params.wallHP;
   rebuildTerrain(state);revealControl(state);state.lastNight=null;preparation=null;clearPlayback();
@@ -833,11 +916,11 @@ $('cancelParams').onclick=()=>{paramsEditor(state.params);refreshParams();};
 $('defaults').onclick=()=>{paramsEditor(DEFAULTS);refreshParams();notify('已填入默认值，点击应用后生效。');};
 $('apply').onclick=()=>{
   if(state.phase!=='build')return;
-  if(paramsDirty()){notify('请先应用或取消实验参数预览。');return;}
-  const sources=readSources(),error=validateSources(sources,state);$('configError').textContent=error;if(error)return;
+  if(paramsDirty()){showTopNotice('请先应用或取消实验参数预览。');return;}
+  const sources=readSources(),error=validateSources(sources,state);$('configError').textContent='';if(error){showTopNotice(error);return;}
   state.sources=structuredClone(sources);state.waves[state.day-1]=state.sources;lockAttacks(state);preparation=null;clearPlayback();sourceEditor(state.sources);notify(`第 ${state.day} 晚实验配置已重新出题并锁定；资金与损伤不变。`);update();
 };
-$('addSource').onclick=()=>{const sources=readSources();if(sources.length>=12){$('configError').textContent='最多 12 个源头。';return;}sources.push({x:1,y:1,hp:12,count:4,first:1,interval:6,target:-2});sourceEditor(sources);};
+$('addSource').onclick=()=>{const sources=readSources();if(sources.length>=12){showTopNotice('最多 12 个源头。');return;}sources.push({x:1,y:1,hp:12,count:4,first:1,interval:6,target:-2});sourceEditor(sources);};
 $('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;constrainCamera();hover=null;draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;
 // 右键退出当前工具，保留悬停查看与地图移动，不再执行建设或拆除。
 canvas.addEventListener('contextmenu',e=>{e.preventDefault();tool=null;selectedSource=null;dragging=null;notify('');update();});
@@ -864,26 +947,26 @@ canvas.addEventListener('pointerup',e=>{
   const source=enemySourceAt(state,id);selectedSource=source&&knownSources(state).some(s=>s.id===source.id)?source.id:null;
   if(selectedSource){update();return;}
   if(tool===null)return;
-  if(state.phase!=='build'&&!(state.phase==='battle'&&['build','long'].includes(tool))){notify('防守中只能在建筑炮位补炮，不能造墙、修复或拆除。');return;}
-  if(paramsDirty()){notify('请先应用或取消实验参数预览，再修改布局。');return;}
+  if(state.phase!=='build'&&!(state.phase==='battle'&&['build','long'].includes(tool))){showTopNotice('防守中只能在建筑炮位补炮，不能造墙、修复或拆除。');return;}
+  if(paramsDirty()){showTopNotice('请先应用或取消实验参数预览，再修改布局。');return;}
   const beforePeople=population(state).total,beforeFunds=funds(state),beforeHP=state.hp,erasedType=tool==='erase'?demolitionQuote(state,id).type:null;let actionError='';
   if(tool==='housing'){
-    const error=actionError=buildHousing(state,id);notify(error||`住房已完成，${population(state).total-beforePeople} 位居民立即入住。`);
+    const error=actionError=buildHousing(state,id);notify(error?'':`住房已完成，${population(state).total-beforePeople} 位居民立即入住。`);
   } else if(tool==='production'){
-    const error=actionError=buildProduction(state,id);notify(error||`生产设施已完成，预计每晚收入 +${productionQuote(state,id).income}，守住后自动入账。`);
+    const error=actionError=buildProduction(state,id);notify(error?'':`生产设施已完成，预计每晚收入 +${productionQuote(state,id).income}，守住后自动入账。`);
   } else if(['outpost','repair'].includes(tool)){
-    const error=actionError=tool==='repair'?repairFacility(state,id):buildOutpost(state,id);notify(error||(tool==='repair'?(id===state.camp?`火光恢复 ${state.hp-beforeHP} HP，花费 ${beforeFunds-funds(state)} 金币。`:'墙已修满。'):'瞭望塔已建立，控制与视野立即扩张。'));
+    const error=actionError=tool==='repair'?repairFacility(state,id):buildOutpost(state,id);notify(error?'':(tool==='repair'?(id===state.camp?`火光恢复 ${state.hp-beforeHP} HP，花费 ${beforeFunds-funds(state)} 金币。`:'墙已修满。'):'瞭望塔已建立，控制与视野立即扩张。'));
     if(!error)sourceEditor(readSources());
   } else if(tool==='wall'){
-    const error=actionError=changeWall(state,id);notify(error||'墙已建造；今晚路线不变，敌人到这里会停下攻击。');
+    const error=actionError=changeWall(state,id);notify(error?'':'墙已建造；今晚路线不变，敌人到这里会停下攻击。');
   } else if(tool==='erase'){
     const quote=demolitionQuote(state,id);
     const error=actionError=quote.type==='housing'?removeHousing(state,id):quote.type==='production'?removeProduction(state,id):quote.type==='tower'?removeTower(state,id):quote.type==='outpost'?removeOutpost(state,id):quote.type==='wall'?changeWall(state,id,true):quote.type==='ruin'?clearPlot(state,id):'这里没有可拆除的设施。';
-    notify(error||(quote.type==='ruin'?'废墟已清理，金币不变；空地可选择经营设施。':`已拆除设施，返还 ${quote.refund} 金币${['production','housing','outpost'].includes(quote.type)?'；地块变为空地':''}。`));
+    notify(error?'':(quote.type==='ruin'?'废墟已清理，金币不变；空地可选择经营设施。':`已拆除设施，返还 ${quote.refund} 金币${['production','housing','outpost'].includes(quote.type)?'；地块变为空地':''}。`));
     if(!error&&quote.type==='outpost')sourceEditor(readSources());
   } else {
     const type=weaponType(),error=actionError=weaponPlacementError(id)||buildTower(state,id,type);
-    if(error)notify(error);else{notify(`武器 ${type} 已架设于建筑，每拍火力 +${state.params.weapons[type].power}。`);}
+    if(!error){notify(`武器 ${type} 已架设于建筑，每拍火力 +${state.params.weapons[type].power}。`);}
   }
   if(!actionError){
     $('firstNightNotice').hidden=true;
@@ -893,23 +976,24 @@ canvas.addEventListener('pointerup',e=>{
     const names={wall:'墙已建造',build:'近防炮就位',long:'远防炮就位',outpost:'控制区扩张',housing:`入住 +${population(state).total-beforePeople} 人`,production:'生产已完成',repair:id===state.camp?`HP +${state.hp-beforeHP}`:'墙已修满',erase:'已拆除'};
     placementFx={id:site?key(site.x,site.y):id,size:site?.width||site?.size||1,height:site?.height||site?.size||1,start:performance.now(),color:delta<0?'#ffe1a0':'#aef2ce',text:`${names[tool]}${delta?` ${delta>0?'+':''}${delta} 金币`:''}`};
     pulse($('budget'),delta<0?'#ffe1a0':'#bff5ce');
-  }else{pulse($('notice'),'#ffb7a5');if(/容量|先拆除.*炮塔|瞭望塔间距|失去与篝火的连接/.test(actionError))showTopNotice(/失去与篝火的连接/.test(actionError)?'无法拆除：会切断与篝火的连接。':actionError,true);}
+  }else{showTopNotice(/失去与篝火的连接/.test(actionError)?'无法拆除：会切断与篝火的连接。':actionError);}
   update();
 });
 canvas.addEventListener('pointercancel',()=>{dragging=null;});
 canvas.addEventListener('lostpointercapture',()=>{dragging=null;});
 canvas.addEventListener('pointerleave',()=>{hover=null;draw();});
 new ResizeObserver(()=>resize()).observe(viewport);
+new ResizeObserver(fitResources).observe(document.querySelector('.wallet'));
 // 预告选项跟随实际波次，避免增加夜晚后界面仍停在前三晚。
 $('forecastDay').replaceChildren(...state.waves.map((_,i)=>{const option=document.createElement('option');option.value=i;option.textContent=`第 ${i+1} 晚`;return option;}));
 paramsEditor(state.params);sourceEditor(state.sources);resize(true);refreshParams();
 
 // 短促高亮确认发生变化，不震屏，不遮挡操作；尊重减少动态效果设置。
 // 失败提示每次重播字体强调，不用背景闪烁；共用顶栏提醒位置。
-function showTopNotice(text,transient=false){
-  dismissTopNotice();
+function showTopNotice(text){
+  dismissTopNotice();notify('');
   const notice=$('firstNightNotice');notice.textContent=text;notice.hidden=false;
-  if(transient)topNoticeTimer=setTimeout(dismissTopNotice,2500);
+  topNoticeTimer=setTimeout(dismissTopNotice,2500);
   notice.getAnimations().forEach(animation=>animation.cancel());
   notice.animate([{color:'#ffd477',filter:'brightness(1)'},{color:'#fff9dc',filter:'brightness(1.8)'},{color:'#ffd477',filter:'brightness(1)'}],{duration:reducedMotion.matches?700:450,iterations:reducedMotion.matches?1:2});
 }
@@ -1008,9 +1092,9 @@ $('start').onclick=()=>{
     showTopNotice('请先建造一座炮塔');
     return;
   }
-  if(paramsDirty()){ $('experiments').open=true;notify('实验参数有未应用修改，请先应用或取消预览。');return; }
-  if(JSON.stringify(sourceValues(readSources()))!==JSON.stringify(sourceValues(state.sources))){ $('configError').textContent='来袭配置有未应用修改，请先应用配置。';$('settings').open=true;notify('请先应用来袭配置，确保预览与实际波次一致。');return; }
-  const error=validateSources(state.sources,state);if(error){notify(error);return;}
+  if(paramsDirty()){ $('experiments').open=true;showTopNotice('实验参数有未应用修改，请先应用或取消预览。');return; }
+  if(JSON.stringify(sourceValues(readSources()))!==JSON.stringify(sourceValues(state.sources))){ $('settings').open=true;showTopNotice('请先应用来袭配置，确保预览与实际波次一致。');return; }
+  const error=validateSources(state.sources,state);if(error){showTopNotice(error);return;}
   preparation=beginBattle(state);if(!preparation)return;
   // 开战成功后撤下白天建设的失败提醒，避免被误认为夜间状态。
   $('firstNightNotice').hidden=true;

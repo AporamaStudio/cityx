@@ -98,9 +98,10 @@ header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320
 .wallet{flex-wrap:wrap;gap:10px}.wallet .resource-people{width:100%;border-top:1px solid #d3bd7940;padding-top:10px;margin:0}.population-main{display:flex;align-items:center;gap:12px}.population-main svg{width:30px;height:30px}.population-main strong{font-size:28px}.resource-people span{font-size:11px}.test-fields{display:grid;gap:8px;margin:12px 0}.test-fields label{display:grid;grid-template-columns:42px 1fr;align-items:center}.test-fields input,.test-fields select{width:100%;min-width:0}
 
 .wallet .resource-people{align-items:stretch}.population-main svg{width:38px;height:38px}.population-main strong{font-size:36px}.resource-people span{text-align:left}
+.wallet .resource-people{position:relative;gap:0}.population-summary{display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;gap:6px 12px;width:100%;padding:0;border:0;background:transparent;color:#f4d3a2;text-align:left}.population-summary:hover{background:transparent;border-color:transparent}.population-metric{display:flex;align-items:center;gap:8px;min-width:0}.population-symbol{display:flex;flex:none}.population-symbol svg{width:32px;height:32px}.population-value{display:flex;align-items:baseline;flex-wrap:nowrap;gap:3px;white-space:nowrap}.wallet .population-metric strong{font-size:32px;color:inherit}.population-summary #populationFreeMetric{color:#bce4ce;gap:6px}#populationFreeMetric .population-symbol svg{width:24px;height:24px}.wallet #populationFree{font-size:26px}.population-summary #populationFreeMetric.no-workers{color:#eabb6f}.resource-people .population-preview{color:#bff5ce;font-size:13px;line-height:1.2;white-space:nowrap}.resource-people .population-decrease{color:#f3ad91}.population-details{position:absolute;top:calc(100% + 8px);left:0;z-index:20;width:100%;min-width:160px;padding:12px;border:1px solid #746953;border-radius:8px;background:#242b2b;box-shadow:0 8px 24px #0008;color:#e5edeb}.population-details dl{margin:0}.population-details dl>div{display:flex;justify-content:space-between;gap:12px;padding:4px 0}.population-details dt{font-size:12px;color:#acb8bb}.population-details dd{margin:0;font-size:12px;font-variant-numeric:tabular-nums}.worker-cost{display:inline-flex;align-items:center;gap:3px;margin-left:5px;padding-left:6px;border-left:1px solid #b9a47355}.worker-cost svg{display:block;width:14px;height:14px;fill:currentColor}.toolgrid button:disabled .worker-cost{color:inherit}
 
-/* 虚线与浅色区分待发生退款和已经到账的金币。 */
-.refund-preview{display:inline-block;margin-left:6px;padding:1px 5px;border:1px dashed #b8e2c4;border-radius:4px;color:#c6f0b5;font-size:16px;font-weight:700;white-space:nowrap}.refund-preview[hidden],#erasePreview[hidden],#repairPreview[hidden]{display:none}#repairPreview.unaffordable{color:var(--red)}
+/* 括号和颜色区分待发生变化与已经到账的金币。 */
+.refund-preview{display:inline-block;color:#c6f0b5;font-size:14px;font-weight:700;white-space:nowrap}.refund-preview[hidden],#erasePreview[hidden],#repairPreview[hidden]{display:none}#repairPreview.unaffordable{color:var(--red)}
 
 /* 声音是玩家设置，页首随时可用，不挤占建设与防守面板。 */
 .audio-settings{position:relative;flex-shrink:0;margin-left:auto;z-index:120}.audio-settings summary{white-space:nowrap;border:1px solid var(--line);border-radius:7px;padding:8px 11px;font-size:12px}.audio-settings summary:focus-visible{outline:2px solid var(--orange);outline-offset:2px}.audio-popover{position:absolute;right:0;top:calc(100% + 8px);width:210px;background:var(--panel);border:1px solid #4b7163;border-radius:9px;padding:14px;box-shadow:0 6px 20px #0006;display:grid;grid-template-columns:65px 1fr;gap:15px 8px;align-items:center}.audio-popover label{display:flex;align-items:center;gap:5px;white-space:nowrap}.audio-popover input[type=range]{width:100%;min-width:0;accent-color:var(--teal)}.audio-popover input:disabled{opacity:.4}
@@ -125,8 +126,7 @@ header{grid-template-columns:auto auto minmax(140px,1fr) minmax(240px,1.4fr) aut
 #campHitFlash{position:absolute;inset:0;z-index:3;pointer-events:none;opacity:0;background:#e5413324;box-shadow:inset 0 0 90px 20px #ed453a99}
 .repair-hp{margin-left:5px;color:var(--teal)}
 /* 虚线框与条纹生命段只表达修复预览，保留真实余额和当前 HP。 */
-.refund-preview.spend-preview{margin-left:0;padding:1px 4px;border-color:var(--red);color:var(--red);font-size:14px}
-.wallet:has(.spend-preview:not([hidden]))>div:not(.resource-people){flex:1;min-width:0;flex-wrap:wrap;gap:4px}
+.refund-preview.spend-preview{color:#f3ad91}
 .camp-health{display:flex;align-items:center;gap:6px;white-space:nowrap}
 #campHPPreview{padding:1px 4px;border:1px dashed var(--teal);border-radius:4px;color:var(--teal);font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
 #campPanel .meter{position:relative}
@@ -146,5 +146,24 @@ header{grid-template-columns:auto auto minmax(140px,1fr) minmax(240px,1.4fr) aut
 @media(prefers-reduced-motion:reduce){.camp-critical .camp-title h1,#viewport.camp-critical::after{animation:none}}
 @media(max-width:540px){#defeat{padding:24px}.defeat-symbol{width:70px;height:70px;margin-bottom:12px}#defeatTitle{font-size:29px}}
 
+.population-summary{user-select:none}.population-summary #populationTotalMetric{color:#f4d3a2}.population-summary .population-symbol,.population-summary .population-value{color:inherit}
+/* 两种资源都按可用宽度缩放，绝不换行或省略数值；图标缩放幅度小于数字。 */
+.wallet .wallet-money{display:flex;width:100%;min-width:0;gap:0}
+.resource-line .resource-content{display:flex;align-items:center;flex:none;flex-wrap:nowrap;width:max-content;gap:max(4px,calc(12px * var(--resource-scale,1)))}
+.wallet-money .money-value{display:flex;align-items:baseline;flex:none;flex-wrap:nowrap;gap:3px;white-space:nowrap}.money-preview-slot{position:relative;display:block;width:6ch;height:1.2em;font-size:max(9px,calc(14px * var(--resource-scale,1)))}.money-preview-slot>span{position:absolute;inset:0;min-width:0;width:100%;height:100%}
+.wallet .wallet-money .coin-icon{width:max(22px,calc(38px * var(--resource-scale,1)));height:max(22px,calc(38px * var(--resource-scale,1)))}
+.wallet #budget{font-size:calc(36px * var(--resource-scale,1));letter-spacing:0}
+.wallet .refund-preview{font-size:max(9px,calc(14px * var(--resource-scale,1)))}
+.wallet #moneyGain{font-size:max(9px,calc(11px * var(--resource-scale,1)))}
+.population-summary .population-metric,.population-summary #populationFreeMetric{flex:none;flex-wrap:nowrap;gap:max(3px,calc(8px * var(--resource-scale,1)))}
+.population-summary .population-symbol svg{width:max(16px,calc(32px * var(--resource-scale,1)));height:max(16px,calc(32px * var(--resource-scale,1)))}
+.population-summary #populationFreeMetric .population-symbol svg{width:max(14px,calc(24px * var(--resource-scale,1)));height:max(14px,calc(24px * var(--resource-scale,1)))}
+.wallet .population-metric strong{font-size:calc(32px * var(--resource-scale,1));letter-spacing:0}
+.wallet #populationFree{font-size:calc(26px * var(--resource-scale,1))}
+.resource-people .population-preview{display:block;flex:none;width:4ch;height:14px;font-size:max(9px,calc(13px * var(--resource-scale,1)))}
+.resource-preview{position:relative}
+.wallet .resource-preview-value{position:absolute;left:0;top:0;display:inline-block;width:max-content;font-size:calc(1em * var(--preview-scale,1));color:inherit;white-space:nowrap}
+.daily-status{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0}
+@media(max-width:540px){.daily-status{grid-column:1/-1}}
 #routeAudit{width:min(880px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:20px;border:1px solid #657c83;border-radius:12px;color:#e5edeb;background:#1c252b;box-shadow:0 24px 90px #0008}
 #routeAudit::backdrop{background:#091015b3}.audit-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}.audit-heading h2{margin:0;font-size:20px}#routeAudit p{line-height:1.6}#routeAuditSummary{color:#f1ce79;font-weight:600}.audit-table{overflow:auto}.audit-table table{width:100%;border-collapse:collapse;white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums}.audit-table th,.audit-table td{padding:9px 10px;border-bottom:1px solid #657c8333;text-align:right}.audit-table th:first-child,.audit-table td:first-child{text-align:left}.audit-table thead{color:#acb8bb}.audit-night{background:#657c831a}.audit-late{color:#ffab96;background:#bc594410}
