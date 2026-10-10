@@ -1,6 +1,6 @@
 import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=62';
-import {generateEnemySources,sourceCells,sourceMaxHP} from './enemy-sources.js?v=2';
-export {sourceCells} from './enemy-sources.js?v=2';
+import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
+export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
 export const xy = id => [id % SIZE, Math.floor(id / SIZE)];
 export const inside = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -97,6 +97,40 @@ export function createCampaign(params=DEFAULTS, waves=WAVES, layout=null,sourceC
   state.sources=state.waves[0];state.lastNight=null;lockAttacks(state);revealControl(state);
   return state;
 }
+// 地图编辑应用到全新一局，避免坐标、据点耐久与已发生的收支交叉。
+export function configureSourceMap(state,rows,waves=state.waves){
+  if(state.phase!=='build')return {error:'仅白天可编辑敌源配置。'};
+  if(!state.layout)return {error:'当前地图不支持建筑敌源。'};
+  const base=createState([],new Map(),new Set(),state.params,new Map(),state.layout);
+  const resolved=resolveSourceCatalog(rows,state.layout,base.field);
+  if(resolved.error)return resolved;
+  const plans=bindSourceWaves(resolved.sources,waves);
+  syncSourceSchedule(resolved.sources,plans);
+  const next=createCampaign(state.params,plans,state.layout,resolved.sources);
+  for(const [i,night] of plans.entries()){
+    const error=validateSources(night,next);
+    if(error)return {error:`第 ${i+1} 晚：${error}`};
+  }
+  return {state:next,error:''};
+}
+// 按夜编辑计划，不重置城市；已消灭源头保留计划记录，运行时继续永久停兵。
+export function configureSourceNight(state,night,plans){
+  if(state.phase!=='build')return '仅白天可编辑敌源配置。';
+  if(!Number.isInteger(night)||night<1||night>state.waves.length)return '请选择有效夜晚。';
+  if(plans.some(p=>!p.sourceId||!state.enemySources.has(p.sourceId)))return '出兵安排须选择地图中已有的敌源。';
+  const error=validateSources(plans,state);if(error)return error;
+  state.waves[night-1]=structuredClone(plans);
+  syncSourceSchedule(state.sourceCatalog,state.waves);
+  // 修改过去的表只供重开使用，当前据点保留真实经历过的激活日期。
+  for(const source of state.enemySources.values()){
+    const past=(source.nights??[source.firstNight]).filter(n=>n<state.day);
+    source.nights=[...past,...state.waves.flatMap((plans,i)=>i+1>=state.day&&plans.some(p=>p.sourceId===source.id)?[i+1]:[])];
+    source.firstNight=source.nights[0]??Infinity;
+  }
+  if(night===state.day){state.sources=state.waves[night-1].filter(p=>state.enemySources.get(p.sourceId).hp>0);lockAttacks(state);}
+  revealControl(state);return '';
+}
+
 export const reservedSources=state=>state.waves?.slice(state.day-1).flat()??state.sources;
 // 固定据点支持提前探索；首次出兵日自动公开，旧规则地图仍按道路坐标记忆。
 export function knownSources(state) {
@@ -256,14 +290,17 @@ export function rebuildTerrain(state) {
   state.walls=new Set([...state.terrainWalls,...[...state.playerWalls].filter(id=>state.wallHealth.get(id)?.hp>0)]);
   rebuildFields(state);
   // 每次从当天原始题目计算必要绕行，避免临时建造再退款留下免费绕行。
-  for(const attack of state.attacks)attack.path=repairPath(state,attack.originalPath??attack.path);
+  for(const attack of state.attacks)attack.path=repairPath(state,attack.originalPath??attack.path,attack.departure);
   revealControl(state);
 }
 export function rebuildFields(state) {
   state.field=routeField(state.camp,state.terrainWalls);
 }
 // 绕过不可攻击建筑，并在最近可达的前方路线格重新接上；墙不参与搜索。
-export function repairPath(state,original) {
+export function repairPath(state,original,departure=[]) {
+  // 仅允许出生敌人沿自身据点的起始段离开；之后仍严格读取物理障碍。
+  let prefix=0;while(prefix<original.length&&departure.includes(original[prefix]))prefix++;
+  if(prefix)return [...original.slice(0,prefix),...repairPath(state,original.slice(prefix))];
   let path=[...original];
   for(let attempts=0;attempts<SIZE*SIZE;attempts++){
     const blockedAt=path.findIndex(id=>state.terrainWalls.has(id));
@@ -287,9 +324,14 @@ export function repairPath(state,original) {
   }
   return [];
 }
+function sourceAttack(state,source,index){
+  const entity=state.enemySources?.get(source.sourceId),departure=entity?sourceDeparture(entity).slice(0,-1):[];
+  const exit=key(entity?.x??source.x,entity?.y??source.y),path=campPath(state,[...departure,...pathFrom(exit,state.field)]),[x,y]=xy(path[0]??exit);
+  return {...structuredClone(source),x,y,index,target:state.camp,departure,originalPath:[...path],path};
+}
 export function forecastAttacks(state,night=state.day) {
   if(night===state.day)return state.attacks;
-  return sourcePlans(state,night).map((source,index)=>({...source,index,target:state.camp,path:campPath(state,pathFrom(key(source.x,source.y),state.field))}));
+  return sourcePlans(state,night).map((source,index)=>sourceAttack(state,source,index));
 }
 // 只读校验出兵表：出生当拍不移动，进入火光任意一格即到达；不计墙与炮火。
 export function routeTimingReport(state) {
@@ -315,7 +357,7 @@ export function routeTimingReport(state) {
 }
 // 来源、目标与初始路线在白天开始锁定；瞭望塔不进入目标池。
 export function lockAttacks(state) {
-  state.attacks=state.sources.map((source,index)=>{const path=campPath(state,pathFrom(key(source.x,source.y),state.field));return {...structuredClone(source),index,target:state.camp,originalPath:[...path],path};});
+  state.attacks=state.sources.map((source,index)=>sourceAttack(state,source,index));
 }
 export const enemyKey=(enemy)=>`${enemy.id}:${enemy.target}`;
 // 火光按余额购买整数 HP，余款保留；墙仍一次修满，瞭望塔无需维修。
@@ -491,7 +533,7 @@ export function validateSources(sources, state) {
   if ((!sources.length&&!state.enemySources?.size) || sources.length > 12) return '源头数量应为 1–12（固定据点清除后允许无来袭）。';
   const seen = new Set();
   for (let i = 0; i < sources.length; i++) {
-    const s = sources[i], id = key(s.x, s.y), prefix = `源头 ${i + 1}：`;
+    const s = sources[i], id = key(s.x, s.y), prefix = `${s.sourceId?'敌源':'源头'} ${s.sourceId?(state.enemySources?.get(s.sourceId)?.index??i)+1:i+1}：`;
     if(s.sourceId){const source=state.enemySources?.get(s.sourceId);if(!source||source.x!==s.x||source.y!==s.y)return prefix+'固定据点出兵口不能移动。';}
     if (!['x','y','hp','count','first','interval'].every(k=>Number.isInteger(s[k])) || !Number.isInteger(s.target??-2)) return prefix + '请填写整数。';
     if (!inside(s.x, s.y)) return prefix + `坐标应为 0–${SIZE-1}。`;
@@ -510,7 +552,8 @@ export function validateSources(sources, state) {
 export function enemyAction(state,enemy) {
   if(campCells(state).includes(enemy.id))return {to:enemy.id};
   let path=enemy.path||pathFrom(enemy.id,state.field);
-  if(path.some(id=>state.terrainWalls.has(id))){path=repairPath(state,path.slice(Math.max(0,path.indexOf(enemy.id))));enemy.path=path;}
+  const remaining=path.slice(Math.max(0,path.indexOf(enemy.id)));
+  if(remaining.some(id=>state.terrainWalls.has(id))){path=repairPath(state,remaining,enemy.departure);enemy.path=path;}
   const at=path.indexOf(enemy.id);
   const next=path[at+1]??enemy.id;
   if(state.wallHealth.get(next)?.hp>0)return {to:enemy.id,attackId:next,attackType:'wall'};
@@ -528,7 +571,7 @@ export function stepBattle(state,actions=null,deferIdleDawn=false) {
   for (const attack of state.attacks) {
     const age=state.tick-attack.first;
     if(age>=0&&age%attack.interval===0&&age/attack.interval<attack.count&&enemyBatchStatus(state,attack,age/attack.interval)!=='blocked'){
-      state.enemies.push({id:key(attack.x,attack.y),target:attack.target,path:[...attack.path],hp:attack.hp,max:attack.hp,members:1,sources:[attack.index],origins:[`${attack.index}:${age/attack.interval}`]});
+      state.enemies.push({id:key(attack.x,attack.y),target:attack.target,path:[...attack.path],departure:[...(attack.departure??[])],hp:attack.hp,max:attack.hp,members:1,sources:[attack.index],origins:[`${attack.index}:${age/attack.interval}`]});
       state.spawned++;
     }
   }

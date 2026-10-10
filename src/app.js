@@ -1,13 +1,14 @@
 import {drawFog} from './fog.js?v=3';
-import {createTowerOverlay} from './tower-overlay.js?v=1';
+import {createTowerOverlay} from './tower-overlay.js?v=3';
 import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-textures.js?v=5';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG} from './icons.js?v=6';
 import {createGameAudio} from './audio.js?v=5';
 import { SIZE, DEFAULTS } from './config.js?v=62';
-import { finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=72';
+import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=74';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
+import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
 const mapSettings=readMapSettings(location.search);
 mapSettings.width=SIZE;mapSettings.height=SIZE;
 const cityLayout=generateCityMap(mapSettings);
@@ -48,6 +49,8 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape')$('audioSett
 sound.setHidden(document.hidden);updateAudioControls();
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
 let state = createCampaign(DEFAULTS,undefined,cityLayout), tool = 'wall', hover = null, dragging = null;
+let sourceDrafts=[],editingNight=1,editorSourcePreview=null;
+const blockedActionReasons=new Map();
 let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0, cameraBottom=80;
 let fire = fireField(state), paused = false, timer = 0, last = 0;
 let messages = [], preparation = null;
@@ -75,6 +78,8 @@ function dismissTopNotice(){
   $('firstNightNotice').hidden=true;
 }
 document.addEventListener('pointerdown',dismissTopNotice,{capture:true});
+// 灰色工具仍能解释原因；禁止原因不使用容易被鼠标遮住的原生 title。
+document.addEventListener('pointerdown',event=>{const button=event.target.closest('button');if(button?.disabled&&blockedActionReasons.get(button.id))showTopNotice(blockedActionReasons.get(button.id));},{capture:true});
 const weaponType = () => tool === 'long' ? 'B' : 'A';
 const viewedSources = () => sourcePlans(state,Number($('forecastDay').value)+1);
 let populationPinned=false;
@@ -134,9 +139,11 @@ let selectedSource=null;
 const sourceNumber=plan=>state.enemySources?.get(plan?.sourceId)?.index??state.sources.indexOf(plan);
 const selectedWeapon = () => previewParams().weapons[weaponType()];
 // 调试显示不写入探索记录，重新显示迷雾时仍保持真实探索进度。
-const visibleCell=id=>!$('showFog').checked||isExplored(state,id);
-const currentlyVisible=id=>!$('showFog').checked||sight.has(id);
-function clipSight(){if(!$('showFog').checked)return;ctx.beginPath();for(const id of sight){const [x,y]=xy(id);ctx.rect(x,y,1,1);}ctx.clip();}
+const sourceEditing=()=>$('settings').open&&state.phase==='build';
+const mapFogEnabled=()=>$('showFog').checked&&!sourceEditing();
+const visibleCell=id=>!mapFogEnabled()||isExplored(state,id);
+const currentlyVisible=id=>!mapFogEnabled()||sight.has(id);
+function clipSight(){if(!mapFogEnabled())return;ctx.beginPath();for(const id of sight){const [x,y]=xy(id);ctx.rect(x,y,1,1);}ctx.clip();}
 const paramsDirty = () => JSON.stringify(readParams()) !== JSON.stringify(state.params);
 function previewParams() {
   const draft = readParams();
@@ -214,8 +221,8 @@ function paintMap() {
   const previewControlled=postGhost?controlMask(previewState):controlled;
   const forecastDay=Number($('forecastDay').value)+1;
   if(view.forecastDay!==forecastDay){
-    const knownIds=new Set(knownSources(state).map(s=>key(s.x,s.y)));
-    view.forecastDay=forecastDay;view.routes=forecastAttacks(state,forecastDay).map(attack=>knownIds.has(key(attack.x,attack.y))?attack:{...attack,path:[]});
+    const knownIds=new Set((sourceEditing()?[...state.enemySources.values()]:knownSources(state)).map(s=>s.id??key(s.x,s.y)));
+    view.forecastDay=forecastDay;view.routes=forecastAttacks(state,forecastDay).map(attack=>knownIds.has(attack.sourceId??key(attack.x,attack.y))?attack:{...attack,path:[]});
   }
   const plannedRoutes=view.routes;
   const sourcePath=source=>plannedRoutes[viewedSources().indexOf(source)]?.path||[];
@@ -287,8 +294,8 @@ function paintMap() {
   fitResources();
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
-  drawCitySurroundings(ctx,cityLayout,nightMix,$('showFog').checked?state.explored:null,backdrop);
-  // 全部地形、路线、敌群与源头都受探索遮罩约束，不能透过雾获取信息。
+  drawCitySurroundings(ctx,cityLayout,nightMix,mapFogEnabled()?state.explored:null,backdrop);
+  // 游玩时受探索遮罩约束；白天展开敌源编辑仅临时预览全图，不写探索记录。
   ctx.fillStyle=palette.fog;ctx.fillRect(0,0,SIZE,SIZE);
   if(!visibleCell(key(30,15))){ctx.fillStyle='#8997a8';ctx.font='600 1.5px system-ui';ctx.textAlign='center';ctx.fillText('未探索 · 向北推进',30,15);}
 
@@ -499,9 +506,11 @@ function paintMap() {
     }
   }
   ctx.restore();
-  if($('showFog').checked)drawFog(ctx,SIZE,sight,state.explored,nightMix,reducedMotion.matches?0:performance.now()/1000,bounds);
+  if(mapFogEnabled())drawFog(ctx,SIZE,sight,state.explored,nightMix,reducedMotion.matches?0:performance.now()/1000,bounds);
   // 已知感染核心在雾上保留身份；危险状态只表达今晚计划，不预告激活日期。
-  for(const source of knownSources(state)){
+  const displayedSources=sourceEditing()?[...state.enemySources.values()].map(s=>({...s,active:state.sources.some(p=>p.sourceId===s.id)})):knownSources(state);
+  const sourcePreview=editorSourcePreview?{...editorSourcePreview,hp:sourceMaxHP(editorSourcePreview,state.params),active:state.sources.some(p=>p.sourceId===editorSourcePreview.id)}:null;
+  for(const source of [...displayedSources.filter(s=>s.id!==sourcePreview?.id),...(sourcePreview?[sourcePreview]:[])]){
     const x=source.bx??source.x,y=source.by??source.y,w=source.width??1,h=source.height??1,alive=source.hp!==0;
     const pulse=reducedMotion.matches?1:.5+.5*Math.sin(performance.now()*Math.PI*2/1500),danger=alive&&source.active;
     ctx.save();ctx.globalAlpha=alive?(danger?.7+.3*pulse:.48):.4;
@@ -512,6 +521,7 @@ function paintMap() {
     ctx.shadowBlur=0;ctx.setLineDash([]);
     label(alive?source.index+1:'×',x+w/2,y+h/2,alive?'#edd4ca':'#b9d8c1',Math.max(.4,8/size));
     ctx.restore();
+    if($('settings').open&&Number.isInteger(source.x)&&Number.isInteger(source.y)){ctx.save();ctx.strokeStyle='#ffc17c';ctx.lineWidth=.12;ctx.strokeRect(source.x+.15,source.y+.15,.7,.7);ctx.restore();}
     if(!alive||!source.id)continue;
     // 所有核心的徽记统一放占地下沿外，与中心编号分开，放大后也不会遮挡。
     ctx.save();ctx.globalAlpha=danger?1:.72;ctx.font=`600 ${Math.max(.44,10/size)}px system-ui`;ctx.textAlign='left';ctx.textBaseline='middle';
@@ -723,13 +733,17 @@ function update() {
     const unlocked=['production','housing'].includes(id)?state.day>=2:id==='outpost'?state.day>=3:true;
     const allowed=unlocked&&(build||(active&&['build','long'].includes(id)));
     $(id).disabled=!allowed||short;
-    $(id).title=!allowed?(state.result?'本局已结束':'防守中不能建设'):short?(!Number.isFinite(cost)?'没有可补建的同用途街区':`资金不足：需要 ${cost}，现有 ${funds(state)}`):`花费 ${cost} 资金`;
+    blockedActionReasons.set(id,!allowed?(state.result?'本局已结束':'防守中不能建设'):short?(!Number.isFinite(cost)?'没有可补建的同用途街区':`资金不足：需要 ${cost}，现有 ${funds(state)}`):'');
+    $(id).title=allowed&&!short?`花费 ${cost} 资金`:'';
   }
   $('repair').disabled=!repairAvailable;
-  $('repair').title=!build?'防守中不能修复':state.day<2?'次日才能修复':!repairTargets.length?'没有受损设施':!repairAvailable?repairError(state,repairTargets[0]):'悬停受损目标预览费用与恢复量';
+  blockedActionReasons.set('repair',!build?'防守中不能修复':state.day<2?'次日才能修复':!repairTargets.length?'没有受损设施':!repairAvailable?repairError(state,repairTargets[0]):'');
+  $('repair').title=repairAvailable?'悬停受损目标预览费用与恢复量':'';
   for(const id of ['applyParams','cancelParams','defaults'])$(id).disabled=!build||state.day!==1;
-  $('addSource').disabled=!build||state.enemySources.size>0;
-  document.querySelectorAll('#sources input, #sources select, #sources button').forEach(el=>el.disabled=!build||!!el.closest('.source')?.dataset.sourceId&&(el.tagName==='BUTTON'||['x','y'].includes(el.name)));
+  for(const id of ['apply','addSource','addWave','applySourceMap','cancelSourceConfig','sourceDefaults']){$(id).disabled=false;$(id).setAttribute('aria-disabled',String(!build));}
+  document.querySelectorAll('#sources input, #sources select, #mapSources input, #mapSources select, #sourceNight').forEach(el=>el.disabled=!build);
+  document.querySelectorAll('[data-config-action]').forEach(el=>el.setAttribute('aria-disabled',String(!build)));
+  $('sourceConfigStatus').textContent=sourceConfigurationDirty()?'存在未应用修改。':'当前配置已应用。';
   document.querySelectorAll('#params input, #params select').forEach(el=>el.disabled=!build||state.day!==1);
   // 成败与收入由结算画面、收入卡承担；实时事件沿用右侧战场记录。
   if(['won','lost'].includes(state.phase))$('toolInfo').textContent='';
@@ -771,7 +785,7 @@ document.querySelectorAll('[data-manual-icon]').forEach(icon=>{
 function updateForecast() {
   const selectable=$('allowForecastSelection').checked;
   $('forecastDay').hidden=!selectable;
-  if(!selectable)$('forecastDay').value=String(state.day-1);
+  if(!selectable)$('forecastDay').value=String(sourceEditing()?editingNight-1:state.day-1);
   const night=Number($('forecastDay').value)+1, sources=viewedSources();
   $('forecastTitle').textContent=`原定 ${sources.reduce((sum,s)=>sum+s.count,0)} 个敌群`;
   $('forecastList').replaceChildren(...sources.map((s,i)=>{
@@ -799,22 +813,71 @@ $('forecastDay').onchange=()=>{updateForecast();draw();};
 // 关闭跨晚预览时立即回到当晚，避免地图残留其他晚的路线。
 $('allowForecastSelection').onchange=()=>{updateForecast();draw();};
 
-function sourceEditor(sources) {
+// 两层编辑仅引用同一据点编号；草稿不写入战场，应用时统一校验。
+function sourceField(fields,name,label,value,min,max,prefix){
+  const wrap=document.createElement('label');wrap.textContent=label;
+  const input=document.createElement('input');input.type='number';input.name=name;input.value=value??'';input.min=min;input.max=max;input.step=1;input.setAttribute('aria-label',`${prefix} ${label}`);wrap.append(input);fields.append(wrap);return input;
+}
+function configEditable(){if(state.phase!=='build'){showTopNotice('仅白天可编辑敌源配置。');return false;}return true;}
+function mapSourceEditor(rows){
+  $('mapSources').replaceChildren();
+  for(const row of rows){
+    const card=document.createElement('div');card.className='source';card.dataset.sourceId=row.id;card.dataset.index=row.index;card.sourceRow={...row};
+    const head=document.createElement('div');head.className='source-head';const name=document.createElement('span');name.textContent=`敌源 ${row.index+1}`;
+    const actions=document.createElement('div');actions.className='source-actions';
+    const focus=document.createElement('button');focus.textContent='定位';focus.onclick=()=>{
+      const source=readMapSources().find(s=>s.id===row.id);
+      if(!Number.isInteger(source.bx)||!Number.isInteger(source.by)||!inside(source.bx,source.by)){showTopNotice('请先填写地图内的整数坐标。');return;}
+      editorSourcePreview=source;selectedSource=row.id;panX=width/2-(source.bx+source.width/2)*base*zoom;panY=(height-cameraBottom)/2-(source.by+source.height/2)*base*zoom;constrainCamera();draw();
+    };
+    const remove=document.createElement('button');remove.textContent='删除';remove.dataset.configAction='delete';remove.onclick=()=>{if(!configEditable())return;card.remove();if(editorSourcePreview?.id===row.id)editorSourcePreview=null;update();};
+    actions.append(focus,remove);head.append(name,actions);card.append(head);
+    const fields=document.createElement('div');fields.className='fields';
+    sourceField(fields,'bx','X',row.bx,0,SIZE-1,name.textContent);sourceField(fields,'by','Y',row.by,0,SIZE-1,name.textContent);
+    const wrap=document.createElement('label');wrap.textContent='形状';const shape=document.createElement('select');shape.name='shape';shape.setAttribute('aria-label',`${name.textContent} 形状`);
+    for(const value of ['1×1','1×2','2×1','1×3','3×1','2×2']){const option=document.createElement('option');option.value=value;option.textContent=value;shape.append(option);}
+    shape.value=`${row.width}×${row.height}`;wrap.append(shape);fields.append(wrap);
+    const hp=sourceField(fields,'maxHP','据点HP',row.maxHP,1,9999,name.textContent);hp.placeholder=String(sourceMaxHP(row,state.params));
+    card.append(fields);$('mapSources').append(card);
+    const preview=()=>{if(editorSourcePreview?.id===row.id)editorSourcePreview=readMapSources().find(s=>s.id===row.id);update();};card.addEventListener('input',preview);card.addEventListener('change',preview);
+  }
+}
+function readMapSources(){return [...document.querySelectorAll('#mapSources>.source')].map(card=>{
+  const previous=card.sourceRow,shape=card.querySelector('[name=shape]').value.split('×').map(Number),hp=card.querySelector('[name=maxHP]').value;
+  const row={...previous,id:card.dataset.sourceId,index:Number(card.dataset.index),bx:Number(card.querySelector('[name=bx]').value||NaN),by:Number(card.querySelector('[name=by]').value||NaN),width:shape[0],height:shape[1]};
+  delete row.maxHP;if(hp.trim()!=='')row.maxHP=Number(hp);return row;
+});}
+function sourceEditor(sources){
   $('sources').replaceChildren();
   sources.forEach((s,i)=>{
-    const card=document.createElement('div');card.className='source';if(s.sourceId)card.dataset.sourceId=s.sourceId;
-    const head=document.createElement('div');head.className='source-head';head.textContent=`敌源 ${s.sourceId?sourceNumber(s)+1:i+1} · 今晚出兵`;
-    const remove=document.createElement('button');remove.textContent='删除';remove.disabled=!!s.sourceId;remove.onclick=()=>{card.remove();sourceEditor(readSources());};head.append(remove);card.append(head);
+    const card=document.createElement('div');card.className='source';
+    const head=document.createElement('div');head.className='source-head';
+    const select=document.createElement('select');select.name='sourceId';select.setAttribute('aria-label',`出兵安排 ${i+1} 敌源`);
+    for(const source of readMapSources()){const option=document.createElement('option');option.value=source.id;option.textContent=`敌源 ${source.index+1}${state.enemySources.get(source.id)?.hp===0?' · 已摧毁':''}`;select.append(option);}
+    select.value=s.sourceId;const remove=document.createElement('button');remove.textContent='删除';remove.dataset.configAction='delete';remove.onclick=()=>{if(!configEditable())return;card.remove();update();};head.append(select,remove);card.append(head);
     const fields=document.createElement('div');fields.className='fields';
-    for(const [name,label,max] of [['x','X',SIZE-1],['y','Y',SIZE-1],['hp','敌人HP',999],['count','批数',30],['first','首拍',200],['interval','间隔',100]]){
-      const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('input');input.type='number';input.name=name;input.value=s[name];if(s.sourceId&&['x','y'].includes(name))input.disabled=true;input.min=['x','y'].includes(name)?0:1;input.max=max;input.step=['productionIncomePerCell','productionSmallCostFloor','productionMaxDensity'].includes(name)||name.endsWith('Multiplier')?0.1:1;input.setAttribute('aria-label',`源头${i+1} ${label}`);wrap.append(input);fields.append(wrap);
-    }
-    card.append(fields);$('sources').append(card);
+    for(const [name,label,max] of [['hp','敌人HP',999],['count','批数',30],['first','首拍',200],['interval','间隔',100]])sourceField(fields,name,label,s[name],1,max,`出兵安排 ${i+1}`);
+    card.append(fields);card.addEventListener('input',update);card.addEventListener('change',update);$('sources').append(card);
   });
 }
-function readSources(){return [...document.querySelectorAll('.source')].map(card=>({...Object.fromEntries([...card.querySelectorAll('input')].map(input=>[input.name,input.value.trim()===''?NaN:Number(input.value)])),target:-2,...(card.dataset.sourceId?{sourceId:card.dataset.sourceId}:{})}));}
-// 配置比较只读取实际字段，避免对象字段顺序影响开夜。
-const sourceValues=sources=>sources.map(s=>['sourceId','x','y','hp','count','first','interval','target'].map(name=>s[name]));
+function readSources(){return [...document.querySelectorAll('#sources>.source')].map(card=>{
+  const sourceId=card.querySelector('[name=sourceId]').value,source=readMapSources().find(s=>s.id===sourceId);
+  return {...Object.fromEntries([...card.querySelectorAll('input')].map(input=>[input.name,input.value.trim()===''?NaN:Number(input.value)])),sourceId,x:source?.x,y:source?.y,target:-2};
+});}
+const sourceValues=sources=>sources.map(s=>['sourceId','hp','count','first','interval','target'].map(name=>s[name]??(name==='target'?-2:null)));
+const mapSourceValues=rows=>rows.map(s=>[s.id,s.index,s.bx,s.by,s.width,s.height,s.x??null,s.y??null,s.maxHP??null]);
+function sourceConfigurationDirty(){
+  if(!sourceDrafts.length)return false;
+  const drafts=sourceDrafts.map((plans,i)=>i===editingNight-1?readSources():plans);
+  return JSON.stringify(mapSourceValues(readMapSources()))!==JSON.stringify(mapSourceValues(state.sourceCatalog))||JSON.stringify(drafts.map(sourceValues))!==JSON.stringify(state.waves.map(sourceValues));
+}
+function resetSourceEditors(){
+  editorSourcePreview=null;sourceDrafts=structuredClone(state.waves);editingNight=state.day;
+  $('sourceNight').replaceChildren(...state.waves.map((_,i)=>{const option=document.createElement('option');option.value=i+1;option.textContent=`第 ${i+1} 晚`;return option;}));$('sourceNight').value=editingNight;
+  mapSourceEditor(state.sourceCatalog);sourceEditor(sourceDrafts[editingNight-1]);
+}
+$('sourceNight').onchange=()=>{sourceDrafts[editingNight-1]=readSources();editingNight=Number($('sourceNight').value);$('forecastDay').value=String(editingNight-1);sourceEditor(sourceDrafts[editingNight-1]);update();};
+$('settings').addEventListener('toggle',()=>{if(!$('settings').open)editorSourcePreview=null;else $('forecastDay').value=String(editingNight-1);mapView=null;updateForecast();draw();});
 // 小型参数面板：仅编辑当前实验，默认值仍保留在 config.js。
 function paramsEditor(params) {
   $('params').replaceChildren();
@@ -869,7 +932,7 @@ function reset(keep=true){
   state=keep?restoreNight(preparation):restartCampaign(state);
   if(!keep)preparation=null;
   clearPlayback();$('firstNightNotice').hidden=true;$('forecastDay').value=String(state.day-1);
-  sourceEditor(state.sources);paramsEditor(state.params);refreshParams();
+  resetSourceEditors();paramsEditor(state.params);refreshParams();
   notify(keep?`已恢复第 ${state.day} 晚战前状态。`:'已重开，保留实验配置。');
 }
 // 失败仅展示已有成果，不额外发奖；重试与整局重来复用原有回滚规则。
@@ -914,7 +977,7 @@ $('applyTest').onclick=()=>{
   const error=applyTestScenario(state,Number($('testDay').value),Number($('testGold').value),Number($('testPeople').value));
   if(error){showTopNotice(error);return;}
   preparation=null;clearPlayback();$('firstNightNotice').hidden=true;hover=null;tool='wall';$('forecastDay').value=String(state.day-1);
-  sourceEditor(state.sources);paramsEditor(state.params);refreshParams();
+  resetSourceEditors();paramsEditor(state.params);refreshParams();
   notify(`已进入第 ${state.day} 天，保留布局。`);
 };
 $('retry').onclick=()=>reset();$('clear').onclick=()=>reset(false);
@@ -945,18 +1008,55 @@ $('applyParams').onclick=()=>{
   for(const body of state.wallHealth.values())body.hp=body.max=params.wallHP;
   rebuildTerrain(state);revealControl(state);state.lastNight=null;preparation=null;clearPlayback();
 
-  paramsEditor(state.params);refreshParams();notify('参数已应用，本轮重置。');
+  mapSourceEditor(readMapSources());paramsEditor(state.params);refreshParams();notify('参数已应用，本轮重置。');
 };
 $('showFog').onchange=()=>{hover=null;update();draw();};
 $('cancelParams').onclick=()=>{paramsEditor(state.params);refreshParams();};
 $('defaults').onclick=()=>{paramsEditor(DEFAULTS);refreshParams();notify('默认值已填入，应用后生效。');};
 $('apply').onclick=()=>{
-  if(state.phase!=='build')return;
+  if(!configEditable())return;
   if(paramsDirty()){showTopNotice('请先应用或取消实验参数预览。');return;}
-  const sources=readSources(),error=validateSources(sources,state);$('configError').textContent='';if(error){showTopNotice(error);return;}
-  state.sources=structuredClone(sources);state.waves[state.day-1]=state.sources;lockAttacks(state);preparation=null;clearPlayback();sourceEditor(state.sources);notify(`第 ${state.day} 晚来袭配置已应用。`);update();
+  if(JSON.stringify(mapSourceValues(readMapSources()))!==JSON.stringify(mapSourceValues(state.sourceCatalog))){showTopNotice('请先应用或取消地图敌源修改。');return;}
+  const plans=readSources(),error=configureSourceNight(state,editingNight,plans);if(error){showTopNotice(error);return;}
+  sourceDrafts[editingNight-1]=structuredClone(state.waves[editingNight-1]);preparation=null;clearPlayback();sourceEditor(sourceDrafts[editingNight-1]);
+  notify(`第 ${editingNight} 晚出兵计划已应用。`);update();
 };
-$('addSource').onclick=()=>{const sources=readSources();if(sources.length>=12){showTopNotice('最多 12 个源头。');return;}sources.push({x:1,y:1,hp:12,count:4,first:1,interval:6,target:-2});sourceEditor(sources);};
+$('applySourceMap').onclick=()=>{
+  if(!configEditable())return;
+  if(paramsDirty()){showTopNotice('请先应用或取消实验参数预览。');return;}
+  sourceDrafts[editingNight-1]=readSources();const result=configureSourceMap(state,readMapSources(),sourceDrafts);
+  if(result.error){showTopNotice(result.error);return;}
+  state=result.state;preparation=null;clearPlayback();hover=null;tool='wall';$('forecastDay').value='0';resetSourceEditors();paramsEditor(state.params);refreshParams();resize(true);
+  notify('地图敌源与出兵计划已应用，开始新局。');
+};
+$('addSource').onclick=()=>{
+  if(!configEditable())return;
+  const rows=readMapSources();if(rows.length>=12){showTopNotice('最多 12 个地图敌源。');return;}
+  const index=Math.max(-1,...state.sourceCatalog.map(s=>s.index),...rows.map(s=>s.index))+1,id=`source-${index+1}`;
+  const field=createCampaign(state.params,Array.from({length:state.waves.length},()=>[]),state.layout,[]).field;
+  let found;
+  for(const block of state.layout.blocks){
+    const row={id,index,bx:block.x,by:block.y,width:1,height:1};
+    if(!resolveSourceCatalog([...rows,row],state.layout,field).error){found=row;break;}
+  }
+  if(!found){showTopNotice('没有可用的临街建筑，请先检查现有坐标。');return;}
+  mapSourceEditor([...rows,found]);update();
+};
+$('addWave').onclick=()=>{
+  if(!configEditable())return;
+  const plans=readSources(),source=state.sourceCatalog.find(s=>!plans.some(p=>p.sourceId===s.id));
+  if(!source){showTopNotice('本晚已安排所有地图敌源；每源每晚一条安排。');return;}
+  plans.push({...SOURCE_WAVE_DEFAULTS,sourceId:source.id,x:source.x,y:source.y,target:-2});sourceEditor(plans);update();
+};
+$('cancelSourceConfig').onclick=()=>{if(!configEditable())return;resetSourceEditors();update();};
+// 默认值以当前城市与实验参数重新生成，仅填草稿，应用并重开才覆盖实际战场。
+$('sourceDefaults').onclick=()=>{
+  if(!configEditable())return;
+  const defaults=createCampaign(state.params,undefined,state.layout);
+  editorSourcePreview=null;sourceDrafts=structuredClone(defaults.waves);mapSourceEditor(defaults.sourceCatalog);sourceEditor(sourceDrafts[editingNight-1]);
+  notify('默认敌源与 15 晚计划已填入，应用并重开后生效。');update();
+};
+$('sourceAudit').onclick=()=>{if(sourceConfigurationDirty()||paramsDirty()){showTopNotice('请先应用或取消配置，再校验路线。');return;}$('auditRoutes').click();};
 $('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;constrainCamera();hover=null;draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;
 // 右键退出当前工具，保留悬停查看与地图移动，不再执行建设或拆除。
 canvas.addEventListener('contextmenu',e=>{e.preventDefault();tool=null;selectedSource=null;dragging=null;notify('');update();});
@@ -992,14 +1092,12 @@ canvas.addEventListener('pointerup',e=>{
     const error=actionError=buildProduction(state,id);notify(error?'':`生产已完成，守夜后收入 +${productionQuote(state,id).income}。`);
   } else if(['outpost','repair'].includes(tool)){
     const error=actionError=tool==='repair'?repairFacility(state,id):buildOutpost(state,id);notify(error?'':(tool==='repair'?(id===state.camp?`火光恢复 ${state.hp-beforeHP} HP。`:'墙已修满。'):'瞭望塔已建立，控制区扩张。'));
-    if(!error)sourceEditor(readSources());
   } else if(tool==='wall'){
     const error=actionError=changeWall(state,id);notify(error?'':'墙已建造。');
   } else if(tool==='erase'){
     const quote=demolitionQuote(state,id);
     const error=actionError=quote.type==='housing'?removeHousing(state,id):quote.type==='production'?removeProduction(state,id):quote.type==='tower'?removeTower(state,id):quote.type==='outpost'?removeOutpost(state,id):quote.type==='wall'?changeWall(state,id,true):quote.type==='ruin'?clearPlot(state,id):'这里没有可拆除的设施。';
     notify(error?'':(quote.type==='ruin'?'废墟已拆为空地。':`已拆除，返还 ${quote.refund} 金币。`));
-    if(!error&&quote.type==='outpost')sourceEditor(readSources());
   } else {
     const type=weaponType(),error=actionError=weaponPlacementError(id)||buildTower(state,id,type);
     if(!error){notify(`${type==='A'?'近防炮':'远防炮'}已就位。`);}
@@ -1022,7 +1120,7 @@ new ResizeObserver(()=>resize()).observe(viewport);
 new ResizeObserver(fitResources).observe(document.querySelector('.wallet'));
 // 预告选项跟随实际波次，避免增加夜晚后界面仍停在前三晚。
 $('forecastDay').replaceChildren(...state.waves.map((_,i)=>{const option=document.createElement('option');option.value=i;option.textContent=`第 ${i+1} 晚`;return option;}));
-paramsEditor(state.params);sourceEditor(state.sources);resize(true);refreshParams();
+paramsEditor(state.params);resetSourceEditors();resize(true);refreshParams();
 
 // 短促高亮确认发生变化，不震屏，不遮挡操作；尊重减少动态效果设置。
 // 失败提示每次重播字体强调，不用背景闪烁；共用顶栏提醒位置。
@@ -1121,7 +1219,7 @@ function finishDawn(){
   if(!enterMorning(state))return;
   sound.play('dawn');
   preparation=null;paused=false;timer=0;motion=null;impactAge=1000;incoming.clear();
-  $('forecastDay').value=String(state.day-1);sourceEditor(state.sources);
+  $('forecastDay').value=String(state.day-1);resetSourceEditors();
   notify('');
   update();
   // 回到钱包与报告，避免浏览器滚动锚定把新插入的收入卡藏在上方。
@@ -1136,7 +1234,7 @@ $('start').onclick=()=>{
     return;
   }
   if(paramsDirty()){ $('experiments').open=true;showTopNotice('实验参数有未应用修改，请先应用或取消预览。');return; }
-  if(JSON.stringify(sourceValues(readSources()))!==JSON.stringify(sourceValues(state.sources))){ $('settings').open=true;showTopNotice('请先应用来袭配置，确保预览与实际波次一致。');return; }
+  if(sourceConfigurationDirty()){ $('settings').open=true;showTopNotice('来袭配置有未应用修改，请先应用或取消。');return; }
   const error=validateSources(state.sources,state);if(error){showTopNotice(error);return;}
   preparation=beginBattle(state);if(!preparation)return;
   // 开战成功后撤下白天建设的失败提醒，避免被误认为夜间状态。

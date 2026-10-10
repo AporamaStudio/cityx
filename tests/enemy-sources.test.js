@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
 import {generateCityMap} from '../src/city-map.js';
 import {MAP_DEFAULTS} from '../src/map-settings.js';
-import {sourceMaxHP} from '../src/enemy-sources.js';
-import {finishIdleNight,buildProduction,funds,enemyBatchStatus,battleRoutes,lockAttacks,nightCleanupState,key,createCampaign,knownSources,sourceCells,sourcePlans,sourceControlled,sourceAttackPlan,beginBattle,stepBattle,restoreNight,restartCampaign,enterMorning,settleEconomy,validateParams,validateSources,visionField,revealControl,plotBuildError,syncSourceHealth} from '../src/model.js';
+import {sourceMaxHP,sourceDeparture} from '../src/enemy-sources.js';
+import {finishIdleNight,rebuildTerrain,enemyAction,forecastAttacks,buildProduction,funds,enemyBatchStatus,battleRoutes,lockAttacks,nightCleanupState,key,createCampaign,knownSources,sourceCells,sourcePlans,sourceControlled,sourceAttackPlan,beginBattle,stepBattle,restoreNight,restartCampaign,enterMorning,settleEconomy,validateParams,validateSources,visionField,revealControl,plotBuildError,syncSourceHealth} from '../src/model.js';
 
 const definition={id:'source-1',index:0,level:1,bx:16,by:22,width:2,height:2,x:16,y:21,site:key(16,22),firstNight:1};
 function setup(params={}){
@@ -195,4 +195,29 @@ test('进度过渡不能跳过未出场敌人或任何剩余清源攻击',()=>{
  for(let i=0;i<160;i++)stepBattle(s,null,true);
  assert.equal(s.tick,160);assert.equal(s.phase,'won');assert.equal(s.enemySources.get('source-1').hp,40);
  assert.ok(!s.events.some(e=>e.type==='nightSkip'));
+});
+
+
+test('所有形状从自身占地出生，路线接临街出口；据点不向其他敌人开放通行',()=>{
+ const s=createCampaign({...DEFAULTS,campHP:10000},undefined,generateCityMap(MAP_DEFAULTS));
+ for(let night=1;night<=15;night++)for(const attack of forecastAttacks(s,night)){
+  const source=s.enemySources.get(attack.sourceId),cells=sourceCells(source),departure=sourceDeparture(source);
+  assert.ok(cells.includes(key(attack.x,attack.y)));assert.equal(attack.path[0],key(attack.x,attack.y));
+  assert.deepEqual(attack.path.slice(0,departure.length),departure);
+  for(const id of attack.departure){assert.ok(cells.includes(id));assert.ok(s.terrainWalls.has(id));assert.ok(!s.field.distance.has(id));}
+  for(let i=1;i<attack.path.length;i++){const a=attack.path[i-1],b=attack.path[i];assert.equal(Math.abs(a%60-b%60)+Math.abs(Math.floor(a/60)-Math.floor(b/60)),1);}
+ }
+ const attack=s.attacks[0],before=[...attack.path];rebuildTerrain(s);assert.deepEqual(s.attacks[0].path,before);
+ const ordinary={id:attack.path[attack.departure.length],path:[attack.path[attack.departure.length],attack.path[0],...attack.path.slice(attack.departure.length)]};
+ assert.notEqual(enemyAction(s,ordinary).to,attack.path[0]);
+});
+test('大型源头仍只出生一批；出口后撞墙，源头被毁后已出生敌人继续',()=>{
+ const s=setup(),source=s.enemySources.get('source-1');Object.assign(s.sources[0],{first:1,count:1});lockAttacks(s);
+ const exit=key(source.x,source.y),wall=s.attacks[0].path[s.attacks[0].departure.length+1];s.playerWalls.add(wall);s.wallHealth.set(wall,{hp:3,max:3});rebuildTerrain(s);
+ beginBattle(s);stepBattle(s);assert.equal(s.spawned,1);assert.equal(s.enemies.length,1);
+ const born=s.enemies[0].id;assert.ok(sourceCells(source).includes(born));assert.equal(s.enemies[0].hp,10);
+ source.hp=0;stepBattle(s);assert.equal(s.enemies[0].id,exit);
+ for(let i=0;i<3;i++){stepBattle(s);assert.equal(s.enemies[0].id,exit);}
+ assert.equal(s.wallHealth.get(wall).hp,0);stepBattle(s);assert.equal(s.enemies[0].id,wall);
+ while(s.phase==='battle')stepBattle(s);assert.equal(s.enemyOutcomes.get('0:0'),'leaked');assert.equal(s.leaked,10);
 });

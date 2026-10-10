@@ -50,7 +50,7 @@ test('新地图十五晚保持物理通路，目标未达成则期限失败',()=
   for(let day=1;day<=15;day++){
     assert.ok(beginBattle(s));
     for(let i=0;i<250&&s.phase==='battle';i++){
-      stepBattle(s);for(const enemy of s.enemies)assert.ok(['road','open'].includes(s.layout.tiles[enemy.id]));
+      stepBattle(s);for(const enemy of s.enemies)assert.ok(['road','open'].includes(s.layout.tiles[enemy.id])||enemy.departure.includes(enemy.id));
     }
     assert.equal(s.phase,day<15?'won':'lost');if(day===15)assert.equal(s.result.type,'deadline');assert.equal(enterMorning(s),day<15);
   }
