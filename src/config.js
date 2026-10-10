@@ -16,8 +16,8 @@ export const DEFAULTS = {
   // 火光危急提示按最大 HP 百分比判断，0 关闭持续警示；受击仍短暂泛红。
   campWarningPercent: 30,
   outpostMinDistance: 2, outpostWorkers: 1, outpostCost: 25, outpostRadius: 6, campRepairCost: 5,
-  // 源头按实际占地生成独立耐久；整晚固定拍数，天亮剩余敌人撤退。
-  sourceCellHPMin:12, sourceCellHPMax:30, sourceRegenHP:0, nightTicks:80,
+  // 源头按实际占地生成独立耐久；固定清源预算，末段仅加速播放，不能省略攻击。
+  sourceCellHPMin:12, sourceCellHPMax:30, sourceRegenHP:0, nightTicks:160, nightCleanupSpeed:2,
   weapons: {
     A: { shape: 'square', range: 1, power: 2, cost: 10 },
     B: { shape: 'square', range: 3, power: 1, cost: 20 },

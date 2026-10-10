@@ -4,7 +4,7 @@ import {DEFAULTS,SIZE} from '../src/config.js';
 import {generateCityMap} from '../src/city-map.js';
 import {MAP_DEFAULTS} from '../src/map-settings.js';
 import {sourceMaxHP} from '../src/enemy-sources.js';
-import {key,createCampaign,knownSources,sourceCells,sourcePlans,sourceControlled,sourceAttackPlan,beginBattle,stepBattle,restoreNight,restartCampaign,enterMorning,settleEconomy,validateParams,validateSources,visionField,revealControl,plotBuildError,syncSourceHealth} from '../src/model.js';
+import {nightCleanupState,key,createCampaign,knownSources,sourceCells,sourcePlans,sourceControlled,sourceAttackPlan,beginBattle,stepBattle,restoreNight,restartCampaign,enterMorning,settleEconomy,validateParams,validateSources,visionField,revealControl,plotBuildError,syncSourceHealth} from '../src/model.js';
 
 const definition={id:'source-1',index:0,level:1,bx:16,by:22,width:2,height:2,x:16,y:21,site:key(16,22),firstNight:1};
 function setup(params={}){
@@ -68,7 +68,7 @@ test('未激活也能肃清；当晚锁定批次继续，后续仅移除被消�
 });
 test('每夜回复默认0，非零仅结算一次、封顶、不复活；与敌人HP独立',()=>{
  const s=setup({sourceRegenHP:5,nightTicks:2}),source=s.enemySources.get('source-1');source.hp=22;
- beginBattle(s);s.attacks=[];stepBattle(s);assert.equal(source.hp,22);stepBattle(s);assert.equal(s.phase,'won');assert.equal(source.hp,24);
+ beginBattle(s);s.attacks=[];stepBattle(s);assert.equal(s.tick,2);assert.equal(s.phase,'won');assert.equal(source.hp,24);
  settleEconomy(s);assert.equal(source.hp,24);
  const dead=setup({sourceRegenHP:5,nightTicks:1});dead.enemySources.get('source-1').hp=0;beginBattle(dead);dead.attacks=[];stepBattle(dead);assert.equal(dead.enemySources.get('source-1').hp,0);
  const zero=setup({nightTicks:1});zero.enemySources.get('source-1').hp=10;beginBattle(zero);zero.attacks=[];stepBattle(zero);assert.equal(zero.enemySources.get('source-1').hp,10);
@@ -77,10 +77,10 @@ test('每夜回复默认0，非零仅结算一次、封顶、不复活；与敌�
 });
 test('无来袭仍有有限肃清窗口，消灭所有源头后不伪造增援',()=>{
  const s=setup({nightTicks:3});s.enemySources.get('source-1').hp=0;s.waves=[[],[]];s.sources=[];s.attacks=[];
- assert.equal(validateSources([],s),'');assert.ok(beginBattle(s));stepBattle(s);assert.equal(s.phase,'battle');stepBattle(s);assert.equal(s.phase,'battle');stepBattle(s);assert.equal(s.phase,'won');assert.equal(s.spawned,0);
+ assert.equal(validateSources([],s),'');assert.ok(beginBattle(s));assert.equal(nightCleanupState(s),'idle');stepBattle(s);assert.equal(s.tick,3);assert.equal(s.phase,'won');assert.equal(s.spawned,0);
  assert.equal(enterMorning(s),true);assert.deepEqual(s.sources,[]);assert.equal(s.enemySources.get('source-1').hp,0);
 });
-test('整晚固定拍数，清空不提前结束，天亮撤退不伤火光也不发金币',()=>{
+test('整晚固定拍数，清源不省略，天亮撤退不伤火光也不发金币',()=>{
  const s=setup({nightTicks:3}),snapshot=beginBattle(s);
  for(let i=0;i<2;i++){stepBattle(s);assert.equal(s.phase,'battle');}
  assert.equal(s.enemies.length,1);stepBattle(s);
@@ -99,4 +99,37 @@ test('末拍受击仍可失败，晚于天亮的出兵配置拒绝，HP范围按
  assert.match(validateSources([{...s.sources[0],first:2}],s),/天亮/);
  assert.match(validateParams({...s.params,sourceCellHPMin:30,sourceCellHPMax:12},s,false),/上限/);
  assert.equal(sourceMaxHP({...definition,hpRoll:0},DEFAULTS),48);assert.equal(sourceMaxHP({...definition,hpRoll:1},DEFAULTS),120);
+});
+
+
+test('第100拍消灭最后敌人，余下60拍继续逐拍攻击源头，不少结算伤害',()=>{
+ const s=setup({nightTicks:160,sourceCellHPMin:50,sourceCellHPMax:50});s.towers.set(key(14,23),'B');
+ beginBattle(s);s.attacks=[{index:0,x:11,y:23,hp:1,count:1,first:100,interval:1,target:s.camp,path:[]}];
+ const source=s.enemySources.get('source-1');
+ for(let i=0;i<100;i++)stepBattle(s);
+ assert.equal(s.tick,100);assert.equal(s.phase,'battle');assert.equal(s.enemies.length,0);assert.equal(s.killed,1);
+ assert.equal(source.hp,101);assert.equal(nightCleanupState(s),'source');
+ for(let i=1;i<=60;i++){stepBattle(s);assert.equal(source.hp,101-i);assert.equal(s.tick,100+i);}
+ assert.equal(s.phase,'won');assert.equal(source.hp,41);assert.equal(s.earned,2);assert.ok(!s.events.some(e=>e.type==='nightSkip'));
+});
+
+test('最后出兵前的空档不能跳过；所有来袭结束且无可清源才跳至黎明',()=>{
+ const s=setup({nightTicks:160,sourceRegenHP:5});s.enemySources.get('source-1').hp=15;
+ beginBattle(s);s.attacks=[{index:0,x:15,y:24,hp:1,count:1,first:10,interval:1,target:s.camp,path:[]}];
+ assert.equal(nightCleanupState(s),null);for(let i=0;i<9;i++){stepBattle(s);assert.equal(s.tick,i+1);assert.equal(s.phase,'battle');}
+ stepBattle(s);assert.equal(s.tick,160);assert.equal(s.phase,'won');assert.equal(s.hp,999);assert.equal(s.withdrawn,0);
+ assert.equal(s.enemySources.get('source-1').hp,20);assert.equal(s.events.find(e=>e.type==='leak').tick,10);
+ assert.equal(s.events.find(e=>e.type==='nightSkip').value,150);settleEconomy(s);assert.equal(s.enemySources.get('source-1').hp,20);
+});
+
+test('清源目标死亡后改打另一源，全部无法攻击才跳过；重试回滚',()=>{
+ const s=setup({nightTicks:160}),source=s.enemySources.get('source-1');source.hp=2;s.towers.set(key(14,23),'B');
+ const other={...source,id:'source-2',index:1,bx:17,by:25,x:17,y:24,hp:3};s.enemySources.set(other.id,other);
+ s.sources=[];s.attacks=[];const snapshot=beginBattle(s);
+ for(let i=1;i<=4;i++){stepBattle(s);assert.equal(s.tick,i);assert.equal(s.phase,'battle');}
+ assert.equal(source.hp,0);assert.equal(other.hp,1);stepBattle(s);assert.equal(other.hp,0);assert.equal(s.tick,160);assert.equal(s.phase,'won');
+ assert.equal(s.events.find(e=>e.type==='sourceLost').tick,5);assert.equal(restoreNight(snapshot).enemySources.get('source-1').hp,2);
+ const idle=setup({nightTicks:160});idle.sources=[];idle.attacks=[];beginBattle(idle);stepBattle(idle);
+ assert.equal(idle.tick,160);assert.equal(idle.phase,'won');assert.equal(idle.enemySources.get('source-1').hp,24); // 存活但无射程/控制资格不构成清源。
+ for(const nightCleanupSpeed of [0,1.5,5])assert.match(validateParams({...idle.params,nightCleanupSpeed},idle,false),/夜末清源速度/);
 });

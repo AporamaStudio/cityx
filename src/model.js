@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=60';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=61';
 import {generateEnemySources,sourceCells,sourceMaxHP} from './enemy-sources.js?v=2';
 export {sourceCells} from './enemy-sources.js?v=2';
 export const key = (x, y) => y * SIZE + x;
@@ -140,6 +140,11 @@ export function sourceAttackPlan(state,enemies=state.enemies,towers=state.towers
     if(targets.length)damage.set(targets[0].id,(damage.get(targets[0].id)||0)+weapon.power);
   }
   return damage;
+}
+// 夜末只有已出完全部批次且场上清空才成立；清源与完全空闲必须分开。
+export function nightCleanupState(state){
+  if(state.phase!=='battle'||!state.waves||state.enemies.length||state.spawned<state.attacks.reduce((sum,s)=>sum+s.count,0))return null;
+  return sourceAttackPlan(state).size?'source':'idle';
 }
 // 调整最大耐久时保留已造成损伤；归零的源头不能因调参复活。
 export function syncSourceHealth(state){
@@ -418,6 +423,7 @@ export function validateParams(params, state, checkLayout = true) {
   if (!integer(params.productionCostPerCell,1,1000)||!(Number.isFinite(params.productionIncomePerCell)&&params.productionIncomePerCell>=0&&params.productionIncomePerCell<=1000)) return '每格生产新建费用须为 1–1000、每格每晚收入须为 0–1000，可使用小数。';
   if (!integer(params.killReward,0,1000)) return '每个敌人击杀奖励须为 0–1000 整数。';
   if(!integer(params.sourceCellHPMin,1,10000)||!integer(params.sourceCellHPMax,params.sourceCellHPMin,10000)||!integer(params.sourceRegenHP,0,10000)||!integer(params.nightTicks,1,500))return '源头每格HP下限须为1–10000，上限不得低于下限；每夜回复0–10000、每晚拍数1–500，均为整数。';
+  if(!integer(params.nightCleanupSpeed,1,4))return '夜末清源速度倍率须为1–4整数，1关闭自动加速。';
   if(state.waves){const lastSpawn=Math.max(1,...state.waves.flat().map(s=>s.first+(s.count-1)*s.interval));if(params.nightTicks<lastSpawn)return `预设最后一批在第 ${lastSpawn} 拍出场，每晚拍数不能更短；请先调整出兵节拍。`;}
   const candidate={...state,params};
   if(checkLayout&&([...state.playerWalls].some(id=>!inGroundControl(candidate,id))||[...state.towers.keys()].some(id=>!inControl(candidate,id))||[...state.outposts.keys()].some(id=>!inGroundControl(candidate,id))||[...state.production.keys(),...state.housing.keys()].some(id=>!productionControlled(candidate,id))))return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
@@ -525,8 +531,15 @@ export function stepBattle(state,actions=null) {
     state.events.push({type:'sourceHit',id:key(source.bx,source.by),sourceId,value:hit});
     if(!source.hp){source.destroyedDay=state.day;state.events.push({type:'sourceLost',id:key(source.bx,source.by),sourceId,value:0});}
   }
-  if(state.hp<=0)state.phase='lost';
-  else if(state.waves?state.tick>=state.params.nightTicks:state.spawned===state.attacks.reduce((sum,s)=>sum+s.count,0)&&!state.enemies.length){
+  if(state.hp<=0){state.phase='lost';return;}
+  if(state.tick<state.params.nightTicks&&nightCleanupState(state)==='idle'){
+    // 没有未出生敌人、存活敌人或可攻击源头时，余下拍数才完全没有战斗结果。
+    // 保留本拍事件的真实时刻；只略过空闲等待，经营与回复仍到黎明结算一次。
+    for(const event of state.events)event.tick=state.tick;
+    state.events.push({type:'nightSkip',id:state.camp,value:state.params.nightTicks-state.tick});
+    state.tick=state.params.nightTicks;
+  }
+  if(state.waves?state.tick>=state.params.nightTicks:state.spawned===state.attacks.reduce((sum,s)=>sum+s.count,0)&&!state.enemies.length){
     // 最后一拍照常结算炮火与近战；存活至天亮的敌群撤退，不伤火光、不发击杀钱。
     for(const enemy of state.enemies){
       for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'withdrawn');

@@ -1,4 +1,4 @@
-import {SIZE} from './config.js?v=60';
+import {SIZE} from './config.js?v=61';
 
 const key=(x,y)=>y*SIZE+x;
 // 手写八个推进节点与出兵日期；清掉一个节点绝不重新分配其兵力。

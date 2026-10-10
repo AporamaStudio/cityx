@@ -3,8 +3,8 @@ import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-text
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,WATCHTOWER_SVG} from './icons.js?v=3';
 import {createGameAudio} from './audio.js?v=4';
-import { SIZE, DEFAULTS } from './config.js?v=60';
-import { sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, towerCapacity, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=67';
+import { SIZE, DEFAULTS } from './config.js?v=61';
+import { nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, towerCapacity, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=68';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -49,12 +49,13 @@ let fire = fireField(state), paused = false, timer = 0, last = 0;
 let messages = [], preparation = null, explainedMerge = false;
 const canBuildWeapon = () => ['build','battle'].includes(state.phase);
 const weaponPlacementError=id=>placementError(state,id,weaponType())||(motion?.actors.some(e=>e.to===id)?'敌人正进入该格，请选择其他炮位。':'');
-let motion = null, impactAge = 1000, incoming = new Map();
+let motion = null, impactAge = 1000, incoming = new Map(), sourceCleanup = false;
 const MOVE_MS = 160, IMPACT_MS = 220;
 const moveDuration=()=>Math.min(MOVE_MS,state.params.stepMs*.36);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let placementFx = null, playbackSpeed = 1, recentGain = 0, gainUntil = 0, dawnAt = 0, receiptUntil = 0;
 let nightMix = 0, sight=visionField(state), lastFogFrame=0;
+const effectiveSpeed=()=>sourceCleanup?Math.max(playbackSpeed,state.params.nightCleanupSpeed):playbackSpeed;
 // 只对环境配色插值，敌人、路线、血条等决策信息不经过压暗滤镜。
 const terrainColors={groundA:[[88,99,88],[21,32,49]],groundB:[[94,105,94],[25,37,54]],grid:[[114,125,112],[43,58,77]],wall:[[130,137,124],[69,82,101]],fog:[[86,103,98],[20,32,45]]};
 function terrainColor(name){
@@ -418,6 +419,7 @@ function draw() {
       drawEnemy(enemy,x,y,merged?1+.16*Math.sin(impact*Math.PI):1,1,before+(enemy.hp-before)*impact);
     }
     if(impact<1)for(const event of state.events){
+      if(event.type==='nightSkip')continue; // 空闲跳时不是受击，不绘制伤害反馈。
       const [x,y]=xy(event.id);
       if(['sourceHit','sourceLost'].includes(event.type)){
         const source=state.enemySources.get(event.sourceId);ctx.save();ctx.globalAlpha=1-impact;
@@ -613,14 +615,16 @@ function update() {
   if(state.phase!=='lost'&&$('defeat').open)$('defeat').close();
   const active = state.phase === 'battle', build = state.phase === 'build';
   document.body.dataset.phase=state.phase;
+  sourceCleanup=nightCleanupState(state)==='source';
+  $('speedLabel').textContent=sourceCleanup?`清源 ${effectiveSpeed()}×`:'速度';
   // 天亮由固定拍数决定；击杀、合流和抵达不推进这条时间进度。
   const elapsed=Math.min(state.tick,state.params.nightTicks),progress=elapsed/state.params.nightTicks*100;
   $('nightProgress').hidden=build;
   $('nightProgressLabel').textContent=`第 ${state.day} 晚 · 天亮进度`;
-  $('nightProgressText').textContent=`${elapsed}/${state.params.nightTicks} 拍${state.phase==='lost'?' · 失败':state.phase==='won'?' · 守住了':''}`;
-  $('nightProgressBar').setAttribute('aria-valuenow',String(elapsed));
-  $('nightProgressBar').setAttribute('aria-valuemax',String(state.params.nightTicks));
-  $('nightProgressBar').setAttribute('aria-valuetext',`${elapsed}/${state.params.nightTicks} 拍`);
+  $('nightProgressText').textContent=`${Math.floor(progress)}%${state.phase==='lost'?' · 失败':state.phase==='won'?' · 守住了':''}`;
+  $('nightProgressBar').setAttribute('aria-valuenow',String(Math.floor(progress)));
+  $('nightProgressBar').setAttribute('aria-valuemax','100');
+  $('nightProgressBar').setAttribute('aria-valuetext',`${Math.floor(progress)}%`);
   $('nightProgressFill').style.width=`${progress}%`;
 
   document.body.dataset.time=build?'day':'night';
@@ -726,7 +730,7 @@ function paramsEditor(params) {
     }
     $('params').append(row);
   }
-  fields('全局',params,'',[['budget','资金',0,10000],['stepMs','移动节拍（毫秒）',50,5000],['wallCost','墙价',1,1000],['demolitionRefundPercent','旧投入拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campWarningPercent','火光危急阈值%',0,100],['campRepairCost','火光修复单价/HP',1,1000],['nightTicks','每晚拍数',1,500]]);
+  fields('全局',params,'',[['budget','资金',0,10000],['stepMs','移动节拍（毫秒）',50,5000],['wallCost','墙价',1,1000],['demolitionRefundPercent','旧投入拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campWarningPercent','火光危急阈值%',0,100],['campRepairCost','火光修复单价/HP',1,1000],['nightTicks','每晚拍数',1,500],['nightCleanupSpeed','夜末清源速度倍率',1,4]]);
   fields('地图',params,'',[['cellMeters','每格距离（米）',1,1000]]);
   fields('视野',params,'',[['campSight','火光外围格数',0,30],['outpostSight','瞭望塔外围格数',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealPadding','敌源边缘揭示格数',0,10]]);
   fields('住房与人口',params,'',[['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房新建每格费用',1,1000]]);
@@ -913,6 +917,7 @@ for(const button of document.querySelectorAll('[data-speed]'))button.onclick=()=
   for(const option of document.querySelectorAll('[data-speed]')){
     const selected=option===button;option.classList.toggle('selected',selected);option.setAttribute('aria-pressed',String(selected));
   }
+  $('speedLabel').textContent=sourceCleanup?`清源 ${effectiveSpeed()}×`:'速度';
 };
 
 // 金币立即入账；弹出并飞向资金栏只是反馈，不要求点击，也不阻挡暂停和补炮。
@@ -938,7 +943,7 @@ function advance() {
   if(state.events.some(event=>event.type==='leak')){sound.play('hurt');flashCampHit();}
   for (const event of state.events) {
     const [x,y] = xy(event.id);
-    const defenseText={withdraw:`${event.value} 批敌人天亮撤退`,sourceHit:`敌源 ${state.enemySources.get(event.sourceId)?.index+1} 受到 ${event.value} 点伤害`,sourceLost:`敌源 ${state.enemySources.get(event.sourceId)?.index+1} 已消灭，后续停止出兵，本晚进攻继续`,wallHit:`墙 (${x},${y}) 受到 ${event.value} 点伤害`,wallLost:`墙 (${x},${y}) 被攻破，敌人将沿原路线推进`};
+    const defenseText={nightSkip:'来袭已结束，迎来黎明',withdraw:`${event.value} 批敌人天亮撤退`,sourceHit:`敌源 ${state.enemySources.get(event.sourceId)?.index+1} 受到 ${event.value} 点伤害`,sourceLost:`敌源 ${state.enemySources.get(event.sourceId)?.index+1} 已消灭，后续停止出兵，本晚进攻继续`,wallHit:`墙 (${x},${y}) 受到 ${event.value} 点伤害`,wallLost:`墙 (${x},${y}) 被攻破，敌人将沿原路线推进`};
     const text = defenseText[event.type]|| (event.type === 'merge' ? `(${x},${y}) ${event.members} 批合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.members} 批敌人，+${event.value} 资金` : `(${x},${y}) 火力削减 ${event.value}`);
     if(event.type==='merge'&&!explainedMerge&&currentlyVisible(event.id)){
       explainedMerge=true;$('mergeNotice').hidden=false;
@@ -946,7 +951,7 @@ function advance() {
     }
     if(event.type==='kill'){showIncome(event.value);showCoins(event.id,event.value);}
     if(event.type==='leak')pulse($('campHP'),'#ff978b');
-    if(currentlyVisible(event.id))messages.unshift(`第 ${state.tick} 拍 · ${text}`);
+    if(currentlyVisible(event.id))messages.unshift(`第 ${event.tick??state.tick} 拍 · ${text}`);
   }
   messages = messages.slice(0,8); $('log').replaceChildren(...messages.map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
   if(state.phase==='won'){
@@ -1008,7 +1013,7 @@ $('step').onclick=()=>{if(state.phase!=='battle'||!paused)return;if(motion){moti
 // 移动占一个节拍的后 160ms；加速同步缩短动画，暂停冻结自动移动。
 function frame(now){
   const elapsed=Math.min(now-last,100);last=now;
-  const dt=elapsed*playbackSpeed;
+  const dt=elapsed*(motion?.singleStep?playbackSpeed:effectiveSpeed());
   const targetMix=state.phase==='build'?0:1;
   if(nightMix!==targetMix){
     const shift=reducedMotion.matches?1:elapsed/600;

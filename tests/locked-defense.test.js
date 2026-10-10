@@ -17,7 +17,7 @@ test('火光完整3×3占地均受击，地块外不扣血，预告止于首个�
   for(const id of area){
     const s=campState(id%SIZE,Math.floor(id/SIZE));s.phase='battle';stepBattle(s);
     assert.equal(s.hp,25);assert.equal(s.enemies.length,0);assert.equal(s.earned,0);
-    assert.deepEqual(s.events.filter(e=>e.type==='leak'),[{type:'leak',id,value:5}]);
+    assert.deepEqual(s.events.filter(e=>e.type==='leak'),[{type:'leak',id,value:5,tick:1}]);
     stepBattle(s);assert.equal(s.hp,25);
   }
   for(const [x,y] of [[15,23],[13,25],[17,25],[15,27]]){
