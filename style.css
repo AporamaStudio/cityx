@@ -22,8 +22,6 @@ main{grid-template-columns:220px minmax(0,1fr) 300px;gap:14px}
 /* 金币与购买选择放在同一区域，价格始终可比较。 */
 .wallet{display:flex;align-items:center;gap:12px;padding:12px;margin-bottom:18px;border:1px solid #9b793b;border-radius:8px;background:#342d1e}.coin-icon{width:38px;height:38px;flex:none}.wallet small{display:block;color:#efd69b;font-size:12px}.wallet strong{display:block;font-size:32px;color:#ffdf83;line-height:1.2;font-variant-numeric:tabular-nums}.toolgrid button{display:flex;align-items:center;justify-content:space-between;gap:6px}.tool-name{display:flex;align-items:center;gap:4px}.tool-price{margin-left:auto;color:#f1ce79;font-size:11px;white-space:nowrap}.toolgrid button:disabled .tool-price{color:inherit}
 
-#mergeNotice{padding:10px;border:1px solid #bb9755;border-radius:6px;background:#3b3020;color:#ffe0a1}#mergeNotice[hidden]{display:none}
-
 /* 原型可读性：选择、花费、操作结果优先于装饰；保留现有布局断点。 */
 :root{--bg:#10191e;--panel:#1c292f;--line:#36494f;--muted:#a8babc;--teal:#99e6cb}
 body{background:radial-gradient(ellipse at 45% 0,#23363c 0, var(--bg) 65%)}
@@ -84,7 +82,13 @@ header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320
 @media(max-width:420px){header{grid-template-columns:auto auto}.daily-objective{grid-column:1/-1}.map-tools{gap:4px}.map-tools button{padding:7px}.map-tools label{font-size:11px}}
 
 /* 反馈留在左下，图例跟随右下视图工具；太阳/月亮明确表达当前昼夜。 */
-.tips-panel{margin-top:auto;max-height:48%;overflow:auto}.tips-panel #cellInfo{display:block;color:var(--muted);font-size:11px;line-height:1.6;margin:10px 0}.tips-panel #result:empty{display:none}.tips-panel details{margin-top:12px}.tips-panel #toolInfo{margin-top:0;padding-top:0;border-top:0}.tips-panel #notice{margin-bottom:10px}
+.tips-panel{margin-top:auto;overflow:hidden;flex-shrink:0}.tips-panel #toolInfo,.tips-panel #notice,.tips-panel #cellInfo{display:block;min-height:0;margin:0;padding:0;border:0;border-radius:0;background:none;color:#dceae4;font-size:12px;font-weight:650;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tips-panel #notice{color:#baf2d8}
+.manual-panel details+details{margin-top:12px}.manual-panel summary{font-size:12px;color:#c5d5d0}
+.manual-panel #manual>summary{font-size:13px;color:#e5edeb}.manual-sections{margin-top:14px}
+.experiment-sections{margin-top:14px}.experiment-sections>section+section{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.experiment-sections>section>h3{margin:0 0 12px;font-size:12px;font-weight:650;color:#c5d5d0}#battleRecord>summary{font-size:13px;font-weight:650}#battleRecord #log{margin-top:12px}
+/* 图例就地悬停或键盘聚焦展开，向上弹出以避开下方手册。 */
+.forecast-info{position:relative;width:20px;margin:6px 0 0 auto}.forecast-info button{display:block;width:20px;height:20px;padding:3px;background:none;border:0;color:var(--muted)}.forecast-info button>svg{display:block;width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}.forecast-info button:hover{color:var(--teal)}.forecast-tooltip{position:absolute;z-index:30;right:0;bottom:calc(100% + 6px);width:190px;padding:10px 12px;border:1px solid #647d79;border-radius:8px;background:#17262b;box-shadow:0 8px 24px #0008;color:#d3e1dc;font-size:11px;line-height:1.5;visibility:hidden;opacity:0;pointer-events:none}.forecast-legend-row{display:grid;grid-template-columns:24px 1fr;align-items:center;gap:9px;--source-color:#df9989}.forecast-legend-row+.forecast-legend-row{margin-top:8px}.forecast-info:hover .forecast-tooltip,.forecast-info:focus-within .forecast-tooltip{visibility:visible;opacity:1}
+.forecast-tooltip .forecast-enemy{min-width:24px;height:24px;padding:0 3px;font-size:12px}.forecast-tooltip .forecast-outcome{font-size:16px;line-height:16px;top:-6px;right:-3px}.forecast-tooltip .blocked .forecast-outcome{width:13px;height:13px;top:-5px;right:-4px}
 .map-tools{display:flex;flex-direction:column;align-items:flex-end;max-width:calc(100% - 24px);gap:8px}.map-tools .maplegend{position:static;max-width:100%;margin:0;padding:0;border:0;background:none;justify-content:flex-end;font-size:10px;gap:5px 10px}.map-tools .viewtools{flex-wrap:wrap;justify-content:flex-end}
 .time-icon{position:absolute;top:12px;left:12px;z-index:1;width:46px;height:46px;padding:7px;border:1px solid #dbce9a;border-radius:50%;background:#5e715ae8;pointer-events:none}.time-icon svg{display:block;width:100%;height:100%}.moon-icon{display:none!important}body[data-time="night"] .time-icon{background:#223a54e8;border-color:#6885a7}body[data-time="night"] .sun-icon{display:none}body[data-time="night"] .moon-icon{display:block!important}
 .camp-title h1{display:flex;align-items:center;gap:6px}#campIcon{width:30px;height:30px;display:inline-block}body[data-time="day"] #viewport{background-color:#718074}body[data-time="night"] #viewport{background-color:#25333e}
@@ -92,7 +96,7 @@ header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320
 
 .tool-section{margin-top:14px}.tool-section h2{margin:0 0 7px;font-size:12px;font-weight:650;color:#b5c8c5}.report-economy strong,.report-kills>span:last-child{display:flex;align-items:center;gap:5px}.tool-section:first-of-type{margin-top:0}
 
-.forecast-source{font-weight:650;color:var(--source-color);margin-bottom:7px}.forecast-blocks{display:flex;flex-wrap:wrap;gap:6px}.forecast-enemy{display:grid;place-items:center;min-width:30px;height:30px;padding:0 4px;border:1px solid var(--source-color);border-radius:4px;background:#823f3f;color:#fff2df;font-weight:750;font-size:14px;font-variant-numeric:tabular-nums}#forecastDebug{white-space:pre-wrap;font:11px/1.7 system-ui;color:var(--muted)}
+.forecast-source{font-weight:650;color:var(--source-color);margin-bottom:7px}.forecast-blocks{display:flex;flex-wrap:wrap;gap:6px}.forecast-enemy{display:grid;place-items:center;min-width:30px;height:30px;padding:0 4px;border:1px solid var(--source-color);border-radius:4px;background:#823f3f;color:#fff2df;font-weight:750;font-size:14px;font-variant-numeric:tabular-nums}
 .source-destroyed-icon{display:inline-flex;width:18px;height:18px;margin-left:6px;vertical-align:middle;color:#b49d8c}.source-destroyed-icon svg{width:100%;height:100%}
 #finalGoal{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;line-height:1.5}#finalGoal>span{white-space:nowrap}.goal-item{border-left:1px solid #596653;padding-left:12px}.goal-status{color:#aebcb2;font-weight:500;margin-left:3px;font-variant-numeric:tabular-nums}.goal-complete,.goal-complete .goal-status{color:#bff5ce}
 
@@ -185,3 +189,7 @@ header{grid-template-columns:auto auto minmax(140px,1fr) minmax(240px,1.4fr) aut
 #victory .primary{background:#485c47;border-color:#91b581;color:#f4edcb}
 #showVictory{border-color:#88a879;color:#d5e9bc}
 #defeatReason{letter-spacing:1px;font-size:14px;line-height:1.6}
+
+/* 空结算或无悬停信息不保留多余间距。 */
+.tips-panel #toolInfo:empty,.tips-panel #notice:empty,.tips-panel #cellInfo:empty{display:none}
+.tips-panel:not(:has(#toolInfo:not(:empty),#notice:not(:empty),#cellInfo:not(:empty))){display:none}
