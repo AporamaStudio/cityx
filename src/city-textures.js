@@ -1,4 +1,5 @@
 // 轻量程序贴图：日/夜各生成一套并缓存，纹理只表达材质，不参与通行或受击规则。
+import {fogColor} from './fog.js?v=5';
 const cache=new Map(),PX=32;
 const palettes={
   day:{road:'#343e47',edge:'#a3aaa4',lane:'#b3aa87',yard:'#697b70',ruin:'#877f6b',roof:'#b0a084',crack:'#454b46',factory:'#739697',factoryRoof:'#a4c2b9',home:'#af775c',homeWall:'#dfc6a0',window:'#425d64',grass:'#738b67'},
@@ -59,7 +60,7 @@ export function drawCitySurroundings(ctx,layout,mix,explored,backdrop){
         if(n%3===0){g.beginPath();g.moveTo(x+.8,y+.25);g.lineTo(x+1.1,y+bh*.5);g.lineTo(x+.8,y+bh-.25);g.stroke();}
       }
       // 远景渐隐到雾底色；最后一圈完全融入背景，避免产生新的矩形边缘。
-      const fog=night?'rgb(20,33,47)':'rgb(32,48,57)';
+      const fog=fogColor(night?1:0);
       for(let y=-b;y<h+b;y++)for(let x=-b;x<w+b;x++)if(outside(x,y)){
         const d=Math.max(-x-.5,x+.5-w,-y-.5,y+.5-h),t=Math.min(1,(d+.5)/b);
         g.globalAlpha=t*t*(3-2*t);g.fillStyle=fog;g.fillRect(x,y,1.01,1.01);

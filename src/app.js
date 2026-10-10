@@ -1,6 +1,6 @@
-import {drawFog} from './fog.js?v=3';
+import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=5';
 import {createTowerOverlay} from './tower-overlay.js?v=5';
-import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-textures.js?v=5';
+import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-textures.js?v=7';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG} from './icons.js?v=6';
 import {createGameAudio} from './audio.js?v=7';
@@ -254,7 +254,7 @@ function paintMap() {
   const size = base * zoom;
   const palette=Object.fromEntries(Object.keys(terrainColors).map(name=>[name,terrainColor(name)]));
   // 地图外与远处雾使用同一底色，宽屏留白也不出现另一块纯色平面。
-  const backdrop=`rgb(${Math.round(32-nightMix*12)},${Math.round(48-nightMix*15)},${Math.round(57-nightMix*10)})`;
+  const backdrop=fogColor(nightMix),cloudTime=reducedMotion.matches?0:performance.now()/1000;
   ctx.fillStyle=backdrop;ctx.fillRect(0,0,width,height);
   const view=mapDisplay(),{controlState,raw:rawControlled,controlled,dirty:draftDirty}=view;
   const hoveredPlot=productionId(hover,state);
@@ -346,6 +346,7 @@ function paintMap() {
   fitResources();
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
+  drawCloudBackdrop(ctx,nightMix,cloudTime,{left:-panX/size,top:-panY/size,right:(width-panX)/size,bottom:(height-panY)/size});
   drawCitySurroundings(ctx,cityLayout,nightMix,mapFogEnabled()?state.explored:null,backdrop);
   // 游玩时受探索遮罩约束；白天展开敌源编辑仅临时预览全图，不写探索记录。
   ctx.fillStyle=palette.fog;ctx.fillRect(0,0,SIZE,SIZE);
@@ -581,7 +582,7 @@ function paintMap() {
     }
   }
   ctx.restore();
-  if(mapFogEnabled())drawFog(ctx,SIZE,sight,state.explored,nightMix,reducedMotion.matches?0:performance.now()/1000,bounds);
+  if(mapFogEnabled())drawFog(ctx,SIZE,sight,state.explored,nightMix,cloudTime);
   // 已知感染核心在雾上保留身份；危险状态只表达今晚计划，不预告激活日期。
   for(const source of displayedEnemySources()){
     const x=source.bx??source.x,y=source.by??source.y,w=source.width??1,h=source.height??1,alive=source.hp!==0;
@@ -1439,7 +1440,8 @@ function frame(now){
     const shift=reducedMotion.matches?1:elapsed/600;
     nightMix=dawnAt?targetMix:targetMix>nightMix?Math.min(targetMix,nightMix+shift):Math.max(targetMix,nightMix-shift);draw();
   }
-  if(($('showFog').checked||knownSources(state).some(s=>s.hp>0&&s.active))&&!reducedMotion.matches&&now-lastFogFrame>120){lastFogFrame=now;draw();}
+  if(($('showFog').checked||knownSources(state).some(s=>s.hp>0&&s.active))&&!reducedMotion.matches&&!document.hidden&&now-lastFogFrame>50){lastFogFrame=now;draw();}
+  if(mapFogEnabled()&&fogTransitionActive()&&!reducedMotion.matches&&!document.hidden)draw();
   // 即使夜晚暂停或白天待修，低血量篝火仍提示；减少动态偏好改用常亮红色。
   if(!state.result&&campCritical(state)&&!reducedMotion.matches&&!document.hidden&&now-lastFogFrame>80){lastFogFrame=now;draw();}
   // 一次短红光结束后停止额外重画，保留静态定位框。
