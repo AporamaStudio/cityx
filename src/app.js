@@ -1,11 +1,11 @@
-import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=5';
-import {createTowerOverlay} from './tower-overlay.js?v=5';
-import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-textures.js?v=7';
+import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=7';
+import {createTowerOverlay} from './tower-overlay.js?v=6';
+import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-textures.js?v=9';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG} from './icons.js?v=6';
 import {createGameAudio} from './audio.js?v=7';
-import { SIZE, DEFAULTS } from './config.js?v=63';
-import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=78';
+import { SIZE, DEFAULTS } from './config.js?v=64';
+import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=79';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -63,7 +63,9 @@ const moveDuration=()=>Math.min(MOVE_MS,state.params.stepMs*.36);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let placementFx = null, playbackSpeed = 1, recentGain = 0, gainUntil = 0, dawnAt = 0, receiptUntil = 0;
 let nightMix = 0, sight=visionField(state), lastFogFrame=0;
-let dayEndHold=null,skipStartClick=false;
+// 流速调节只累计云纹时间，避免调参时跳位，也不改变揭雾过渡与战斗速度。
+let cloudTime=0,cloudSpeed=state.params.cloudSpeedMultiplier;
+let dayEndHold=null,dayEndReturn=null,dayEndProgress=0,sceneProgress=-1,duskMix=0,skipStartClick=false;
 let nightVisualTick=0;
 const effectiveSpeed=()=>sourceCleanup?Math.max(playbackSpeed,state.params.nightCleanupSpeed):playbackSpeed;
 // 只对环境配色插值，敌人、路线、血条等决策信息不经过压暗滤镜。
@@ -254,7 +256,8 @@ function paintMap() {
   const size = base * zoom;
   const palette=Object.fromEntries(Object.keys(terrainColors).map(name=>[name,terrainColor(name)]));
   // 地图外与远处雾使用同一底色，宽屏留白也不出现另一块纯色平面。
-  const backdrop=fogColor(nightMix),cloudTime=reducedMotion.matches?0:performance.now()/1000;
+  const backdrop=fogColor(nightMix),fogTime=reducedMotion.matches?0:performance.now()/1000;
+  cloudSpeed=previewParams().cloudSpeedMultiplier;
   ctx.fillStyle=backdrop;ctx.fillRect(0,0,width,height);
   const view=mapDisplay(),{controlState,raw:rawControlled,controlled,dirty:draftDirty}=view;
   const hoveredPlot=productionId(hover,state);
@@ -346,7 +349,7 @@ function paintMap() {
   fitResources();
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
-  drawCloudBackdrop(ctx,nightMix,cloudTime,{left:-panX/size,top:-panY/size,right:(width-panX)/size,bottom:(height-panY)/size});
+  drawCloudBackdrop(ctx,nightMix,cloudTime,{left:-panX/size,top:-panY/size,right:(width-panX)/size,bottom:(height-panY)/size},duskMix);
   drawCitySurroundings(ctx,cityLayout,nightMix,mapFogEnabled()?state.explored:null,backdrop);
   // 游玩时受探索遮罩约束；白天展开敌源编辑仅临时预览全图，不写探索记录。
   ctx.fillStyle=palette.fog;ctx.fillRect(0,0,SIZE,SIZE);
@@ -582,7 +585,7 @@ function paintMap() {
     }
   }
   ctx.restore();
-  if(mapFogEnabled())drawFog(ctx,SIZE,sight,state.explored,nightMix,cloudTime);
+  if(mapFogEnabled())drawFog(ctx,SIZE,sight,state.explored,nightMix,fogTime,cloudTime,duskMix);
   // 已知感染核心在雾上保留身份；危险状态只表达今晚计划，不预告激活日期。
   for(const source of displayedEnemySources()){
     const x=source.bx??source.x,y=source.by??source.y,w=source.width??1,h=source.height??1,alive=source.hp!==0;
@@ -792,8 +795,8 @@ function update() {
   if(state.result?.type!=='victory'&&$('victory').open)$('victory').close();
   if(state.phase!=='lost'&&$('defeat').open)$('defeat').close();
   const active = state.phase === 'battle'&&!nightOutro, build = state.phase === 'build';
-  if(!build)cancelDayEnd();
-  if(build&&!dayEndHold)showDayEndCharge(0);
+  if(!build){cancelDayEnd();dayEndReturn=null;}
+  if(build&&!dayEndHold&&!dayEndReturn)showDayEndCharge(0);
   $('start').classList.toggle('day-end',build||!!dawnAt);$('dayEndVisual').hidden=!build&&!dawnAt;$('dayEndHint').hidden=!build;
   document.body.dataset.phase=state.phase;
   sourceCleanup=nightCleanupState(state)==='source';
@@ -803,6 +806,7 @@ function update() {
 
   const dawn=build||state.economySettled&&campaignComplete(state);
   document.body.dataset.time=dawn?'day':'night';
+  if(!dayEndHold&&!dayEndReturn&&!dawnAt)setSceneProgress(dawn?0:1);
   $('timeIcon').setAttribute('aria-label',dawn?'白天':'夜晚');
   const goals=campaignGoals(state);
   $('finalGoal').innerHTML=goals.enabled?`<span>目标：${state.waves.length} 晚内</span><span class="goal-item${goals.hospital?' goal-complete':''}">收复医院：<span class="goal-status">${goals.hospital?'已收复':'未收复'}</span></span><span class="goal-item${goals.sources?' goal-complete':''}">摧毁全部敌源：<span class="goal-status">${goals.cleared}/${goals.total}</span></span>`:'最终目标 · 完成防守实验';
@@ -1005,6 +1009,7 @@ function paramsEditor(params) {
   fields('地图',params,'',[['cellMeters','每格距离（米）',1,1000]]);
   fields('日夜操作',params,'',[['dayEndHoldMs','结束白天长按时长（毫秒）',300,3000]]);
   fields('视野',params,'',[['campSight','火光外围格数',0,30],['outpostSight','瞭望塔外围格数',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealPadding','敌源边缘揭示格数',0,10]]);
+  fields('云层',params,'',[['cloudSpeedMultiplier','流速倍率（0静止）',0,3]]);
   fields('住房与人口',params,'',[['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房新建每格费用',1,1000]]);
   fields('经营建造',params,'',[['renovationCostPercent','修缮费用占新建价%',1,100]]);
   fields('街区生产',params,'',[['productionCostPerCell','基准每格新建费用',1,1000],['productionIncomePerCell','基准每格每晚收入',0,1000],['productionBaseArea','基准面积（格）',1,3600],['productionSmallCostFloor','小地块成本最低倍率',0.01,1],['productionDensityGrowthArea','密度增长面积（格）',1,3600],['productionMaxDensity','产出密度最高倍率',1,10]]);
@@ -1031,6 +1036,7 @@ function refreshParams(){
 }
 function clearPlayback() {
   cancelDayEnd();
+  dayEndReturn=null;
   nightVisualTick=0;
   forecastPointerSource=null;forecastFocusSource=null;mapPointerSource=null;
   sourceHighlightId=null;sourceHighlightAt=null;
@@ -1241,7 +1247,8 @@ function showTopNotice(text){
   const notice=$('firstNightNotice');notice.textContent=text;notice.hidden=false;
   topNoticeTimer=setTimeout(dismissTopNotice,2500);
   notice.getAnimations().forEach(animation=>animation.cancel());
-  notice.animate([{color:'#ffd477',filter:'brightness(1)'},{color:'#fff9dc',filter:'brightness(1.8)'},{color:'#ffd477',filter:'brightness(1)'}],{duration:reducedMotion.matches?700:450,iterations:reducedMotion.matches?1:2});
+  const day=document.body.dataset.time==='day',baseInk=day?'#9d531e':'#ffd477',flashInk=day?'#60331a':'#fff9dc';
+  notice.animate([{color:baseInk},{color:flashInk},{color:baseInk}],{duration:reducedMotion.matches?700:450,iterations:reducedMotion.matches?1:2});
 }
 function pulse(element,color){
   if(reducedMotion.matches)return;
@@ -1358,20 +1365,39 @@ function startNight(){
   receiptUntil=0;$('economyReceipt').hidden=true;recentGain=0;gainUntil=0;$('moneyGain').textContent='';
   $('forecastDay').value=String(state.day-1);paused=false;timer=0;last=performance.now();$('settings').open=false;notify('夜晚开始，可暂停补炮。');update();
 }
+// 按钮、云层、地图和页面使用同一进度；配色预演不改变视野、组件或战斗阶段。
+function setSceneProgress(progress){
+  document.body.toggleAttribute('data-scene-transition',!!(dayEndHold||dayEndReturn||dawnAt));
+  if(reducedMotion.matches)progress=document.body.dataset.time==='day'?0:1;
+  if(sceneProgress===progress)return;
+  sceneProgress=progress;
+  nightMix=Math.max(0,(progress-.35)/.65);duskMix=Math.min(1,progress*2.5)*(1-nightMix);
+  document.body.style.setProperty('--scene-night',`${nightMix*100}%`);
+  document.body.style.setProperty('--scene-warm',`${duskMix*12}%`);
+  document.body.style.setProperty('--scene-source-shade',nightMix>.5?'0%':'60%');
+  document.body.style.setProperty('--scene-contrast',`${nightMix>.5?0:nightMix*100}%`);
+  // 中途换用深/浅文字，避免明暗文字同时插值到灰色而失去对比。
+  document.body.style.setProperty('--scene-ink',nightMix>.5?'100%':'0%');
+  document.body.style.colorScheme=nightMix>.5?'dark':'light';draw();
+}
 function showDayEndCharge(progress){
+  dayEndProgress=progress;setSceneProgress(progress);
   const button=$('start'),dusk=Math.min(1,progress*2.5),dark=Math.max(0,(progress-.35)/.65);
   button.style.setProperty('--day-end-progress',progress);button.style.setProperty('--day-end-dusk',dusk);button.style.setProperty('--day-end-dark',dark);
   const ink=Math.min(1,progress*2.5);button.style.setProperty('--day-end-ink',`rgb(${[59,48,37].map((v,i)=>Math.round(v+([255,243,216][i]-v)*ink)).join(',')})`);
   button.classList.toggle('charging',!!dayEndHold);$('dayEndHint').textContent=dayEndHold?'松开取消':'长按确认';
 }
-// 蓄满前不改变游戏阶段；离开、松开或切后台都撤销蓄力及声音。
+// 蓄满前只预演光线；取消时按钮与场景共用原220毫秒回退，规则仍保持白天。
 function cancelDayEnd(completed=false){
   if(!dayEndHold)return;
-  const hold=dayEndHold;dayEndHold=null;sound.endDayEnd();showDayEndCharge(completed?1:0);
+  const hold=dayEndHold;dayEndHold=null;sound.endDayEnd();
+  dayEndReturn=!completed&&!reducedMotion.matches?{at:performance.now(),from:dayEndProgress}:null;
+  showDayEndCharge(completed?1:dayEndReturn?dayEndProgress:0);
   if(hold.pointerId!==undefined&&$('start').hasPointerCapture(hold.pointerId))$('start').releasePointerCapture(hold.pointerId);
 }
 function beginDayEnd(input){
   if(dayEndHold||!nightStartAllowed())return;
+  dayEndReturn=null;
   dayEndHold={...input,at:performance.now(),duration:state.params.dayEndHoldMs};showDayEndCharge(0);sound.beginDayEnd(dayEndHold.duration);
 }
 function finishDayEnd(){
@@ -1434,13 +1460,15 @@ $('step').onclick=()=>{if(nightOutro||state.phase!=='battle'||!paused)return;if(
 function frame(now){
   const elapsed=Math.min(now-last,100);last=now;
   if(dayEndHold&&!document.hidden){const progress=Math.min(1,(now-dayEndHold.at)/dayEndHold.duration);showDayEndCharge(progress);if(progress>=1)finishDayEnd();}
-  const dt=elapsed*(motion?.singleStep?playbackSpeed:effectiveSpeed());
-  const targetMix=dawnAt&&!reducedMotion.matches?Math.max(0,(dawnAt-now)/DAWN_MS):document.body.dataset.time==='day'?0:1;
-  if(nightMix!==targetMix){
-    const shift=reducedMotion.matches?1:elapsed/600;
-    nightMix=dawnAt?targetMix:targetMix>nightMix?Math.min(targetMix,nightMix+shift):Math.max(targetMix,nightMix-shift);draw();
+  if(dayEndReturn){
+    const t=Math.min(1,(now-dayEndReturn.at)/220),ease=t*t*(3-2*t);
+    showDayEndCharge(dayEndReturn.from*(1-ease));
+    if(t===1){dayEndReturn=null;showDayEndCharge(0);}
   }
-  if(($('showFog').checked||knownSources(state).some(s=>s.hp>0&&s.active))&&!reducedMotion.matches&&!document.hidden&&now-lastFogFrame>50){lastFogFrame=now;draw();}
+  const dt=elapsed*(motion?.singleStep?playbackSpeed:effectiveSpeed());
+  if(!dayEndHold&&!dayEndReturn&&!dawnAt)setSceneProgress(document.body.dataset.time==='day'?0:1);
+  if(!reducedMotion.matches&&!document.hidden)cloudTime+=elapsed/1000*cloudSpeed;
+  if(($('showFog').checked&&cloudSpeed>0||knownSources(state).some(s=>s.hp>0&&s.active))&&!reducedMotion.matches&&!document.hidden&&now-lastFogFrame>50){lastFogFrame=now;draw();}
   if(mapFogEnabled()&&fogTransitionActive()&&!reducedMotion.matches&&!document.hidden)draw();
   // 即使夜晚暂停或白天待修，低血量篝火仍提示；减少动态偏好改用常亮红色。
   if(!state.result&&campCritical(state)&&!reducedMotion.matches&&!document.hidden&&now-lastFogFrame>80){lastFogFrame=now;draw();}

@@ -236,3 +236,81 @@ button[aria-disabled="true"]{opacity:.4;cursor:not-allowed}.source-actions{displ
 /* 源头和预告联动只变亮度与边框，避免悬停时挤动敌群或文字。 */
 #forecastList li.source-highlighted{background:#3c1d1ddd;box-shadow:inset 0 0 0 1px #b44c42;border-left-color:#e56851}
 #forecastList li.source-highlighted .forecast-source{color:#ffc2ac}#forecastList li:focus-visible{outline:2px solid #e56851;outline-offset:2px}
+
+/* 昼夜共用组件和位置；柔和日色、暮色和夜色只由按钮进度驱动。 */
+body{--scene-night:0%;--scene-warm:0%;--scene-ink:0%;--scene-source-shade:60%;--scene-contrast:0%;
+  --bg:color-mix(in srgb,color-mix(in srgb,#c5cfcd,#111c28 var(--scene-night)),#ba9872 var(--scene-warm));
+  --panel:color-mix(in srgb,color-mix(in srgb,#dbe1d9,#1e2c39 var(--scene-night)),#ba9872 var(--scene-warm));
+  --line:color-mix(in srgb,#a9b7b7,#3c5060 var(--scene-night));
+  --text:color-mix(in srgb,color-mix(in srgb,#27393e,#e5edeb var(--scene-ink)),#101820 var(--scene-contrast));
+  --muted:color-mix(in srgb,color-mix(in srgb,#50646b,#a8babc var(--scene-ink)),#101820 var(--scene-contrast));
+  --teal:color-mix(in srgb,color-mix(in srgb,#286d58,#99e6cb var(--scene-ink)),#101820 var(--scene-contrast));
+  --orange:color-mix(in srgb,color-mix(in srgb,#875d26,#ffc17c var(--scene-ink)),#101820 var(--scene-contrast));
+  --red:color-mix(in srgb,color-mix(in srgb,#aa453f,#f5847c var(--scene-ink)),#101820 var(--scene-contrast));
+  --surface:color-mix(in srgb,color-mix(in srgb,#cbd7d2,#273847 var(--scene-night)),#ba9872 var(--scene-warm));
+  --hover:color-mix(in srgb,color-mix(in srgb,#becfc5,#344d55 var(--scene-night)),#ba9872 var(--scene-warm));
+  --input:color-mix(in srgb,color-mix(in srgb,#e2e7de,#152330 var(--scene-night)),#ba9872 var(--scene-warm));
+  --selected:color-mix(in srgb,#bacfc0,#294d47 var(--scene-night));
+  --selected-ink:color-mix(in srgb,color-mix(in srgb,#244a3c,#e7fff5 var(--scene-ink)),#101820 var(--scene-contrast));
+  --gold:color-mix(in srgb,color-mix(in srgb,#795516,#f1ce79 var(--scene-ink)),#101820 var(--scene-contrast));
+  --wallet:color-mix(in srgb,color-mix(in srgb,#e0cfaa,#403a2b var(--scene-night)),#ba9872 var(--scene-warm));
+  --wallet-ink:color-mix(in srgb,color-mix(in srgb,#68480c,#ffdf83 var(--scene-ink)),#101820 var(--scene-contrast));
+  --soft:color-mix(in srgb,color-mix(in srgb,#41575d,#c5d5d0 var(--scene-ink)),#101820 var(--scene-contrast));
+  --success:color-mix(in srgb,color-mix(in srgb,#246947,#bff5ce var(--scene-ink)),#101820 var(--scene-contrast));
+  --danger:color-mix(in srgb,color-mix(in srgb,#9c4934,#f3ad91 var(--scene-ink)),#101820 var(--scene-contrast));
+  --inset:color-mix(in srgb,#b7c4c180,#15233080 var(--scene-night));
+  --tooltip:color-mix(in srgb,color-mix(in srgb,#dbe2d7,#1b2b38 var(--scene-night)),#ba9872 var(--scene-warm));
+  --shadow:color-mix(in srgb,#435b6814,#00000020 var(--scene-night));
+  --pending-ink:color-mix(in srgb,color-mix(in srgb,#5b4d48,#cabbb0 var(--scene-ink)),#101820 var(--scene-contrast));
+  --highlight-bg:color-mix(in srgb,#ddc2b5,#3c1d1ddd var(--scene-night));
+  --highlight-ink:color-mix(in srgb,color-mix(in srgb,#823a30,#ffc2ac var(--scene-ink)),#101820 var(--scene-contrast));
+  --notice-ink:color-mix(in srgb,color-mix(in srgb,#864b25,#ffd477 var(--scene-ink)),#101820 var(--scene-contrast));
+  --meter-bg:color-mix(in srgb,#c6c7b8,#3d3530 var(--scene-night));
+  --meter-fill:color-mix(in srgb,#b78b46,#ffc17c var(--scene-night));
+  --legend-building:color-mix(in srgb,color-mix(in srgb,#765b26,#f5d789 var(--scene-ink)),#101820 var(--scene-contrast));
+  --legend-land:color-mix(in srgb,color-mix(in srgb,#366849,#a8d5ad var(--scene-ink)),#101820 var(--scene-contrast));
+  --legend-control:color-mix(in srgb,color-mix(in srgb,#325f78,#8ccce8 var(--scene-ink)),#101820 var(--scene-contrast));
+  --report-bg:color-mix(in srgb,#d9d4ba,#c7b9580a var(--scene-night));
+  --report-border:color-mix(in srgb,#a99d65,#7a794c var(--scene-night));
+  background:var(--bg);color:var(--text)
+}
+header,.mapbar,body[data-time="day"] .mapbar,body[data-time="night"] .mapbar{background:var(--panel)}
+.panel{background:var(--panel);box-shadow:0 5px 18px var(--shadow)}
+.arena{border-color:var(--line);box-shadow:0 10px 30px var(--shadow)}
+/* 连续进度逐帧给出颜色，取消额外CSS换色计时，避免页面追赶按钮。 */
+body,header,.panel,.arena,footer,.objective,.wallet,.map-tools,button,select,input[type=number]{transition:none}
+body[data-scene-transition] button,body[data-scene-transition] #start.day-end::before,body[data-scene-transition] #start.day-end::after,body[data-scene-transition] .day-end-sun,body[data-scene-transition] .day-end-fill{transition:none}
+button,select{background:var(--surface);color:var(--text);border-color:var(--line)}
+button:hover{background:var(--hover)}
+.selected,.toolgrid button.selected{background:var(--selected);color:var(--selected-ink);border-color:var(--teal);box-shadow:inset 3px 0 var(--teal)}
+.toolgrid button:disabled{background:var(--surface);color:var(--muted);border-color:var(--line)}
+input[type=number]{background:var(--input);color:var(--text);border-color:var(--line)}
+.badge{border-color:var(--line)}
+.objective{background:var(--inset);border-color:var(--line)}
+.objective strong,.daily-objective{color:var(--text)}
+.goal-item{border-color:var(--line)}.goal-status{color:var(--muted)}.goal-complete,.goal-complete .goal-status{color:var(--success)}
+.wallet{background:var(--wallet);border-color:var(--gold)}.wallet strong,.wallet small{color:var(--wallet-ink)}
+.build-sidebar .wallet{box-shadow:0 8px 12px var(--shadow)}
+.population-summary,.population-summary #populationTotalMetric{color:var(--wallet-ink)}
+.population-summary #populationFreeMetric{color:var(--success)}.population-summary #populationFreeMetric.no-workers{color:var(--orange)}
+.tool-price{color:var(--gold)}.population-details,.forecast-tooltip{background:var(--tooltip);color:var(--text);border-color:var(--line);box-shadow:0 8px 24px var(--shadow)}
+.population-details dt,.tool-section h2{color:var(--muted)}
+.resource-people .population-preview,.refund-preview,#moneyGain{color:var(--success)}
+.resource-people .population-decrease,.refund-preview.spend-preview{color:var(--danger)}
+.tips-panel #toolInfo,.tips-panel #cellInfo{color:var(--text)}.tips-panel #notice{color:var(--success)}
+.manual-panel summary,.manual-rule,.experiment-sections>section>h3{color:var(--soft)}.manual-panel #manual>summary{color:var(--text)}
+.map-tools{background:var(--tooltip);color:var(--text);border-color:var(--line);box-shadow:0 3px 12px var(--shadow)}
+.map-scale,.map-tools .maplegend{color:var(--muted)}
+#forecastList li{background:var(--inset);color:var(--soft)}
+.forecast-source,.forecast-enemy.pending{border-color:color-mix(in srgb,var(--source-color),#542f3c var(--scene-source-shade))}
+.forecast-source{color:color-mix(in srgb,color-mix(in srgb,var(--source-color),#542f3c var(--scene-source-shade)),#101820 var(--scene-contrast))}
+.forecast-enemy.pending{color:var(--pending-ink)}
+#forecastList li.source-highlighted{background:var(--highlight-bg);border-left-color:#b44c42}
+#forecastList li.source-highlighted .forecast-source{color:var(--highlight-ink)}
+#firstNightNotice{color:var(--notice-ink)}
+.camp-warning,.camp-critical .camp-title h1{color:var(--red)}
+.meter{background:var(--meter-bg)}.meter i{background:var(--meter-fill)}.camp-critical #campBar{background:var(--red)}
+.map-tools .legend-building{color:var(--legend-building)}.map-tools .legend-land{color:var(--legend-land)}.map-tools .legend-control{color:var(--legend-control)}
+.night-report{background:var(--report-bg);border-color:var(--report-border)}
+.report-total,#economyReceipt{color:var(--gold)}.report-economy,.report-kills,.night-report p{color:var(--soft)}
+.night-report .report-stopped{color:var(--danger)}#economyReceipt{background:var(--wallet)}

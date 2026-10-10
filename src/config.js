@@ -5,6 +5,8 @@ export const DEFAULTS = {
   cellMeters: 20,
   // 敌源按完整占地边缘外扩揭雾，0只显示占地；与视野面板同步。
   campSight: 6, outpostSight: 9, daySightMultiplier: 1, nightSightMultiplier: 0.6, eventSightMultiplier: 1, sourceRevealPadding: 2,
+  // 云纹流速只影响外观，0静止；保持两层云的方向与速度比例。
+  cloudSpeedMultiplier: 1,
   initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 8,
   // 空地新建为基准；修缮只改变投入，不改变建成后的收入或人口。
   productionCostPerCell: 4, productionIncomePerCell: 0.5, renovationCostPercent: 50, killReward: 2,

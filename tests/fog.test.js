@@ -5,7 +5,7 @@ import {drawFog,fogTransitionActive} from '../src/fog.js';
 // 只记录真实绘制函数生成的遮罩，测试信息遮挡，不测试云纹的具体形状。
 class CanvasStub {
   constructor(){this.width=0;this.height=0;this.ctx={
-    globalCompositeOperation:'source-over',save(){},restore(){},setTransform(){},clearRect(){},beginPath(){},rect(){},clip(){},fillRect(){},
+    globalCompositeOperation:'source-over',save(){},restore(){},setTransform(){},translate(){},scale(){},createPattern(){return {};},clearRect(){},beginPath(){},rect(){},clip(){},fillRect(){},
     createRadialGradient(){return {addColorStop(){}};},
     createImageData(w,h){return {data:new Uint8ClampedArray(w*h*4)};},
     putImageData(pixels){this.pixels=pixels;},
@@ -16,8 +16,8 @@ class CanvasStub {
 globalThis.document={createElement:()=>new CanvasStub()};
 const size=12,id=(x,y)=>y*size+x;
 function block(set,left,top,right,bottom){for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++)set.add(id(x,y));}
-function render(seen,explored,time,night=0){
-  const ctx=new CanvasStub().ctx;drawFog(ctx,size,seen,explored,night,time);
+function render(seen,explored,time,night=0,cloudTime=time){
+  const ctx=new CanvasStub().ctx;drawFog(ctx,size,seen,explored,night,time,cloudTime);
   const {image,rect:[left,top,width,height]}=ctx.last,mask=image.ctx.mask;
   return (x,y)=>{
     const px=Math.floor((x-left)/width*mask.width),py=Math.floor((y-top)/height*mask.height);
@@ -44,4 +44,11 @@ test('减少动态效果在退雾途中启用时立即完成，重开不沿用�
   block(seen,3,3,8,8);block(explored,3,3,8,8);render(seen,explored,201);
   assert.equal(render(seen,explored,0)(5.5,5.5),0);assert.equal(fogTransitionActive(),false);
   assert.equal(render(new Set(),new Set(),202)(5.5,5.5),255);
+});
+test('云纹静止时揭雾仍按真实时间完成，撤回仍即时遮挡',()=>{
+  const seen=new Set(),explored=new Set();render(seen,explored,300,0,0);
+  block(seen,3,3,8,8);block(explored,3,3,8,8);
+  assert.equal(render(seen,explored,301,0,0)(5.5,5.5),255);
+  assert.equal(render(seen,explored,301.4,0,0)(5.5,5.5),0);
+  seen.clear();assert.equal(render(seen,explored,302,0,0)(5.5,5.5),153);
 });

@@ -5,7 +5,7 @@ const smooth=t=>t*t*(3-2*t);
 const blend=(a,b,t)=>a.map((v,i)=>Math.round(v+(b[i]-v)*t));
 
 // 全图、地图外远景和昼夜过渡共用底色，避免出现一圈矩形接缝。
-export const fogColor=night=>`rgb(${blend([237,240,235],[52,68,93],night).join(',')})`;
+export const fogColor=night=>`rgb(${blend([224,230,222],[52,68,93],night).join(',')})`;
 
 function surface(width,height=width){
   const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;
@@ -28,7 +28,7 @@ function cloudTextures(){
     for(const [period,weight] of [[4,.62],[8,.27],[16,.09],[32,.02]])h+=noise(x/n*period,y/n*period,period)*weight;
     heights[y*n+x]=h;
   }
-  textures=[[166,185,207,255,252,240],[25,39,61,77,98,133]].map(colors=>{
+  textures=[[166,185,207,241,243,229],[25,39,61,77,98,133]].map(colors=>{
     const canvas=surface(n),g=canvas.getContext('2d'),pixels=g.createImageData(n,n);
     for(let y=0;y<n;y++)for(let x=0;x<n;x++){
       const i=y*n+x,h=heights[i];
@@ -49,10 +49,10 @@ function cloudTextures(){
         for(const ox of [-n,0,n])for(const oy of [-n,0,n]){
           const x=px+ox,y=py+oy;if(x+r<0||y+r<0||x-r>n||y-r>n)continue;
           const glow=g.createRadialGradient(x-r*.2,y-r*.22,0,x,y,r);
-          glow.addColorStop(0,night?'rgba(109,129,164,.48)':'rgba(255,254,246,.96)');
-          glow.addColorStop(.30,night?'rgba(102,123,157,.40)':'rgba(255,254,246,.90)');
-          glow.addColorStop(.68,night?'rgba(93,112,141,.23)':'rgba(254,252,244,.55)');
-          glow.addColorStop(1,night?'rgba(93,112,141,0)':'rgba(254,252,244,0)');
+          glow.addColorStop(0,night?'rgba(109,129,164,.48)':'rgba(243,243,231,.96)');
+          glow.addColorStop(.30,night?'rgba(102,123,157,.40)':'rgba(243,243,231,.90)');
+          glow.addColorStop(.68,night?'rgba(93,112,141,.23)':'rgba(241,242,229,.55)');
+          glow.addColorStop(1,night?'rgba(93,112,141,0)':'rgba(241,242,229,0)');
           g.fillStyle=glow;g.fillRect(x-r,y-r,r*2,r*2);
         }
       }
@@ -62,13 +62,13 @@ function cloudTextures(){
   return textures;
 }
 function tileClouds(ctx,image,bounds,dx,dy){
-  const startX=Math.floor((bounds.left-dx)/CLOUD_SPAN)*CLOUD_SPAN+dx;
-  const startY=Math.floor((bounds.top-dy)/CLOUD_SPAN)*CLOUD_SPAN+dy;
-  for(let y=startY;y<bounds.bottom;y+=CLOUD_SPAN)for(let x=startX;x<bounds.right;x+=CLOUD_SPAN)
-    ctx.drawImage(image,x,y,CLOUD_SPAN+.20,CLOUD_SPAN+.20);
+  // 连续重复填充不会在昼夜半透明混合时叠出深色拼接线。
+  const scale=CLOUD_SPAN/TEXTURE_PX;
+  ctx.save();ctx.translate(dx,dy);ctx.scale(scale,scale);ctx.fillStyle=ctx.createPattern(image,'repeat');
+  ctx.fillRect((bounds.left-dx)/scale,(bounds.top-dy)/scale,(bounds.right-bounds.left)/scale,(bounds.bottom-bounds.top)/scale);ctx.restore();
 }
 // 两层云以不同方向流动；起点视角几秒即可察觉位移，遮罩仍固定，不改变敌人显隐。
-export function drawCloudBackdrop(ctx,night,time,bounds){
+export function drawCloudBackdrop(ctx,night,time,bounds,dusk=0){
   const [day,dark]=cloudTextures();ctx.save();ctx.imageSmoothingEnabled=true;
   ctx.beginPath();ctx.rect(bounds.left,bounds.top,bounds.right-bounds.left,bounds.bottom-bounds.top);ctx.clip();
   // 连续不透明底层兜住贴图拼接的亚像素缝，不让缩放后的云纹透出未知地形。
@@ -77,6 +77,8 @@ export function drawCloudBackdrop(ctx,night,time,bounds){
   if(night>0){ctx.globalAlpha=night;tileClouds(ctx,dark,bounds,time*.34,time*.10);}
   ctx.globalAlpha=.18*(1-night);tileClouds(ctx,day,bounds,12-time*.16,19+time*.055);
   if(night>0){ctx.globalAlpha=.18*night;tileClouds(ctx,dark,bounds,12-time*.16,19+time*.055);}
+  // 暮色只染云层，不压暗路线、敌人和数值；日出沿同一进度反向褪去。
+  if(dusk>0){ctx.globalAlpha=dusk*.08;ctx.fillStyle='#d6ab78';ctx.fillRect(bounds.left,bounds.top,bounds.right-bounds.left,bounds.bottom-bounds.top);}
   ctx.restore();
 }
 // 两次距离传播只在视野变化时执行，羽化只向已知一侧延伸，未知区域保持不透明。
@@ -127,7 +129,7 @@ function updateField(size,seen,explored,time){
 }
 export const fogTransitionActive=()=>!!field?.until;
 
-export function drawFog(ctx,size,seen,explored,night,time){
+export function drawFog(ctx,size,seen,explored,night,time,cloudTime=time,dusk=0){
   updateField(size,seen,explored,time);
   const f=field,t=f.until&&time?Math.min(1,(time-f.at)/.36):1;
   if(!f.painted||f.until){
@@ -140,7 +142,7 @@ export function drawFog(ctx,size,seen,explored,night,time){
   }
   const g=f.layer.getContext('2d');g.setTransform(MASK_PX,0,0,MASK_PX,BORDER*MASK_PX,BORDER*MASK_PX);
   g.clearRect(-BORDER,-BORDER,f.span,f.span);
-  drawCloudBackdrop(g,night,time,{left:-BORDER,top:-BORDER,right:size+BORDER,bottom:size+BORDER});
+  drawCloudBackdrop(g,night,cloudTime,{left:-BORDER,top:-BORDER,right:size+BORDER,bottom:size+BORDER},dusk);
   g.setTransform(1,0,0,1,0,0);g.globalCompositeOperation='destination-in';g.drawImage(f.mask,0,0);g.globalCompositeOperation='source-over';
   ctx.save();ctx.imageSmoothingEnabled=true;
   // 绘制整张缓存遮罩含外围景物，云纹在地图边缘连续；镜头不参与逻辑视野。
