@@ -4,7 +4,7 @@ import {DEFAULTS,SIZE} from '../src/config.js';
 import {generateCityMap} from '../src/city-map.js';
 import {MAP_DEFAULTS} from '../src/map-settings.js';
 import {sourceMaxHP} from '../src/enemy-sources.js';
-import {enemyBatchStatus,battleRoutes,lockAttacks,nightCleanupState,key,createCampaign,knownSources,sourceCells,sourcePlans,sourceControlled,sourceAttackPlan,beginBattle,stepBattle,restoreNight,restartCampaign,enterMorning,settleEconomy,validateParams,validateSources,visionField,revealControl,plotBuildError,syncSourceHealth} from '../src/model.js';
+import {finishIdleNight,buildProduction,funds,enemyBatchStatus,battleRoutes,lockAttacks,nightCleanupState,key,createCampaign,knownSources,sourceCells,sourcePlans,sourceControlled,sourceAttackPlan,beginBattle,stepBattle,restoreNight,restartCampaign,enterMorning,settleEconomy,validateParams,validateSources,visionField,revealControl,plotBuildError,syncSourceHealth} from '../src/model.js';
 
 const definition={id:'source-1',index:0,level:1,bx:16,by:22,width:2,height:2,x:16,y:21,site:key(16,22),firstNight:1};
 function setup(params={}){
@@ -169,4 +169,30 @@ test('全部当前出兵被阻止但仍可攻击另一源，剩余160拍清源�
  for(let i=1;i<160;i++)stepBattle(s);
  assert.equal(s.phase,'won');assert.equal(s.tick,160);assert.equal(s.enemySources.get('source-2').hp,41);assert.equal(s.earned,0);
  assert.ok(!s.events.some(e=>e.type==='nightSkip'));assert.equal(s.spawned,0);assert.equal(s.prevented,3);
+});
+
+
+test('空闲夜末动画延迟结算而不补跑拍数；收入与回血只结算一次，重试可撤回',()=>{
+ const s=setup({nightTicks:160,sourceRegenHP:5});s.day=2;s.enemySources.get('source-1').hp=15;
+ assert.equal(buildProduction(s,key(13,22)),'');
+ s.attacks=[{index:0,x:15,y:24,hp:1,count:1,first:1,interval:1,target:s.camp,path:[]}];
+ const direct=structuredClone(s),before=funds(s),snapshot=beginBattle(s);beginBattle(direct);
+ stepBattle(s,null,true);stepBattle(direct);
+ assert.equal(s.tick,1);assert.equal(s.phase,'battle');assert.equal(s.economySettled,false);assert.equal(funds(s),before);
+ assert.equal(s.enemySources.get('source-1').hp,15);assert.equal(s.hp,999);assert.equal(s.events.find(e=>e.type==='nightSkip').value,159);
+ assert.equal(finishIdleNight(s),true);assert.equal(s.tick,160);assert.equal(s.phase,'won');assert.ok(s.nightEconomy>0);
+ assert.equal(s.enemySources.get('source-1').hp,20);assert.equal(funds(s),before+s.nightEconomy);
+ assert.deepEqual(s,direct);assert.equal(finishIdleNight(s),false);assert.deepEqual(s,direct);
+ const retry=restoreNight(snapshot);assert.equal(funds(retry),before);assert.equal(retry.enemySources.get('source-1').hp,15);assert.equal(retry.tick,0);
+ for(const nightIdleTransitionMs of [-1,3001,0.5,NaN])assert.match(validateParams({...s.params,nightIdleTransitionMs},s,false),/空闲夜末过渡/);
+ for(const nightIdleTransitionMs of [0,800,3000])assert.equal(validateParams({...s.params,nightIdleTransitionMs},s,false),'');
+});
+
+test('进度过渡不能跳过未出场敌人或任何剩余清源攻击',()=>{
+ const s=setup({nightTicks:160});beginBattle(s);assert.equal(finishIdleNight(s),false);assert.equal(s.tick,0);
+ s.sources=[];s.attacks=[];s.towers.set(key(14,23),'B');s.enemySources.get('source-1').hp=200;s.enemySources.get('source-1').max=200;
+ assert.equal(finishIdleNight(s),false);
+ for(let i=0;i<160;i++)stepBattle(s,null,true);
+ assert.equal(s.tick,160);assert.equal(s.phase,'won');assert.equal(s.enemySources.get('source-1').hp,40);
+ assert.ok(!s.events.some(e=>e.type==='nightSkip'));
 });

@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=61';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=62';
 import {generateEnemySources,sourceCells,sourceMaxHP} from './enemy-sources.js?v=2';
 export {sourceCells} from './enemy-sources.js?v=2';
 export const key = (x, y) => y * SIZE + x;
@@ -478,6 +478,7 @@ export function validateParams(params, state, checkLayout = true) {
   if (!integer(params.killReward,0,1000)) return '每个敌人击杀奖励须为 0–1000 整数。';
   if(!integer(params.sourceCellHPMin,1,10000)||!integer(params.sourceCellHPMax,params.sourceCellHPMin,10000)||!integer(params.sourceRegenHP,0,10000)||!integer(params.nightTicks,1,500))return '源头每格HP下限须为1–10000，上限不得低于下限；每夜回复0–10000、每晚拍数1–500，均为整数。';
   if(!integer(params.nightCleanupSpeed,1,4))return '夜末清源速度倍率须为1–4整数，1关闭自动加速。';
+  if(!integer(params.nightIdleTransitionMs,0,3000))return '空闲夜末过渡时长须为0–3000毫秒整数，0关闭动画。';
   if(state.waves){const lastSpawn=Math.max(1,...state.waves.flat().map(s=>s.first+(s.count-1)*s.interval));if(params.nightTicks<lastSpawn)return `预设最后一批在第 ${lastSpawn} 拍出场，每晚拍数不能更短；请先调整出兵节拍。`;}
   const candidate={...state,params};
   if(checkLayout&&([...state.playerWalls].some(id=>!inGroundControl(candidate,id))||[...state.towers.keys()].some(id=>!inControl(candidate,id))||[...state.outposts.keys()].some(id=>!inGroundControl(candidate,id))||[...state.production.keys(),...state.housing.keys()].some(id=>!productionControlled(candidate,id))))return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
@@ -517,7 +518,7 @@ export function enemyAction(state,enemy) {
 }
 
 // 每拍移动/撞墙、合流、持续炮火、同时结算近战；破墙后下一拍再继续原路线。
-export function stepBattle(state,actions=null) {
+export function stepBattle(state,actions=null,deferIdleDawn=false) {
   if (state.phase !== 'battle') return;
   state.tick++; state.events = [];
   for (const enemy of state.enemies){
@@ -595,16 +596,26 @@ export function stepBattle(state,actions=null) {
     // 保留本拍事件的真实时刻；只略过空闲等待，经营与回复仍到黎明结算一次。
     for(const event of state.events)event.tick=state.tick;
     state.events.push({type:'nightSkip',id:state.camp,value:state.params.nightTicks-state.tick});
+    // 页面可先播放纯进度动画；等待期间不再走战斗拍，动画结束才结算黎明。
+    if(deferIdleDawn)return;
     state.tick=state.params.nightTicks;
   }
   if(state.waves?state.tick>=state.params.nightTicks:state.spawned===state.attacks.reduce((sum,s)=>sum+s.count,0)&&!state.enemies.length){
-    // 最后一拍照常结算炮火与近战；存活至天亮的敌群撤退，不伤火光、不发击杀钱。
-    for(const enemy of state.enemies){
-      for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'withdrawn');
-      state.withdrawn+=enemy.members;state.events.push({type:'withdraw',id:enemy.id,value:enemy.members});
-    }
-    state.enemies=[];state.phase='won';settleEconomy(state);if(state.waves)settleCampaign(state);
+    finishBattleNight(state);
   }
+}
+// 空闲进度动画只延迟一次结算；条件不再成立时不能跳过任何攻击。
+export function finishIdleNight(state){
+  if(nightCleanupState(state)!=='idle')return false;
+  state.tick=state.params.nightTicks;finishBattleNight(state);return true;
+}
+function finishBattleNight(state){
+  // 最后一拍照常结算炮火与近战；存活至天亮的敌群撤退，不伤火光、不发击杀钱。
+  for(const enemy of state.enemies){
+    for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'withdrawn');
+    state.withdrawn+=enemy.members;state.events.push({type:'withdraw',id:enemy.id,value:enemy.members});
+  }
+  state.enemies=[];state.phase='won';settleEconomy(state);if(state.waves)settleCampaign(state);
 }
 
 // 地块内容与几何分开；修缮与换建共用整块身份，夜末按控制资格结算。

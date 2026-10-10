@@ -74,7 +74,7 @@ header #phase{margin-left:auto;flex-shrink:0;font-size:22px;font-weight:800;padd
 header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320px,1.4fr);gap:20px}header #phase{margin:0;font-size:22px}.daily-objective{color:#f2dfb0;font-size:15px;line-height:1.5}.objective{max-width:none}.objective strong{font-size:12px}.objective small{font-size:10px}
 .map-tools{position:absolute;right:12px;bottom:12px;z-index:2;padding:8px;border:1px solid #59716d;border-radius:8px;background:#17272bed;box-shadow:0 3px 12px #0003}.maplegend{bottom:68px;right:auto;max-width:calc(100% - 24px)}
 /* 进度贴在操作按钮底部；日夜共用固定高度，百分比不挤动操作文字。 */
-#start{position:relative;overflow:hidden;min-height:76px;padding:12px 10px 24px;line-height:1.2}
+#start{position:relative;overflow:hidden;display:grid;place-items:center;min-height:76px;padding:12px 10px;line-height:1.2}
 #nightProgress{position:absolute;left:0;right:0;bottom:0;height:22px;pointer-events:none}#nightProgress[hidden]{display:none}
 #nightProgressText{position:absolute;right:12px;bottom:7px;font-size:11px;font-weight:650;letter-spacing:0;font-variant-numeric:tabular-nums}
 .night-progress-track{position:absolute;left:0;right:0;bottom:0;height:4px;background:#243f3b55;overflow:hidden}.night-progress-track i{display:block;width:0;height:100%;background:#315f53}

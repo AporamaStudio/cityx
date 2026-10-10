@@ -18,6 +18,8 @@ export const DEFAULTS = {
   outpostMinDistance: 2, outpostWorkers: 1, outpostCost: 25, outpostRadius: 6, campRepairCost: 5,
   // 源头按实际占地生成独立耐久；固定清源预算，末段仅加速播放，不能省略攻击。
   sourceCellHPMin:12, sourceCellHPMax:30, sourceRegenHP:0, nightTicks:160, nightCleanupSpeed:2,
+  // 仅空闲夜末的进度过渡，0关闭动画；不增加战斗拍数或清源伤害。
+  nightIdleTransitionMs:800,
   weapons: {
     A: { shape: 'square', range: 1, power: 2, cost: 10 },
     B: { shape: 'square', range: 3, power: 1, cost: 20 },

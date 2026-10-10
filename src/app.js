@@ -3,8 +3,8 @@ import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-text
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG} from './icons.js?v=6';
 import {createGameAudio} from './audio.js?v=5';
-import { SIZE, DEFAULTS } from './config.js?v=61';
-import { enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, towerCapacity, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=71';
+import { SIZE, DEFAULTS } from './config.js?v=62';
+import { finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, towerCapacity, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=72';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -50,9 +50,9 @@ let state = createCampaign(DEFAULTS,undefined,cityLayout), tool = 'wall', hover 
 let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0, cameraBottom=80;
 let fire = fireField(state), paused = false, timer = 0, last = 0;
 let messages = [], preparation = null, explainedMerge = false;
-const canBuildWeapon = () => ['build','battle'].includes(state.phase);
+const canBuildWeapon = () => !nightOutro&&['build','battle'].includes(state.phase);
 const weaponPlacementError=id=>placementError(state,id,weaponType())||(motion?.actors.some(e=>e.to===id)?'敌人正进入该格，请选择其他炮位。':'');
-let motion = null, impactAge = 1000, incoming = new Map(), sourceCleanup = false;
+let motion = null, impactAge = 1000, incoming = new Map(), sourceCleanup = false, nightOutro = null;
 const MOVE_MS = 160, IMPACT_MS = 220;
 const moveDuration=()=>Math.min(MOVE_MS,state.params.stepMs*.36);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -647,6 +647,17 @@ function draw() {
     if(sourcePlot){$('placementInfo').textContent='';$('cellInfo').textContent=`格子 (${x}, ${y}) · 感染据点${sourcePlot.hp?'':'残骸'} · 不可通行`;}
   } else $('cellInfo').textContent = '单击建造 · 右键取消选择 · 拖动平移 · 滚轮缩放 · 悬停看生命';
 }
+// 动画只刷新显示值，不把插值后的拍数写回战斗状态。
+function updateNightProgress(){
+  const elapsed=nightOutro?nightOutro.from+(state.params.nightTicks-nightOutro.from)*Math.min(1,nightOutro.elapsed/nightOutro.duration):Math.min(state.tick,state.params.nightTicks),progress=elapsed/state.params.nightTicks*100;
+  $('nightProgress').hidden=state.phase==='build';
+  $('nightProgressText').textContent=`${Math.floor(progress)}%`;
+  $('nightProgressBar').setAttribute('aria-valuenow',String(Math.floor(progress)));
+  $('nightProgressBar').setAttribute('aria-valuemax','100');
+  $('nightProgressBar').setAttribute('aria-valuetext',`${Math.floor(progress)}%`);
+  $('nightProgressFill').style.width=`${progress}%`;
+  $('start').setAttribute('aria-label',`${$('startLabel').textContent}${state.phase==='build'?'':`，夜晚已过 ${Math.floor(progress)}%`}`);
+}
 function update() {
   sound.setScene(state.phase,paused);
   sight=visionField(state);revealControl(state);
@@ -696,20 +707,12 @@ function update() {
   $('campWarning').hidden=!critical;$('showDefeat').hidden=state.phase!=='lost';$('showVictory').hidden=state.result?.type!=='victory';
   if(state.result?.type!=='victory'&&$('victory').open)$('victory').close();
   if(state.phase!=='lost'&&$('defeat').open)$('defeat').close();
-  const active = state.phase === 'battle', build = state.phase === 'build';
+  const active = state.phase === 'battle'&&!nightOutro, build = state.phase === 'build';
   document.body.dataset.phase=state.phase;
   sourceCleanup=nightCleanupState(state)==='source';
   $('speedLabel').textContent=sourceCleanup?`清源 ${effectiveSpeed()}×`:'速度';
-  // 天亮由固定拍数决定；击杀、合流和抵达不推进这条时间进度。
-  const elapsed=Math.min(state.tick,state.params.nightTicks),progress=elapsed/state.params.nightTicks*100;
-  $('nightProgress').hidden=build;
-  $('nightProgressText').textContent=`${Math.floor(progress)}%`;
   $('start').classList.toggle('night-failed',state.phase==='lost');
   $('start').classList.toggle('night-ended',!build&&!active);
-  $('nightProgressBar').setAttribute('aria-valuenow',String(Math.floor(progress)));
-  $('nightProgressBar').setAttribute('aria-valuemax','100');
-  $('nightProgressBar').setAttribute('aria-valuetext',`${Math.floor(progress)}%`);
-  $('nightProgressFill').style.width=`${progress}%`;
 
   const dawn=build||state.economySettled&&campaignComplete(state);
   document.body.dataset.time=dawn?'day':'night';
@@ -720,8 +723,8 @@ function update() {
   $('phase').textContent=`第 ${state.day} 天`;
   $('start').disabled = !build && !active;
   $('retry').disabled=!preparation; $('step').disabled = !active || !paused || !!motion?.singleStep;
-  $('startLabel').textContent = active ? (paused ? '继续夜晚' : '暂停夜晚') : state.result?.type==='victory'?'收复成功':state.result?.type==='deadline'?'收复未完成':state.result?.type==='experiment'?'实验完成':build?'开始夜晚':state.phase==='won'?'守住了':'防守结束';
-  $('start').setAttribute('aria-label',`${$('startLabel').textContent}${build?'':`，夜晚已过 ${Math.floor(progress)}%`}`);
+  $('startLabel').textContent = nightOutro?'迎来黎明':active ? (paused ? '继续夜晚' : '暂停夜晚') : state.result?.type==='victory'?'收复成功':state.result?.type==='deadline'?'收复未完成':state.result?.type==='experiment'?'实验完成':build?'开始夜晚':state.phase==='won'?'守住了':'防守结束';
+  updateNightProgress();
   for (const id of ['build','long','wall','outpost','production','housing','repair','erase','apply','addSource','applyParams','cancelParams','defaults']) $(id).disabled = !build;
   // 通用建造交互：不足价即禁用，退款或应用参数后立即恢复。
   const minimumEconomyCost=type=>Math.min(...state.sites.filter(p=>!['camp','hospital'].includes(p.role)).map(p=>{const id=key(p.x,p.y),c=plotContent(state,id),q=economyBuildQuote(state,id,type);return q.added>0&&(!c.type||c.type===type)?q.cost:Infinity;}));
@@ -825,7 +828,7 @@ function paramsEditor(params) {
     }
     $('params').append(row);
   }
-  fields('全局',params,'',[['budget','资金',0,10000],['stepMs','移动节拍（毫秒）',50,5000],['wallCost','墙价',1,1000],['demolitionRefundPercent','旧投入拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campWarningPercent','火光危急阈值%',0,100],['campRepairCost','火光修复单价/HP',1,1000],['nightTicks','每晚拍数',1,500],['nightCleanupSpeed','夜末清源速度倍率',1,4]]);
+  fields('全局',params,'',[['budget','资金',0,10000],['stepMs','移动节拍（毫秒）',50,5000],['wallCost','墙价',1,1000],['demolitionRefundPercent','旧投入拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campWarningPercent','火光危急阈值%',0,100],['campRepairCost','火光修复单价/HP',1,1000],['nightTicks','每晚拍数',1,500],['nightCleanupSpeed','夜末清源速度倍率',1,4],['nightIdleTransitionMs','空闲夜末过渡时长（毫秒）',0,3000]]);
   fields('地图',params,'',[['cellMeters','每格距离（米）',1,1000]]);
   fields('视野',params,'',[['campSight','火光外围格数',0,30],['outpostSight','瞭望塔外围格数',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealPadding','敌源边缘揭示格数',0,10]]);
   fields('住房与人口',params,'',[['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房新建每格费用',1,1000]]);
@@ -854,7 +857,7 @@ function refreshParams(){
 }
 function clearPlayback() {
   $('campHitFlash').getAnimations().forEach(animation=>animation.cancel());
-  dawnAt=0;receiptUntil=0;$('economyReceipt').hidden=true;
+  nightOutro=null;dawnAt=0;receiptUntil=0;$('economyReceipt').hidden=true;
   selectedSource=null;paused=false;timer=0;motion=null;placementFx=null;impactAge=1000;incoming.clear();recentGain=0;gainUntil=0;$('moneyGain').textContent='';messages=[];explainedMerge=false;$('mergeNotice').hidden=true;$('log').replaceChildren();
   document.querySelectorAll('.coin-drop').forEach(el=>el.remove());
 }
@@ -972,7 +975,7 @@ canvas.addEventListener('pointermove',e=>{
 canvas.addEventListener('pointerup',e=>{
   const shouldPlace=dragging&&!dragging.moved&&!dragging.panOnly;dragging=null;
   if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);
-  if(!shouldPlace)return;
+  if(!shouldPlace||nightOutro)return;
   const id=cellAt(e);if(id===null)return;
   const source=enemySourceAt(state,id);selectedSource=source&&knownSources(state).some(s=>s.id===source.id)?source.id:null;
   if(selectedSource){update();return;}
@@ -1069,7 +1072,7 @@ function showCoins(id, amount) {
 
 // 只记录当前波次的近期反馈，不建设存档或回放系统。
 function advance() {
-  stepBattle(state,motion?.actions);
+  stepBattle(state,motion?.actions,state.params.nightIdleTransitionMs>0&&!reducedMotion.matches);
   motion=null;impactAge=0;timer=0;sight=visionField(state);
   const kills=state.events.filter(event=>event.type==='kill');
   if(kills.some(event=>currentlyVisible(event.id))||state.events.some(e=>e.type==='sourceLost'))sound.play('kill');
@@ -1088,6 +1091,15 @@ function advance() {
     if(currentlyVisible(event.id))messages.unshift(`第 ${event.tick??state.tick} 拍 · ${text}`);
   }
   messages = messages.slice(0,8); $('log').replaceChildren(...messages.map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
+  const skip=state.events.find(event=>event.type==='nightSkip');
+  if(skip&&state.phase==='battle'){
+    // 只插值显示进度，真实拍数与资源冻结；接近天亮时按剩余比例缩短。
+    nightOutro={from:state.tick,elapsed:0,duration:state.params.nightIdleTransitionMs*Math.min(1,skip.value/state.params.nightTicks*4)};
+    tool=null;hover=null;selectedSource=null;incoming.clear();notify('');update();return;
+  }
+  presentNightEnd();
+}
+function presentNightEnd(){
   if(state.economySettled){
     if(state.result?.type==='victory')sound.play('victory');
     else if(state.result?.type==='experiment')sound.play('dawn');
@@ -1118,7 +1130,7 @@ function finishDawn(){
   document.querySelector('.build-sidebar').scrollTop=0;
 }
 $('start').onclick=()=>{
-  if(campaignComplete(state))return;
+  if(nightOutro||campaignComplete(state))return;
   if(state.phase==='battle'){paused=!paused;timer=0;update();return;}
   if(state.phase!=='build')return;
   if(!firstNightReady(state)){
@@ -1137,7 +1149,7 @@ $('start').onclick=()=>{
 };
 // 简单的逐格滑动：动画结束才提交一步战斗，无独立动画框架。
 function beginMotion(singleStep=false){
-  if(motion||state.phase!=='battle')return;
+  if(nightOutro||motion||state.phase!=='battle')return;
   const actions=new Map(state.enemies.map(e=>[enemyKey(e),enemyAction(state,e)]));
   motion={elapsed:0,singleStep,actions,actors:state.enemies.map(e=>({...e,to:actions.get(enemyKey(e)).to}))};
   incoming=new Map();
@@ -1146,7 +1158,7 @@ function beginMotion(singleStep=false){
   for(const source of state.attacks){const age=state.tick+1-source.first;if(age>=0&&age%source.interval===0&&age/source.interval<source.count&&enemyBatchStatus(state,source,age/source.interval)!=='blocked')add(key(source.x,source.y),{hp:source.hp,max:source.hp,members:1,target:source.target});}
   update();
 }
-$('step').onclick=()=>{if(state.phase!=='battle'||!paused)return;if(motion){motion.singleStep=true;update();}else beginMotion(true);};
+$('step').onclick=()=>{if(nightOutro||state.phase!=='battle'||!paused)return;if(motion){motion.singleStep=true;update();}else beginMotion(true);};
 // 移动占一个节拍的后 160ms；加速同步缩短动画，暂停冻结自动移动。
 function frame(now){
   const elapsed=Math.min(now-last,100);last=now;
@@ -1159,12 +1171,17 @@ function frame(now){
   if(($('showFog').checked||knownSources(state).some(s=>s.hp>0&&s.active))&&!reducedMotion.matches&&now-lastFogFrame>120){lastFogFrame=now;draw();}
   // 即使夜晚暂停或白天待修，低血量篝火仍提示；减少动态偏好改用常亮红色。
   if(!state.result&&campCritical(state)&&!reducedMotion.matches&&!document.hidden&&now-lastFogFrame>80){lastFogFrame=now;draw();}
+  if(nightOutro&&!document.hidden){
+    nightOutro.elapsed=Math.min(nightOutro.duration,nightOutro.elapsed+elapsed);
+    if(nightOutro.elapsed>=nightOutro.duration){nightOutro=null;if(finishIdleNight(state))presentNightEnd();else update();}
+    else updateNightProgress();
+  }
   if(dawnAt&&now>=dawnAt)finishDawn();
   if(receiptUntil&&now>=receiptUntil){receiptUntil=0;$('economyReceipt').hidden=true;}
   if(gainUntil&&now>=gainUntil){gainUntil=0;recentGain=0;$('moneyGain').textContent='';}
   if(placementFx){if(now-placementFx.start>=750)placementFx=null;draw();}
   if(impactAge<IMPACT_MS){impactAge=Math.min(IMPACT_MS,impactAge+dt);draw();}
-  if(state.phase==='battle'&&(!paused||motion?.singleStep)){
+  if(!nightOutro&&state.phase==='battle'&&(!paused||motion?.singleStep)){
     if(motion){motion.elapsed+=dt;if(motion.elapsed>=moveDuration())advance();else draw();}
     else{timer+=dt;if(timer>=state.params.stepMs-moveDuration())beginMotion();}
   }
