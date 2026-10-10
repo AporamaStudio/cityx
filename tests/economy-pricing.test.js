@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {createCampaign,key,productionCells,productionQuote,housingQuote,economyBuildQuote,buildProduction,buildHousing,clearPlot,buildTower,removeTower,changeWall,funds,demolitionQuote,validateParams,beginBattle,restoreNight} from '../src/model.js';
+import {createCampaign,key,productionCells,productionQuote,housingQuote,economyBuildQuote,buildProduction,buildHousing,clearPlot,buildTower,removeTower,changeWall,embeddingQuote,funds,demolitionQuote,validateParams,beginBattle,restoreNight} from '../src/model.js';
 
 const id=key(15,22);
 function setup(width=2,height=2,type='production',kind='building'){
@@ -40,15 +40,16 @@ test('先修缮再当天拆除不能保留折扣，换用途按新建价；原�
  assert.equal(buildProduction(s,id),'');assert.equal(funds(s),cash-10);
 });
 
-test('每个边缘格反复嵌炮再补建不会降低同一栋建筑的实付成本',()=>{
+test('每次嵌炮消耗原经营格投资，拆炮补建和拆楼不重复返还',()=>{
  for(const type of ['production','housing'])for(const kind of ['building','open']){
   const s=setup(2,2,type,kind),build=type==='production'?buildProduction:buildHousing,cash=funds(s),cost=economyBuildQuote(s,id,type).cost;
-  assert.equal(build(s,id),'');
+  assert.equal(build(s,id),'');let consumed=0;
   for(const cell of productionCells(id,s))for(let repeat=0;repeat<3;repeat++){
+   const q=embeddingQuote(s,cell);assert.equal(q.refund,0);consumed+=q.cost;
    assert.equal(buildTower(s,cell,'A'),'');assert.equal(removeTower(s,cell),'');assert.equal(build(s,id),'');
-   assert.equal(funds(s),cash-cost);
+   assert.equal(funds(s),cash-cost-consumed);
   }
-  assert.equal(clearPlot(s,id),'');assert.equal(funds(s),cash);
+  assert.equal(clearPlot(s,id),'');assert.equal(funds(s),cash-consumed);
  }
 });
 
@@ -68,5 +69,25 @@ test('空地留墙缺口后补建仍按新建价，不因已有建筑而变成�
 test('新建单格被炮位全部替代后，恢复经营不能冒充原始废墟半价',()=>{
  const s=setup(1,1,'production','open'),cash=funds(s),cost=economyBuildQuote(s,id,'production').cost;
  assert.equal(buildProduction(s,id),'');assert.equal(buildTower(s,id,'A'),'');assert.equal(removeTower(s,id),'');
- assert.equal(economyBuildQuote(s,id,'production').mode,'new');assert.equal(buildProduction(s,id),'');assert.equal(funds(s),cash-cost);
+ assert.equal(economyBuildQuote(s,id,'production').mode,'new');assert.equal(buildProduction(s,id),'');assert.equal(funds(s),cash-2*cost);
+});
+
+test('先修缮再架炮比先架炮再修缮多花原经营格投资，拆返比例不影响改建',()=>{
+ for(const percent of [0,50,100]){
+  const first=setup(),second=setup();first.params.demolitionRefundPercent=percent;second.params.demolitionRefundPercent=percent;
+  assert.equal(buildTower(first,id,'A'),'');assert.equal(buildProduction(first,id),'');
+  assert.equal(buildProduction(second,id),'');const q=embeddingQuote(second,id),cash=funds(second);second.day++;
+  assert.equal(buildTower(second,id,'A'),'');assert.equal(funds(second),cash-10);
+  assert.equal(funds(first)-funds(second),q.cost);assert.deepEqual(productionQuote(first,id),productionQuote(second,id));
+ }
+});
+
+test('夜间改建扣完整加急造价；重试恢复投资与余额，战前消耗不丢失',()=>{
+ const s=setup();assert.equal(buildProduction(s,id),'');const cash=funds(s),paid=new Map(s.production.get(id).paid);
+ const replacement=embeddingQuote(s,id).cost,snap=beginBattle(s);assert.equal(buildTower(s,id,'A'),'');assert.equal(funds(s),cash-20);
+ const retry=restoreNight(snap);assert.equal(funds(retry),cash);assert.deepEqual(retry.production.get(id).paid,paid);
+ assert.equal(buildTower(retry,id,'A'),'');
+ const next=restoreNight(beginBattle(retry));assert.equal(funds(next),cash-10);
+ assert.equal(removeTower(next,id),'');assert.equal(funds(next),cash);
+ assert.equal(buildProduction(next,id),'');assert.equal(funds(next),cash-replacement);
 });

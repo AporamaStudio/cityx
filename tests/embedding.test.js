@@ -22,7 +22,7 @@ test('住房改建仍检查人口下降的经营依赖，不额外收施工人�
  assert.equal(housingQuote(s,id).residents,5);assert.equal(buildProduction(s,key(small.x,small.y)),'');assert.equal(population(s).free,0);
  const before=structuredClone(s);assert.match(buildTower(s,id,'A'),/劳动力不足/);assert.deepEqual(s,before);
  assert.equal(removeProduction(s,key(small.x,small.y)),'');const q=embeddingQuote(s,id);assert.equal(q.residents,1);assert.equal(q.freeAfter,0);
- const cash=funds(s);assert.equal(buildTower(s,id,'A'),'');assert.equal(population(s).free,0);assert.equal(funds(s),cash-10+q.refund);assert.equal(housingQuote(s,id).residents,4);
+ const cash=funds(s);assert.equal(buildTower(s,id,'A'),'');assert.equal(population(s).free,0);assert.equal(funds(s),cash-10);assert.equal(housingQuote(s,id).residents,4);
 });
 test('零人口仍可在废墟架炮，不改变人口',()=>{
  const s=setup('building','production',0),before=population(s),cash=funds(s);
@@ -65,12 +65,12 @@ test('内部缺口不产生炮位边缘，临街资格不随临时墙和路线�
  assert.equal(buildTower(s,edge,'A'),'');
 });
 
-test('跨天补建仅新增投资全返，旧格维持半返；局部拆改使用对应格投入日期',()=>{
+test('主动拆楼按投入日期退款；架炮消耗对应格投资不退款',()=>{
  const s=setup(),corner=id;assert.equal(buildTower(s,corner,'A'),'');assert.equal(buildProduction(s,id),'');
  const oldCost=s.production.get(id).cost;s.day=4;removeTower(s,corner);
  const q=economyBuildQuote(s,id,'production');assert.equal(buildProduction(s,id),'');
  assert.equal(demolitionQuote(s,id).refund,Math.floor(oldCost*.5)+q.cost);
- assert.equal(embeddingQuote(s,corner).refund,q.cost);
+ assert.equal(embeddingQuote(s,corner).cost,q.cost);assert.equal(embeddingQuote(s,corner).refund,0);
  const oldCell=key(17,22),entry=s.production.get(id).paid.get(oldCell);
- assert.equal(embeddingQuote(s,oldCell).refund,Math.floor(entry.cost*.5));
+ assert.equal(embeddingQuote(s,oldCell).cost,entry.cost);assert.equal(embeddingQuote(s,oldCell).refund,0);
 });

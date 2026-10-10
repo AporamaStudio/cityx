@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {key,createCampaign,controlMask,rawControlMask,placementError,buildTower,removeTower,clearPlot,buildHousing,beginBattle,restoreNight,towerCapacity} from '../src/model.js';
+import {key,createCampaign,controlMask,rawControlMask,placementError,buildTower,removeTower,clearPlot,buildHousing,buildProduction,funds,embeddingQuote,beginBattle,restoreNight,towerCapacity} from '../src/model.js';
 import {createTowerOverlay} from '../src/tower-overlay.js';
 
 function setup(){
@@ -44,10 +44,23 @@ test('资金、夜间加急、敌人所在及进入格、重试都反映在新�
   assert.ok(!view.eligible('A').has(origin));assert.ok(!view.eligible('A').has(far));assertMatches(s,view,moving);
   const retry=restoreNight(snapshot);assertMatches(retry);assert.equal(retry.debugGold,0);assert.ok(overlay(retry).eligible('A').has(far));
 });
-test('住房嵌炮仍检查劳动力与拆返，而非仅凭边缘与余额放行',()=>{
+test('住房嵌炮仍检查经营劳动力，而非仅凭边缘与余额放行',()=>{
   const s=setup();s.params.controlRadius=9;s.explored=new Set(Array.from({length:SIZE*SIZE},(_,i)=>i));
   assert.equal(buildHousing(s,remote),'');s.debugPopulation=-s.params.initialPopulation;
   // 9格住房提供5人；用满这5人后，移除一个住房格不能再架炮。
   s.outposts=new Map([[key(10,11),{day:3}]]);s.params.outpostWorkers=5;
   assertMatches(s);assert.equal(overlay(s).eligible('A').has(remote),false);
+});
+
+test('架炮只看完整造价，余额恢复后资格与高亮同步恢复',()=>{
+  for(const [phase,type,balance,cost] of [['build','A',8,10],['build','B',18,20],['battle','A',18,20],['battle','B',38,40]]){
+    const s=setup();assert.equal(buildProduction(s,origin),'');s.phase=phase;s.debugGold+=balance-funds(s);
+    assert.equal(embeddingQuote(s,origin).refund,0);
+    const before=structuredClone(s);assert.match(buildTower(s,origin,type),/预算不足/);assert.deepEqual(s,before);
+    assert.equal(overlay(s).eligible(type).size,0);
+    s.debugGold+=cost-funds(s);assert.ok(overlay(s).eligible(type).has(origin));
+    assert.equal(buildTower(s,origin,type),'');assert.equal(funds(s),0);
+  }
+  const s=setup();s.params.weapons.A.cost=7;s.params.budget=6;
+  assert.equal(overlay(s).eligible('A').size,0);s.params.budget=7;assert.ok(overlay(s).eligible('A').has(origin));
 });

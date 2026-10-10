@@ -460,7 +460,8 @@ export function placementError(state, id, type = 'A') {
   if (!state.params.weapons[type]) return '未知武器。';
   const siteError=towerSiteError(state,id);if(siteError)return siteError;
   const embed=embeddingError(state,id);if(embed)return embed;
-  if (funds(state) + embeddingQuote(state,id).refund < towerBuildCost(state,type)) return '预算不足，无法架设炮台。';
+  // 建造资格只看当前余额，夜间包含加急费。
+  if (funds(state) < towerBuildCost(state,type)) return '预算不足，无法架设炮台。';
   return '';
 }
 
@@ -732,7 +733,7 @@ function investmentRefund(state,entries){
   for(const entry of entries)if(entry.day===state.day)today+=entry.cost;else older+=entry.cost;
   return today+Math.floor(older*state.params.demolitionRefundPercent/100);
 }
-// 架炮不收施工人力；只预览占经营面积带来的人口、用工、收入和退款变化。
+// 架炮不收施工人力；只预览占经营面积带来的人口、用工和收入变化。
 export function embeddingQuote(state,id){
   const c=plotContent(state,id),cells=contentCells(state,id),occupied=cells.includes(id),plot=productionId(id,state);
   const building=occupied&&c.status==='building',home=building&&c.type==='housing',factory=building&&c.type==='production';
@@ -740,7 +741,7 @@ export function embeddingQuote(state,id){
   const released=factory?Math.ceil(cells.length/state.params.productionCellsPerWorker)-Math.ceil((cells.length-1)/state.params.productionCellsPerWorker):0;
   const record=home?state.housing.get(plot):factory?state.production.get(plot):null;
   const invested=record?.cost??(home?housingQuote(state,id).cost:factory?productionQuote(state,id).cost:0);
-  const investment=record?.paid?.get(id),cost=building?(investment?.cost??Math.floor(invested/cells.length)):0,refund=investmentRefund(state,[{cost,day:investment?.day??record?.day??0}]);
+  const investment=record?.paid?.get(id),cost=building?(investment?.cost??Math.floor(invested/cells.length)):0,refund=0;
   const incomeLoss=factory?areaQuote(state,id,cells.length).income-areaQuote(state,id,cells.length-1).income:0;
   return {residents,released,cost,refund,incomeLoss,freeAfter:population(state).free-residents+released};
 }
@@ -777,6 +778,7 @@ function embeddingError(state,id){
 function applyEmbedding(state,id,preserveBuilding=false){
   const c=plotContent(state,id),cells=contentCells(state,id),footprint=new Set(buildingCells(state,id));if(!footprint.has(id))return;
   const q=embeddingQuote(state,id),plot=productionId(id,state),map=c.type==='housing'?state.housing:state.production,record=map.get(plot);
+  // 原经营格投资仍算已支出，后续拆炮或拆楼也不能重复返还。
   if(c.status==='building'&&record){record.cost=(record.cost??(c.type==='housing'?housingQuote(state,id).cost:productionQuote(state,id).cost))-q.cost;record.paid?.delete(id);retainDemolitionCost(state,q);}
   const remaining=new Set(cells.filter(cell=>cell!==id));
   if(!preserveBuilding)footprint.delete(id);
