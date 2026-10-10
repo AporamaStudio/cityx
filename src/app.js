@@ -5,7 +5,7 @@ import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG} from './icons.js?v=6';
 import {createGameAudio} from './audio.js?v=7';
 import { SIZE, DEFAULTS } from './config.js?v=63';
-import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=75';
+import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=76';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -395,17 +395,40 @@ function paintMap() {
   }
   const actualNight=state.phase==='battle'&&Number($('forecastDay').value)===state.day-1;
   const displayedRoutes=actualNight?battleRoutes(state):plannedRoutes.map(attack=>({...attack,future:false}));
+  const routeSources=viewedSources(),linked=linkedSource();
+  const linkedRoute=route=>(route.sources??[route.index]).some(index=>routeSources[index]&&sourceIdentity(routeSources[index])===linked);
+  const focusedRoutes=linked?displayedRoutes.filter(route=>route.path.length>1&&linkedRoute(route)):[];
+  const focusActive=focusedRoutes.length>0;
+  const routeColor=index=>colors[(sourceNumber(routeSources[index])>=0?sourceNumber(routeSources[index]):index)%colors.length];
+  // 颜色继续表达来源；合流时按当前联动的源头着色，而不是只取第一来源。
+  const focusedColor=focusActive?routeColor(routeSources.findIndex(source=>sourceIdentity(source)===linked)):null;
+  const brighten=amount=>`rgb(${[1,3,5].map(i=>{const value=parseInt(focusedColor.slice(i,i+2),16);return Math.round(value+(255-value)*amount);}).join(',')})`;
   ctx.save();clipSight();
-  if ($('routes').checked || wallEdit || postGhost) displayedRoutes.forEach(({path,index,future}) => {
-    ctx.setLineDash(future?[.25,.2]:[]);
-    ctx.strokeStyle = colors[(sourceNumber(viewedSources()[index])>=0?sourceNumber(viewedSources()[index]):index) % colors.length]; ctx.globalAlpha = future?.35:.8; ctx.lineWidth = future?.065:.10;
-    ctx.beginPath(); path.forEach((id, i) => { const [x,y] = xy(id), offset = (index % 3 - 1) * .12; if (!i) ctx.moveTo(x + .5 + offset,y + .5); else ctx.lineTo(x + .5 + offset,y + .5); }); ctx.stroke();
-    for (let i = 1; i < path.length; i += 4) {
-      const [x,y] = xy(path[i]), [nx,ny] = xy(path[Math.min(i + 1,path.length - 1)]);
-      ctx.save(); ctx.translate(x+.5,y+.5); ctx.rotate(Math.atan2(ny-y,nx-x)); ctx.beginPath(); ctx.moveTo(-.15,-.16); ctx.lineTo(.1,0); ctx.lineTo(-.15,.16); ctx.stroke(); ctx.restore();
+  // 复用已锁定路径，关联路线最后描画；临时显线不修改开关或揭开迷雾。
+  const strokeRoute=(path,index)=>{
+    const offset=(index%3-1)*.12;
+    ctx.beginPath();path.forEach((id,i)=>{const [x,y]=xy(id);if(!i)ctx.moveTo(x+.5+offset,y+.5);else ctx.lineTo(x+.5+offset,y+.5);});ctx.stroke();
+  };
+  const routeArrows=(path,index,spacing)=>{
+    const offset=(index%3-1)*.12;
+    for(let i=1;i<path.length-1;i+=spacing){
+      const [x,y]=xy(path[i]),[nx,ny]=xy(path[i+1]);
+      ctx.save();ctx.translate(x+.5+offset,y+.5);ctx.rotate(Math.atan2(ny-y,nx-x));ctx.beginPath();ctx.moveTo(-.15,-.16);ctx.lineTo(.1,0);ctx.lineTo(-.15,.16);ctx.stroke();ctx.restore();
     }
-    ctx.globalAlpha = 1;ctx.setLineDash([]);
+  };
+  if ($('routes').checked || wallEdit || postGhost) displayedRoutes.forEach(route => {
+    if(focusActive&&linkedRoute(route))return;
+    const {path,index,future}=route;
+    ctx.setLineDash(future?[.25,.2]:[]);
+    ctx.strokeStyle=routeColor(index);ctx.globalAlpha=(future?.35:.8)*(focusActive?.3:1);ctx.lineWidth=future?.065:.10;
+    strokeRoute(path,index);routeArrows(path,index,4);
   });
+  for(const {path,index,future} of focusedRoutes){
+    ctx.setLineDash(future?[.3,.18]:[]);ctx.lineJoin='round';ctx.lineCap='round';
+    ctx.globalAlpha=.95;ctx.strokeStyle='#172029';ctx.lineWidth=Math.max(.32,5/size);strokeRoute(path,index);
+    ctx.strokeStyle=brighten(.18);ctx.lineWidth=Math.max(.16,2.5/size);strokeRoute(path,index);
+    ctx.setLineDash([]);ctx.strokeStyle=brighten(.35);ctx.lineWidth=Math.max(.10,1.5/size);routeArrows(path,index,6);
+  }
   ctx.restore();
   if (tool !== null && hover !== null && (state.phase === 'build' || weaponHover) && (!productionSite(hover,state)||weaponHover||postHover)) {
     const isWeapon = ['build','long'].includes(tool), weapon = selectedWeapon();

@@ -142,7 +142,7 @@ test('源头归零当拍已经出生的敌人继续；只阻止更晚批次，�
  assert.equal(enemyBatchStatus(s,s.attacks[0],0),'pending');stepBattle(s);
  assert.equal(source.hp,0);assert.equal(s.spawned,1);assert.equal(s.prevented,2);assert.equal(s.enemies.length,1);assert.equal(s.phase,'battle');
  assert.equal(enemyBatchStatus(s,s.attacks[0],0),'active');assert.equal(enemyBatchStatus(s,s.attacks[0],1),'blocked');
- assert.equal(battleRoutes(s).filter(r=>r.future).length,0);assert.equal(battleRoutes(s).length,1);
+ assert.equal(battleRoutes(s).filter(r=>r.future).length,0);assert.equal(battleRoutes(s).length,1);assert.deepEqual(battleRoutes(s)[0].sources,[0]);
  for(let i=0;i<100&&s.phase==='battle';i++)stepBattle(s);
  assert.equal(s.spawned,1);assert.equal(s.prevented,2);assert.equal(s.killed,0);assert.equal(s.earned,0);assert.equal(s.leaked,10);
  assert.equal(s.enemyOutcomes.get('0:0'),'leaked');assert.equal(s.enemyOutcomes.get('0:1'),'blocked');assert.equal(s.enemyOutcomes.get('0:2'),'blocked');

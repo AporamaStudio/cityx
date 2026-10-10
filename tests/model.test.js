@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULTS, SIZE } from '../src/config.js';
-import { key, createState as makeState, coverage, pathFrom, funds, placementError, validateSources, stepBattle, changeWall, wallPreview, validateParams, fireField, inControl, lockAttacks, buildTower, removeTower, repairFacility, repairQuote } from '../src/model.js';
+import { key, createState as makeState, coverage, pathFrom, funds, placementError, validateSources, stepBattle, changeWall, wallPreview, validateParams, fireField, inControl, battleRoutes, lockAttacks, buildTower, removeTower, repairFacility, repairQuote } from '../src/model.js';
 
 // 原有战斗用例使用大控制范围，另用独立用例检查默认控制权限。
 const createState=(sources,towers,walls,params={...DEFAULTS,controlRadius:30})=>makeState(sources,towers,walls,params);
@@ -25,6 +25,8 @@ test('同时入格先合并再扣一次火力，满值相加且不回血',()=>{
   const s=createState([{x:1,y:1,hp:1,count:1,first:100,interval:1}]);s.phase='battle';
   s.field.next=new Map([[1,3],[2,3]]);s.enemies=[{id:1,hp:3,max:10,members:1,sources:[0]},{id:2,hp:8,max:10,members:1,sources:[1]}];s.towers.set(3,'A');
   stepBattle(s);assert.deepEqual(s.enemies.map(e=>[e.hp,e.max,e.members]),[[9,20,2]]);assert.equal(s.damage,2);assert.equal(s.merges,1);
+  const routes=battleRoutes(s),merged=routes.find(r=>!r.future);assert.deepEqual(routes.filter(r=>r.future).map(r=>r.sources),[[0]]);
+  assert.deepEqual(merged.sources,[0,1]);merged.sources.pop();assert.deepEqual(s.enemies[0].sources,[0,1]);
 });
 test('火光广场边缘先受火力再漏剩余生命，到达者移除，不重复扣命',()=>{
   const s=createState([{x:15,y:23,hp:5,count:1,first:1,interval:1}]);s.towers.set(key(14,25),'A');s.phase='battle';

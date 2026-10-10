@@ -889,11 +889,12 @@ export function settleEconomy(state) {
 export function battleRoutes(state) {
   const routes=state.attacks.flatMap(attack=>{
     const pending=Array.from({length:attack.count},(_,batch)=>enemyBatchStatus(state,attack,batch)).includes('pending');
-    return pending?[{future:true,index:attack.index,target:attack.target,path:attack.path}]:[];
+    return pending?[{future:true,index:attack.index,sources:[attack.index],target:attack.target,path:attack.path}]:[];
   });
   for(const enemy of state.enemies){
     const path=enemy.path||pathFrom(enemy.id,state.field);
-    routes.push({future:false,index:enemy.sources[0]??0,target:enemy.target,path:path.slice(Math.max(0,path.indexOf(enemy.id)))});
+    // 合流路线保留所有来源，联动任一源头都能定位共同的剩余进攻。
+    routes.push({future:false,index:enemy.sources[0]??0,sources:[...enemy.sources],target:enemy.target,path:path.slice(Math.max(0,path.indexOf(enemy.id)))});
   }
   return routes;
 }
