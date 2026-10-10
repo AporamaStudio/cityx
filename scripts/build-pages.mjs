@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = join(root, '.pages-dist');
 const revision = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-const files = ['index.html', 'style.css', 'map-preview.html', 'src/app.js', 'src/model.js', 'src/config.js', 'src/enemy-sources.js', 'src/audio.js', 'src/map-camera.js', 'src/city-map.js', 'src/map-settings.js', 'src/map-preview.js', 'src/city-textures.js', 'src/fog.js', 'src/icons.js'];
+const files = ['index.html', 'style.css', 'map-preview.html', 'src/app.js', 'src/model.js', 'src/config.js', 'src/enemy-sources.js', 'src/audio.js', 'src/map-camera.js', 'src/city-map.js', 'src/map-settings.js', 'src/map-preview.js', 'src/city-textures.js', 'src/fog.js', 'src/icons.js', 'src/tower-overlay.js'];
 await rm(output, { recursive: true, force: true });
 for (const file of files) {
   let content = await readFile(join(root, file), 'utf8');
