@@ -4,7 +4,7 @@ import {DEFAULTS,SIZE} from '../src/config.js';
 import {generateCityMap} from '../src/city-map.js';
 import {MAP_DEFAULTS} from '../src/map-settings.js';
 import {sourceMaxHP} from '../src/enemy-sources.js';
-import {nightCleanupState,key,createCampaign,knownSources,sourceCells,sourcePlans,sourceControlled,sourceAttackPlan,beginBattle,stepBattle,restoreNight,restartCampaign,enterMorning,settleEconomy,validateParams,validateSources,visionField,revealControl,plotBuildError,syncSourceHealth} from '../src/model.js';
+import {enemyBatchStatus,battleRoutes,lockAttacks,nightCleanupState,key,createCampaign,knownSources,sourceCells,sourcePlans,sourceControlled,sourceAttackPlan,beginBattle,stepBattle,restoreNight,restartCampaign,enterMorning,settleEconomy,validateParams,validateSources,visionField,revealControl,plotBuildError,syncSourceHealth} from '../src/model.js';
 
 const definition={id:'source-1',index:0,level:1,bx:16,by:22,width:2,height:2,x:16,y:21,site:key(16,22),firstNight:1};
 function setup(params={}){
@@ -55,14 +55,15 @@ test('提前侦察记住源头身份，不提前激活或揭示实时周边',()=
  s.towers.clear();revealControl(s);assert.equal(knownSources(s).length,1);assert.ok(!visionField(s).has(key(40,10)));
  s.day=5;s.sources=wave;assert.ok(visionField(s).has(key(40,10)));
 });
-test('未激活也能肃清；当晚锁定批次继续，后续仅移除被消灭源头',()=>{
+test('未激活也能肃清；未出场批次阻止，不发钱、不增强其他源头',()=>{
  const s=setup(),source=s.enemySources.get('source-1');source.firstNight=3;source.hp=1;s.towers.set(key(14,23),'B');
  const another={...source,id:'source-2',index:1,bx:40,by:10,x:39,y:10,site:key(40,10),hp:24,firstNight:2};s.enemySources.set(another.id,another);
  const otherWave={sourceId:another.id,x:39,y:10,hp:9,count:2,first:1,interval:7};s.waves[1].push(otherWave);
  const original=structuredClone(s.waves),locked=structuredClone(s.attacks),snapshot=beginBattle(s);
  stepBattle(s);assert.equal(source.hp,0);assert.deepEqual(s.attacks,locked);assert.equal(s.spawned,0);
  for(let i=0;i<200&&s.phase==='battle';i++)stepBattle(s);
- assert.equal(s.spawned,3);assert.equal(s.phase,'won');assert.deepEqual(s.waves,original);
+ assert.equal(s.spawned,0);assert.equal(s.prevented,3);assert.equal(s.killed,0);assert.equal(s.earned,0);assert.equal(s.phase,'won');assert.deepEqual(s.waves,original);
+ assert.deepEqual([...s.enemyOutcomes.values()],['blocked','blocked','blocked']);assert.equal(s.events.find(e=>e.type==='sourceLost').prevented,3);
  assert.deepEqual(sourcePlans(s,2),[otherWave]);assert.equal(enterMorning(s),true);assert.deepEqual(s.sources,[otherWave]);
  assert.equal(restoreNight(snapshot).enemySources.get(source.id).hp,1);assert.equal(restartCampaign(s).enemySources.get(source.id).hp,24);
 });
@@ -132,4 +133,40 @@ test('清源目标死亡后改打另一源，全部无法攻击才跳过；重�
  const idle=setup({nightTicks:160});idle.sources=[];idle.attacks=[];beginBattle(idle);stepBattle(idle);
  assert.equal(idle.tick,160);assert.equal(idle.phase,'won');assert.equal(idle.enemySources.get('source-1').hp,24); // 存活但无射程/控制资格不构成清源。
  for(const nightCleanupSpeed of [0,1.5,5])assert.match(validateParams({...idle.params,nightCleanupSpeed},idle,false),/夜末清源速度/);
+});
+
+
+test('源头归零当拍已经出生的敌人继续；只阻止更晚批次，预告与路线保留身份',()=>{
+ const s=setup(),source=s.enemySources.get('source-1');source.hp=1;s.sources[0].first=1;lockAttacks(s);
+ s.towers.set(key(20,24),'B');const snapshot=beginBattle(s);
+ assert.equal(enemyBatchStatus(s,s.attacks[0],0),'pending');stepBattle(s);
+ assert.equal(source.hp,0);assert.equal(s.spawned,1);assert.equal(s.prevented,2);assert.equal(s.enemies.length,1);assert.equal(s.phase,'battle');
+ assert.equal(enemyBatchStatus(s,s.attacks[0],0),'active');assert.equal(enemyBatchStatus(s,s.attacks[0],1),'blocked');
+ assert.equal(battleRoutes(s).filter(r=>r.future).length,0);assert.equal(battleRoutes(s).length,1);
+ for(let i=0;i<100&&s.phase==='battle';i++)stepBattle(s);
+ assert.equal(s.spawned,1);assert.equal(s.prevented,2);assert.equal(s.killed,0);assert.equal(s.earned,0);assert.equal(s.leaked,10);
+ assert.equal(s.enemyOutcomes.get('0:0'),'leaked');assert.equal(s.enemyOutcomes.get('0:1'),'blocked');assert.equal(s.enemyOutcomes.get('0:2'),'blocked');
+ const retry=restoreNight(snapshot);assert.equal(retry.prevented,0);assert.equal(retry.enemyOutcomes.size,0);assert.equal(retry.enemySources.get(source.id).hp,1);
+ assert.equal(enterMorning(s),true);assert.equal(s.prevented,0);assert.equal(s.enemyOutcomes.size,0);
+});
+
+test('阻止一源未出场批次仍须等待另一源预定出兵，不重排索引或取消普通击杀奖励',()=>{
+ const s=setup({nightTicks:20}),source=s.enemySources.get('source-1');source.hp=1;Object.assign(s.sources[0],{first:1,count:3});
+ s.enemySources.set('source-2',{...source,id:'source-2',index:1,bx:40,by:10,x:39,y:10,site:key(40,10),hp:24});
+ s.sources.push({sourceId:'source-2',x:39,y:10,hp:1,count:1,first:7,interval:1});lockAttacks(s);
+ s.towers.set(key(20,24),'B');beginBattle(s);
+ for(let i=1;i<=6;i++){stepBattle(s);assert.equal(s.tick,i);assert.equal(s.phase,'battle');}
+ assert.equal(s.spawned,1);assert.equal(s.prevented,2);assert.equal(enemyBatchStatus(s,s.attacks[1],0),'pending');
+ s.towers.set(key(39,9),'A');stepBattle(s);
+ assert.equal(s.spawned,2);assert.equal(s.prevented,2);assert.equal(s.killed,1);assert.equal(s.earned,2);
+ assert.equal(s.enemyOutcomes.get('1:0'),'killed');assert.equal(s.enemyOutcomes.get('0:1'),'blocked');assert.equal(s.phase,'won');
+});
+
+test('全部当前出兵被阻止但仍可攻击另一源，剩余160拍清源不被省略',()=>{
+ const s=setup({nightTicks:160}),source=s.enemySources.get('source-1');source.hp=1;s.towers.set(key(14,23),'B');
+ s.enemySources.set('source-2',{...source,id:'source-2',index:1,bx:17,by:25,x:17,y:24,hp:200,max:200});
+ beginBattle(s);stepBattle(s);assert.equal(s.prevented,3);assert.equal(s.spawned,0);assert.equal(s.tick,1);assert.equal(nightCleanupState(s),'source');
+ for(let i=1;i<160;i++)stepBattle(s);
+ assert.equal(s.phase,'won');assert.equal(s.tick,160);assert.equal(s.enemySources.get('source-2').hp,41);assert.equal(s.earned,0);
+ assert.ok(!s.events.some(e=>e.type==='nightSkip'));assert.equal(s.spawned,0);assert.equal(s.prevented,3);
 });

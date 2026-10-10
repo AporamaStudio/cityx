@@ -64,7 +64,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
     layout, blocked, terrainWalls, sites, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
-    hp: params.campHP, enemies: [], enemyOutcomes:new Map(), events: [], spawned: 0, removed: 0, damage: 0, leaked: 0, merges: 0 };
+    hp: params.campHP, enemies: [], enemyOutcomes:new Map(), events: [], spawned: 0, prevented:0, removed: 0, damage: 0, leaked: 0, merges: 0 };
   // 本局成果独立于金币倍率和测试台日期；战前快照同时回滚这些计数。
   state.killed=0;state.survivedNights=0;state.result=null;
   state.plotContents=new Map(state.sites.map(p=>[key(p.x,p.y),{status:p.kind==='open'?'empty':'ruin',type:p.kind==='open'?null:(p.ruinType??'production')}]));
@@ -128,12 +128,13 @@ function settleCampaign(state){
 }
 export const campCritical=state=>state.hp>0&&state.hp*100<state.params.campHP*state.params.campWarningPercent;
 function clearNight(state) {
-  state.tick=0;state.enemies=[];state.enemyOutcomes=new Map();state.events=[];state.spawned=0;state.removed=0;state.withdrawn=0;
+  state.tick=0;state.enemies=[];state.enemyOutcomes=new Map();state.events=[];state.spawned=0;state.prevented=0;state.removed=0;state.withdrawn=0;
   state.damage=0;state.leaked=0;state.merges=0;state.nightEarned=0;state.nightEconomy=0;state.economySettled=false;state.productionReport=null;
 }
 export function beginBattle(state) {
   if(state.result||state.phase!=='build'||state.hp<=0||validateSources(state.sources,state))return null;
   clearNight(state);
+  for(const source of state.enemySources?.values()??[])if(source.hp===0)preventSourceSpawns(state,source.id);
   const snapshot=structuredClone(state);
   state.phase='battle';return snapshot;
 }
@@ -146,6 +147,20 @@ export function restartCampaign(state) {
 export const enemySourceAt=(state,id)=>[...(state.enemySources?.values()??[])].find(s=>sourceCells(s).includes(id)||key(s.x,s.y)===id);
 export const sourceControlled=(state,source)=>inGroundControl(state,key(source.x,source.y));
 export const sourcePlans=(state,night=state.day)=>(night===state.day?state.sources:state.waves?.[night-1]??[]).filter(s=>!s.sourceId||!state.enemySources?.has(s.sourceId)||state.enemySources.get(s.sourceId).hp>0||night===state.day);
+// 保留原批次身份：预告、移动预演和实战共用状态，不把已阻止批次当作击杀。
+export function enemyBatchStatus(state,attack,batch){
+  return state.enemyOutcomes.get(`${attack.index}:${batch}`)??(state.tick<attack.first+batch*attack.interval?'pending':'active');
+}
+function preventSourceSpawns(state,sourceId){
+  let count=0;
+  for(const attack of state.attacks.filter(a=>a.sourceId===sourceId))for(let batch=0;batch<attack.count;batch++){
+    const origin=`${attack.index}:${batch}`;
+    if(attack.first+batch*attack.interval>state.tick&&!state.enemyOutcomes.has(origin)){
+      state.enemyOutcomes.set(origin,'blocked');count++;
+    }
+  }
+  state.prevented+=count;return count;
+}
 // 每门炮当拍先打敌人，空闲时只选一个源头；大占地不会让同门炮重复命中。
 export function sourceAttackPlan(state,enemies=state.enemies,towers=state.towers){
   const damage=new Map(),sources=knownSources(state).filter(s=>s.id&&s.hp>0&&sourceControlled(state,s));
@@ -158,9 +173,9 @@ export function sourceAttackPlan(state,enemies=state.enemies,towers=state.towers
   }
   return damage;
 }
-// 夜末只有已出完全部批次且场上清空才成立；清源与完全空闲必须分开。
+// 夜末全部批次已出生或被阻止、且场上清空才成立；仍有清源伤害就不能省略。
 export function nightCleanupState(state){
-  if(state.phase!=='battle'||!state.waves||state.enemies.length||state.spawned<state.attacks.reduce((sum,s)=>sum+s.count,0))return null;
+  if(state.phase!=='battle'||!state.waves||state.enemies.length||state.spawned+state.prevented<state.attacks.reduce((sum,s)=>sum+s.count,0))return null;
   return sourceAttackPlan(state).size?'source':'idle';
 }
 // 调整最大耐久时保留已造成损伤；归零的源头不能因调参复活。
@@ -511,7 +526,7 @@ export function stepBattle(state,actions=null) {
   }
   for (const attack of state.attacks) {
     const age=state.tick-attack.first;
-    if(age>=0&&age%attack.interval===0&&age/attack.interval<attack.count){
+    if(age>=0&&age%attack.interval===0&&age/attack.interval<attack.count&&enemyBatchStatus(state,attack,age/attack.interval)!=='blocked'){
       state.enemies.push({id:key(attack.x,attack.y),target:attack.target,path:[...attack.path],hp:attack.hp,max:attack.hp,members:1,sources:[attack.index],origins:[`${attack.index}:${age/attack.interval}`]});
       state.spawned++;
     }
@@ -568,7 +583,11 @@ export function stepBattle(state,actions=null) {
   for(const [sourceId,power] of sourceFire){
     const source=state.enemySources.get(sourceId),hit=Math.min(source.hp,power);source.hp-=hit;source.lastHit=hit;
     state.events.push({type:'sourceHit',id:key(source.bx,source.by),sourceId,value:hit});
-    if(!source.hp){source.destroyedDay=state.day;state.events.push({type:'sourceLost',id:key(source.bx,source.by),sourceId,value:0});}
+    if(!source.hp){
+      // 本拍先出生再受炮火；只阻止更晚的批次，已出场敌人保留原路线和目标。
+      source.destroyedDay=state.day;const prevented=preventSourceSpawns(state,sourceId);
+      state.events.push({type:'sourceLost',id:key(source.bx,source.by),sourceId,value:0,prevented});
+    }
   }
   if(state.hp<=0){state.phase='lost';state.result={type:'campLost',day:state.day};return;}
   if(state.tick<state.params.nightTicks&&nightCleanupState(state)==='idle'){
@@ -814,8 +833,8 @@ export function settleEconomy(state) {
 // 预告与实战读取同一份路径；建筑绕行及时显示，破墙不重算题目。
 export function battleRoutes(state) {
   const routes=state.attacks.flatMap(attack=>{
-    const born=state.tick<attack.first?0:Math.min(attack.count,Math.floor((state.tick-attack.first)/attack.interval)+1);
-    return born>=attack.count?[]:[{future:true,index:attack.index,target:attack.target,path:attack.path}];
+    const pending=Array.from({length:attack.count},(_,batch)=>enemyBatchStatus(state,attack,batch)).includes('pending');
+    return pending?[{future:true,index:attack.index,target:attack.target,path:attack.path}]:[];
   });
   for(const enemy of state.enemies){
     const path=enemy.path||pathFrom(enemy.id,state.field);

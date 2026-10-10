@@ -13,6 +13,11 @@ export function drawShield(ctx,x,y,size){
   ctx.beginPath();ctx.moveTo(.5,.19);ctx.lineTo(.5,.79);ctx.stroke();ctx.restore();
 }
 
+// 破裂徽记和碎片表示敌源已摧毁，与任务完成的对号区分。
+export const SOURCE_DESTROYED_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2 3 5l1 8 5 5 2-6-3-3 4-3zM15 3l6 2-1 8-6 7-2-5 3-4-2-3zM3 19l4 1-2 3zM19 18l3 3-4 1z" fill="currentColor"/></svg>';
+// 圆圈斜杠表示出兵被阻止，不与已击杀的叉号混用。
+export const SPAWN_BLOCKED_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></g></svg>';
+
 // 群体代表城市人口，戴帽单人代表可分配工人；资源栏、报价和地图共用。
 export const POPULATION_SVG='<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="currentColor" opacity=".55"><circle cx="6" cy="11" r="4"/><circle cx="26" cy="11" r="4"/><path d="M0 29v-8a6 6 0 0 1 12 0v8zm20 0v-8a6 6 0 0 1 12 0v8z"/></g><g fill="currentColor"><circle cx="16" cy="8" r="5"/><path d="M7 29v-8a9 9 0 0 1 18 0v8z"/></g></svg>';
 export const WORKER_SVG='<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="currentColor"><circle cx="16" cy="12" r="5"/><path d="M5 29v-6a11 11 0 0 1 22 0v6zM9 9a7 7 0 0 1 14 0z"/></g><path d="M8 9h16M16 2v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';

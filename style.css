@@ -73,7 +73,13 @@ header #phase{margin-left:auto;flex-shrink:0;font-size:22px;font-weight:800;padd
 /* 目标统一放顶栏，地图工具浮在右下角，不再挤占画布高度。 */
 header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320px,1.4fr);gap:20px}header #phase{margin:0;font-size:22px}.daily-objective{color:#f2dfb0;font-size:15px;line-height:1.5}.objective{max-width:none}.objective strong{font-size:12px}.objective small{font-size:10px}
 .map-tools{position:absolute;right:12px;bottom:12px;z-index:2;padding:8px;border:1px solid #59716d;border-radius:8px;background:#17272bed;box-shadow:0 3px 12px #0003}.maplegend{bottom:68px;right:auto;max-width:calc(100% - 24px)}
-.progress-heading{display:flex;justify-content:space-between;color:#c5dded;margin-bottom:8px}.night-progress-track{height:8px;background:#34434e;border-radius:5px;overflow:hidden}.night-progress-track i{display:block;width:0;height:100%;background:#9cd7ec;transition:width .2s}#nightProgress small{display:block;margin-top:7px;color:var(--muted);font-size:10px;line-height:1.5}
+/* 进度贴在操作按钮底部；日夜共用固定高度，百分比不挤动操作文字。 */
+#start{position:relative;overflow:hidden;min-height:76px;padding:12px 10px 24px;line-height:1.2}
+#nightProgress{position:absolute;left:0;right:0;bottom:0;height:22px;pointer-events:none}#nightProgress[hidden]{display:none}
+#nightProgressText{position:absolute;right:12px;bottom:7px;font-size:11px;font-weight:650;letter-spacing:0;font-variant-numeric:tabular-nums}
+.night-progress-track{position:absolute;left:0;right:0;bottom:0;height:4px;background:#243f3b55;overflow:hidden}.night-progress-track i{display:block;width:0;height:100%;background:#315f53}
+#start.night-ended:disabled{opacity:1;background:#263c37;border-color:#536b62;color:#c4dbd1}
+#start.night-failed .night-progress-track i{background:#c98275}#start.night-failed #nightProgressText{color:#ffb4a4}
 @media(max-width:900px){header{display:grid;grid-template-columns:auto auto minmax(0,1fr);height:auto;gap:10px;min-height:0}.brand{font-size:21px}header #phase{font-size:19px;padding:7px 10px}.objective{order:0;grid-column:1/-1}.daily-objective{font-size:13px}.map-tools{gap:6px;right:8px;bottom:8px;padding:6px}.maplegend{bottom:62px}}
 @media(max-width:420px){header{grid-template-columns:auto auto}.daily-objective{grid-column:1/-1}.map-tools{gap:4px}.map-tools button{padding:7px}.map-tools label{font-size:11px}}
 
@@ -87,8 +93,11 @@ header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320
 .tool-section{margin-top:14px}.tool-section h2{margin:0 0 7px;font-size:12px;font-weight:650;color:#b5c8c5}.report-economy strong,.report-kills>span:last-child{display:flex;align-items:center;gap:5px}.tool-section:first-of-type{margin-top:0}
 
 .forecast-source{font-weight:650;color:var(--source-color);margin-bottom:7px}.forecast-blocks{display:flex;flex-wrap:wrap;gap:6px}.forecast-enemy{display:grid;place-items:center;min-width:30px;height:30px;padding:0 4px;border:1px solid var(--source-color);border-radius:4px;background:#823f3f;color:#fff2df;font-weight:750;font-size:14px;font-variant-numeric:tabular-nums}#forecastDebug{white-space:pre-wrap;font:11px/1.7 system-ui;color:var(--muted)}
+.source-destroyed-icon{display:inline-flex;width:18px;height:18px;margin-left:6px;vertical-align:middle;color:#b49d8c}.source-destroyed-icon svg{width:100%;height:100%}
+#finalGoal{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;line-height:1.5}#finalGoal>span{white-space:nowrap}.goal-item{border-left:1px solid #596653;padding-left:12px}.goal-status{color:#aebcb2;font-weight:500;margin-left:3px;font-variant-numeric:tabular-nums}.goal-complete,.goal-complete .goal-status{color:#bff5ce}
 
 .forecast-enemy{position:relative}.forecast-enemy.killed{background:#263637;color:#83918f;border-color:#586e69}.forecast-enemy.killed>span{text-decoration:line-through;opacity:.6}.forecast-enemy.leaked{background:#553122;color:#ffc594;border-color:#db9d68}.forecast-outcome{position:absolute;right:-4px;top:-8px;font-size:20px;line-height:20px;color:#c6ded2;text-shadow:0 1px 3px #102025}.leaked .forecast-outcome{color:#ffb46b}
+.forecast-enemy.pending{background:transparent;color:#cabbb0}.forecast-enemy.blocked{background:#263033;color:#8b989a;border-color:#58656a;border-style:dashed}.forecast-enemy.blocked>span{opacity:.45}.blocked .forecast-outcome{color:#b4c1c1;width:16px;height:16px;top:-7px;right:-5px;background:#263033;border-radius:50%}.blocked .forecast-outcome svg{display:block;width:100%;height:100%}
 .forecast-enemy.withdrawn{background:#2b3946;color:#b1c3d2;border-color:#7b95aa}.withdrawn .forecast-outcome{color:#c0d6ed}
 
 .report-total{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;color:#ffe2a0;font-size:16px;font-weight:700}.report-total strong,.report-economy strong,.report-kills strong{display:flex;align-items:center;gap:5px}.report-total strong{font-size:20px}.report-economy,.report-kills{margin:7px 0 0 12px;font-size:12px;color:#c6d2d0}.report-economy strong,.report-kills strong{font-weight:600}

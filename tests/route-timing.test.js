@@ -33,7 +33,7 @@ test('出生就在广场当拍到达；不可达路线明确报告所有批次�
  s.attacks[0].path=[key(15,20)];row=routeTimingReport(s).nights[0].rows[0];
  assert.equal(row.lastArrival,null);assert.equal(row.steps,null);assert.equal(row.lateCount,3);assert.equal(routeTimingReport(s).unreachable,3);
 });
-test('默认15晚路线、末批时间及160拍/80拍超时人数；已清源只取消非当晚计划',()=>{
+test('默认15晚路线、末批时间及160拍/80拍超时人数；当前晚保留原定预告，已清源不生成其他晚计划',()=>{
  const s=createCampaign(DEFAULTS,undefined,generateCityMap(MAP_DEFAULTS)),report=routeTimingReport(s);
  assert.equal(report.nights.length,15);assert.equal(report.farthest.sourceNumber,8);assert.equal(report.farthest.steps,68);assert.equal(report.latest.lastArrival,141);
  assert.equal(report.late,0);assert.equal(report.unreachable,0);

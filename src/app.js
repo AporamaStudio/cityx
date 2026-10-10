@@ -1,10 +1,10 @@
 import {drawFog} from './fog.js?v=2';
 import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-textures.js?v=5';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
-import {drawCampfire,drawShield,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG} from './icons.js?v=4';
+import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG} from './icons.js?v=6';
 import {createGameAudio} from './audio.js?v=5';
 import { SIZE, DEFAULTS } from './config.js?v=61';
-import { campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, towerCapacity, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=70';
+import { enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, towerCapacity, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, availableCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, outpostAt, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=71';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 const mapSettings=readMapSettings(location.search);
@@ -703,8 +703,9 @@ function update() {
   // 天亮由固定拍数决定；击杀、合流和抵达不推进这条时间进度。
   const elapsed=Math.min(state.tick,state.params.nightTicks),progress=elapsed/state.params.nightTicks*100;
   $('nightProgress').hidden=build;
-  $('nightProgressLabel').textContent=`第 ${state.day} 晚 · 天亮进度`;
-  $('nightProgressText').textContent=`${Math.floor(progress)}%${state.result?.type==='victory'?' · 收复成功':state.result?.type==='deadline'?' · 收复未完成':state.phase==='lost'?' · 失败':state.phase==='won'?' · 守住了':''}`;
+  $('nightProgressText').textContent=`${Math.floor(progress)}%`;
+  $('start').classList.toggle('night-failed',state.phase==='lost');
+  $('start').classList.toggle('night-ended',!build&&!active);
   $('nightProgressBar').setAttribute('aria-valuenow',String(Math.floor(progress)));
   $('nightProgressBar').setAttribute('aria-valuemax','100');
   $('nightProgressBar').setAttribute('aria-valuetext',`${Math.floor(progress)}%`);
@@ -714,12 +715,13 @@ function update() {
   document.body.dataset.time=dawn?'day':'night';
   $('timeIcon').setAttribute('aria-label',dawn?'白天':'夜晚');
   const goals=campaignGoals(state);
-  $('finalGoal').textContent=goals.enabled?`最终目标 · ${state.waves.length} 晚内 · 医院${goals.hospital?' ✓':' ○'} · 肃清敌源${goals.sources?' ✓':' ○'}`:'最终目标 · 完成防守实验';
+  $('finalGoal').innerHTML=goals.enabled?`<span>目标：${state.waves.length} 晚内</span><span class="goal-item${goals.hospital?' goal-complete':''}">收复医院：<span class="goal-status">${goals.hospital?'已收复':'未收复'}</span></span><span class="goal-item${goals.sources?' goal-complete':''}">摧毁全部敌源：<span class="goal-status">${goals.cleared}/${goals.total}</span></span>`:'最终目标 · 完成防守实验';
   const iconContext=$('campIcon').getContext('2d');iconContext.clearRect(0,0,64,64);drawCampfire(iconContext,4,5,54,state.hp>0);
   $('phase').textContent=`第 ${state.day} 天`;
   $('start').disabled = !build && !active;
   $('retry').disabled=!preparation; $('step').disabled = !active || !paused || !!motion?.singleStep;
-  $('start').textContent = active ? (paused ? '继续夜晚' : '暂停夜晚') : state.result?.type==='victory'?'收复成功':state.result?.type==='deadline'?'收复未完成':state.result?.type==='experiment'?'实验完成':build?'开始夜晚':state.phase==='won'?'守住了 · 即将天亮':'防守结束';
+  $('startLabel').textContent = active ? (paused ? '继续夜晚' : '暂停夜晚') : state.result?.type==='victory'?'收复成功':state.result?.type==='deadline'?'收复未完成':state.result?.type==='experiment'?'实验完成':build?'开始夜晚':state.phase==='won'?'守住了':'防守结束';
+  $('start').setAttribute('aria-label',`${$('startLabel').textContent}${build?'':`，夜晚已过 ${Math.floor(progress)}%`}`);
   for (const id of ['build','long','wall','outpost','production','housing','repair','erase','apply','addSource','applyParams','cancelParams','defaults']) $(id).disabled = !build;
   // 通用建造交互：不足价即禁用，退款或应用参数后立即恢复。
   const minimumEconomyCost=type=>Math.min(...state.sites.filter(p=>!['camp','hospital'].includes(p.role)).map(p=>{const id=key(p.x,p.y),c=plotContent(state,id),q=economyBuildQuote(state,id,type);return q.added>0&&(!c.type||c.type===type)?q.cost:Infinity;}));
@@ -762,18 +764,25 @@ function updateForecast() {
   $('forecastDay').hidden=!selectable;
   if(!selectable)$('forecastDay').value=String(state.day-1);
   const night=Number($('forecastDay').value)+1, sources=viewedSources();
-  $('forecastTitle').textContent=`共 ${sources.reduce((sum,s)=>sum+s.count,0)} 个敌群`;
+  $('forecastTitle').textContent=`原定 ${sources.reduce((sum,s)=>sum+s.count,0)} 个敌群`;
   $('forecastList').replaceChildren(...sources.map((s,i)=>{
     const row=document.createElement('li'),name=document.createElement('div'),blocks=document.createElement('div');
     row.style.setProperty('--source-color',colors[(s.sourceId?sourceNumber(s):i)%colors.length]);
+    const cleared=s.sourceId&&state.enemySources.get(s.sourceId)?.hp===0;
     name.className='forecast-source';name.textContent=`敌源 ${s.sourceId?sourceNumber(s)+1:i+1}`;
+    if(cleared){
+      const icon=document.createElement('span');icon.className='source-destroyed-icon';icon.innerHTML=SOURCE_DESTROYED_SVG;name.append(icon);
+      name.title='敌源已摧毁';name.setAttribute('aria-label',`${name.textContent}，已摧毁`);
+    }
     blocks.className='forecast-blocks';blocks.setAttribute('aria-label',`${s.count} 个敌群，每个 ${s.hp} HP`);
     for(let n=0;n<s.count;n++){
-      const block=document.createElement('span'),outcome=night===state.day?state.enemyOutcomes.get(`${i}:${n}`):null;
-      block.className=`forecast-enemy${outcome?' '+outcome:''}`;
+      const block=document.createElement('span'),status=night===state.day?enemyBatchStatus(state,{...s,index:i},n):'pending';
+      block.className=`forecast-enemy ${status}`;
       const hp=document.createElement('span');hp.textContent=s.hp;block.append(hp);
-      if(outcome){const mark=document.createElement('b');mark.className='forecast-outcome';mark.textContent=outcome==='killed'?'×':outcome==='withdrawn'?'↩':'↘';block.append(mark);}
-      block.setAttribute('aria-label',`敌群 ${n+1}，${s.hp} HP，${outcome==='killed'?'已消灭':outcome==='leaked'?'已抵达火光':outcome==='withdrawn'?'天亮撤退':'尚未结束进攻'}`);blocks.append(block);
+      const marks={killed:'×',withdrawn:'↩',leaked:'↘'};
+      if(status==='blocked'||marks[status]){const mark=document.createElement('b');mark.className='forecast-outcome';if(status==='blocked')mark.innerHTML=SPAWN_BLOCKED_SVG;else mark.textContent=marks[status];block.append(mark);}
+      const label={killed:'已消灭',blocked:'出兵已阻止，不计击杀、不发金币',leaked:'已抵达火光',withdrawn:'天亮撤退',pending:'待出场',active:'正在进攻'}[status];
+      block.title=label;block.setAttribute('aria-label',`敌群 ${n+1}，${s.hp} HP，${label}`);blocks.append(block);
     }
     row.append(name,blocks);return row;
   }));
@@ -1068,7 +1077,7 @@ function advance() {
   if(state.events.some(event=>event.type==='leak')){sound.play('hurt');flashCampHit();}
   for (const event of state.events) {
     const [x,y] = xy(event.id);
-    const defenseText={nightSkip:'来袭已结束，迎来黎明',withdraw:`${event.value} 批敌人天亮撤退`,sourceHit:`敌源 ${state.enemySources.get(event.sourceId)?.index+1} 受到 ${event.value} 点伤害`,sourceLost:`敌源 ${state.enemySources.get(event.sourceId)?.index+1} 已消灭，后续停止出兵，本晚进攻继续`,wallHit:`墙 (${x},${y}) 受到 ${event.value} 点伤害`,wallLost:`墙 (${x},${y}) 被攻破，敌人将沿原路线推进`};
+    const defenseText={nightSkip:'来袭已结束，迎来黎明',withdraw:`${event.value} 批敌人天亮撤退`,sourceHit:`敌源 ${state.enemySources.get(event.sourceId)?.index+1} 受到 ${event.value} 点伤害`,sourceLost:`敌源 ${state.enemySources.get(event.sourceId)?.index+1} 已肃清${event.prevented?`，阻止 ${event.prevented} 个未出场敌群`:'，后续停止出兵'}`,wallHit:`墙 (${x},${y}) 受到 ${event.value} 点伤害`,wallLost:`墙 (${x},${y}) 被攻破，敌人将沿原路线推进`};
     const text = defenseText[event.type]|| (event.type === 'merge' ? `(${x},${y}) ${event.members} 批合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.members} 批敌人，+${event.value} 资金` : `(${x},${y}) 火力削减 ${event.value}`);
     if(event.type==='merge'&&!explainedMerge&&currentlyVisible(event.id)){
       explainedMerge=true;$('mergeNotice').hidden=false;
@@ -1134,7 +1143,7 @@ function beginMotion(singleStep=false){
   incoming=new Map();
   const add=(id,e)=>{const groupId=enemyKey({...e,id});const old=incoming.get(groupId);if(old){old.hp+=e.hp;old.max+=e.max;old.members+=e.members;}else incoming.set(groupId,{...e,id});};
   for(const e of motion.actors)add(e.to,e);
-  for(const source of state.attacks){const age=state.tick+1-source.first;if(age>=0&&age%source.interval===0&&age/source.interval<source.count)add(key(source.x,source.y),{hp:source.hp,max:source.hp,members:1,target:source.target});}
+  for(const source of state.attacks){const age=state.tick+1-source.first;if(age>=0&&age%source.interval===0&&age/source.interval<source.count&&enemyBatchStatus(state,source,age/source.interval)!=='blocked')add(key(source.x,source.y),{hp:source.hp,max:source.hp,members:1,target:source.target});}
   update();
 }
 $('step').onclick=()=>{if(state.phase!=='battle'||!paused)return;if(motion){motion.singleStep=true;update();}else beginMotion(true);};

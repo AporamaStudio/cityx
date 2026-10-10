@@ -49,7 +49,7 @@ test('最后一晚目标齐全先判胜利；目标缺失为期限失败，守�
   const hospitalMissing=setup();hospitalMissing.day=3;hospitalMissing.params.controlRadius=1;hospitalMissing.enemySources.get('source-1').hp=0;
   finish(hospitalMissing);assert.equal(hospitalMissing.result.type,'deadline');assert.equal(hospitalMissing.result.hospital,false);
 });
-test('源头中途肃清不能取消锁定批次；最后一拍火光熄灭优先失败，不发经营钱',()=>{
+test('清源不能取消其他来源批次；最后一拍火光熄灭优先失败，不发经营钱',()=>{
   const s=setup();s.sources=[{x:15,y:24,hp:1,count:1,first:3,interval:1}];lockAttacks(s);
   beginBattle(s);stepBattle(s);s.enemySources.get('source-1').hp=0;for(let i=2;i<3;i++){stepBattle(s);assert.equal(s.phase,'battle');assert.equal(s.result,null);}
   stepBattle(s);assert.equal(s.spawned,1);assert.equal(s.result.type,'victory');assert.equal(s.hp,999);
