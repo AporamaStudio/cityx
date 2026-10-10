@@ -78,6 +78,26 @@ header{display:grid;grid-template-columns:auto auto minmax(160px,1fr) minmax(320
 .night-progress-track{position:absolute;left:0;right:0;bottom:0;height:4px;background:#243f3b55;overflow:hidden}.night-progress-track i{display:block;width:0;height:100%;background:#315f53}
 #start.night-ended:disabled{opacity:1;background:#263c37;border-color:#536b62;color:#c4dbd1}
 #start.night-failed .night-progress-track i{background:#c98275}#start.night-failed #nightProgressText{color:#ffb4a4}
+/* 长按落日只渲染按钮，蓄满才改变地图昼夜；松手平滑回到日色。 */
+#start{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#startLabel{position:relative;z-index:3}
+#start.day-end{--day-end-progress:0;--day-end-dusk:0;--day-end-dark:0;background:linear-gradient(165deg,#fff0b5,#e5be72);color:#3b3025;border-color:#d7b778;box-shadow:inset 0 1px 0 #fff6d5aa,0 3px 12px #c1974220;transition:box-shadow .18s,border-color .18s}
+#start.day-end::before,#start.day-end::after{content:'';position:absolute;inset:0;pointer-events:none;transition:opacity .22s ease-out}
+#start.day-end::before{background:linear-gradient(170deg,#de8952,#974834 65%,#5c4146);opacity:var(--day-end-dusk)}
+#start.day-end::after{background:linear-gradient(170deg,#494a50,#1b202b 70%,#10151e);opacity:var(--day-end-dark)}
+#start.day-end.charging::before,#start.day-end.charging::after{transition:none}
+#start.day-end.charging{color:var(--day-end-ink);border-color:#cd8359;box-shadow:0 0 18px #b2603428,inset 0 1px 0 #fff2c033}
+#dayEndHint{position:absolute;bottom:9px;left:0;right:0;z-index:3;font-size:10px;font-weight:500;letter-spacing:1px;opacity:.7;pointer-events:none}
+#dayEndVisual{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none}
+#dayEndVisual[hidden],#dayEndHint[hidden]{display:none}
+.day-end-sun{position:absolute;left:19px;top:18px;width:19px;height:19px;border-radius:50%;background:#fff6c9;box-shadow:0 0 12px #fff2ac80;transform:translateY(calc(var(--day-end-progress)*30px));opacity:calc(1 - var(--day-end-dark));transition:transform .22s ease-out,opacity .22s ease-out}
+.day-end-horizon{position:absolute;left:12px;top:42px;width:34px;height:17px;background:linear-gradient(180deg,#b17c4b99,#76533a00);border-top:1px solid #eac68a88}
+#start.charging .day-end-sun{transition:none}
+.day-end-fill{position:absolute;left:0;right:0;bottom:0;height:3px;background:#ffca8b;box-shadow:0 0 8px #f59a56;transform:scaleX(var(--day-end-progress));transform-origin:left;transition:transform .22s ease-out}
+#start.charging .day-end-fill{transition:none}
+body[data-phase="battle"] #start{background:linear-gradient(160deg,#39414c,#1b2330);border-color:#6c707b;color:#f3e8d2;box-shadow:inset 0 1px 0 #b2b5c022}
+body[data-phase="battle"] .night-progress-track{background:#0c142b80}body[data-phase="battle"] .night-progress-track i{background:#c59a66}
+@media(prefers-reduced-motion:reduce){#start.day-end::before,#start.day-end::after,.day-end-sun,.day-end-fill{transition:none}.day-end-sun{transform:none}}
 @media(max-width:900px){header{display:grid;grid-template-columns:auto auto minmax(0,1fr);height:auto;gap:10px;min-height:0}.brand{font-size:21px}header #phase{font-size:19px;padding:7px 10px}.objective{order:0;grid-column:1/-1}.daily-objective{font-size:13px}.map-tools{gap:6px;right:8px;bottom:8px;padding:6px}.maplegend{bottom:62px}}
 @media(max-width:420px){header{grid-template-columns:auto auto}.daily-objective{grid-column:1/-1}.map-tools{gap:4px}.map-tools button{padding:7px}.map-tools label{font-size:11px}}
 

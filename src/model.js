@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=62';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=63';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -508,6 +508,7 @@ export function validateParams(params, state, checkLayout = true) {
   if(!integer(params.renovationCostPercent,1,100))return '修缮费用占新建价须为 1–100% 整数。';
   if(!integer(params.productionBaseArea,1,SIZE*SIZE)||!integer(params.productionDensityGrowthArea,1,SIZE*SIZE)||!Number.isFinite(params.productionSmallCostFloor)||params.productionSmallCostFloor<=0||params.productionSmallCostFloor>1||!Number.isFinite(params.productionMaxDensity)||params.productionMaxDensity<1||params.productionMaxDensity>10)return '经营曲线：基准/增长面积须为 1–3600，低面积成本倍率大于 0 且不超过 1，产出密度上限为 1–10。';
   if(!integer(params.stepMs,50,5000))return '移动节拍须为 50–5000 毫秒整数。';
+  if(!integer(params.dayEndHoldMs,300,3000))return '结束白天长按时长须为300–3000毫秒整数。';
   if(!integer(params.outpostCost,1,1000)||!integer(params.outpostRadius,1,30)||!integer(params.campRepairCost,1,1000))return '瞭望塔价格 1–1000、半径 1–30；火光每 HP 修复单价 1–1000。';
   if(!Number.isFinite(params.nightTowerCostMultiplier)||params.nightTowerCostMultiplier<1||params.nightTowerCostMultiplier>10)return '夜间金币加急倍率须为1–10。';
   if(!integer(params.outpostMinDistance,1,30))return '瞭望塔最小间距须为1–30格。';

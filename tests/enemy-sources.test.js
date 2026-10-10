@@ -188,6 +188,12 @@ test('空闲夜末动画延迟结算而不补跑拍数；收入与回血只结�
  for(const nightIdleTransitionMs of [0,800,3000])assert.equal(validateParams({...s.params,nightIdleTransitionMs},s,false),'');
 });
 
+test('结束白天确认时长只接受300–3000毫秒整数',()=>{
+ const s=setup();
+ for(const dayEndHoldMs of [299,3001,500.5,NaN])assert.match(validateParams({...s.params,dayEndHoldMs},s,false),/结束白天长按/);
+ for(const dayEndHoldMs of [300,1000,3000])assert.equal(validateParams({...s.params,dayEndHoldMs},s,false),'');
+});
+
 test('进度过渡不能跳过未出场敌人或任何剩余清源攻击',()=>{
  const s=setup({nightTicks:160});beginBattle(s);assert.equal(finishIdleNight(s),false);assert.equal(s.tick,0);
  s.sources=[];s.attacks=[];s.towers.set(key(14,23),'B');s.enemySources.get('source-1').hp=200;s.enemySources.get('source-1').max=200;

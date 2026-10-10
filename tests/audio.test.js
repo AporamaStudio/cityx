@@ -86,3 +86,20 @@ test('收复完成音效保持舒展，冻结配乐并遵守音效关闭',async(
   assert.ok(s.calls.length>=7);assert.ok(s.calls.filter(c=>c.kind==='tone').every(c=>c.end-c.at>2));
   s.calls.length=0;s.ctx.currentTime=5;s.sound.configure({effects:false});s.sound.play('victory');assert.equal(s.calls.length,0);
 });
+
+test('结束白天蓄力可取消，所有声音淡出停止，重按不叠加上一轮',async()=>{
+  const s=setup();s.sound.configure({music:false});await s.sound.beginDayEnd(1000);
+  assert.equal(s.calls.length,4);const first=[...s.calls];
+  s.ctx.currentTime=.2;s.sound.endDayEnd();assert.ok(first.every(c=>c.end<=.29));
+  await s.sound.beginDayEnd(1000);assert.equal(s.calls.length,8);
+  s.ctx.currentTime=.4;s.sound.setHidden(true);assert.ok(s.calls.slice(4).every(c=>c.end<=.49));
+});
+
+test('蓄力等待首次解锁时松手，不会迟到播放；关闭音效停止正在蓄力的声音',async()=>{
+  const s=setup();s.sound.configure({music:false});let finish;
+  s.ctx.resume=()=>new Promise(resolve=>{finish=()=>{s.ctx.state='running';resolve();};});
+  const pending=s.sound.beginDayEnd(1000);s.sound.endDayEnd();finish();await pending;assert.equal(s.calls.length,0);
+  await s.sound.beginDayEnd(1000);assert.equal(s.calls.length,4);
+  s.ctx.currentTime=.25;s.sound.configure({effects:false});assert.ok(s.calls.every(c=>c.end<=.34));
+  await s.sound.beginDayEnd(1000);assert.equal(s.calls.length,4);s.sound.endDayEnd();
+});

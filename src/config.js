@@ -20,6 +20,8 @@ export const DEFAULTS = {
   sourceCellHPMin:12, sourceCellHPMax:30, sourceRegenHP:0, nightTicks:160, nightCleanupSpeed:2,
   // 仅空闲夜末的进度过渡，0关闭动画；不增加战斗拍数或清源伤害。
   nightIdleTransitionMs:800,
+  // 结束白天需连续按住确认；仅影响操作，不占用夜晚战斗拍数。
+  dayEndHoldMs:1000,
   weapons: {
     A: { shape: 'square', range: 1, power: 2, cost: 10 },
     B: { shape: 'square', range: 3, power: 1, cost: 20 },
