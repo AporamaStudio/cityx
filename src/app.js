@@ -136,10 +136,34 @@ function fitResources(){
   for(const slot of document.querySelectorAll('.resource-preview'))fitResourcePreview(slot);
 }
 let selectedSource=null;
+let forecastPointerSource=null,forecastFocusSource=null,mapPointerSource=null;
+let sourceHighlightId=null,sourceHighlightAt=null;
+const sourceIdentity=source=>source.id??source.sourceId??`cell:${key(source.x,source.y)}`;
+const linkedSource=()=>forecastPointerSource??mapPointerSource??forecastFocusSource;
+// 悬停只改关联样式与重画请求，不重建预告或整图建设缓存。
+function syncSourceHighlight(){
+  const linked=linkedSource();
+  // 同一源头的逐拍刷新不重播红光；只在关联对象切换时触发一次。
+  if(linked!==sourceHighlightId){sourceHighlightId=linked;sourceHighlightAt=linked&&!reducedMotion.matches?performance.now():null;}
+  const id=forecastPointerSource??(Number($('forecastDay').value)+1===state.day?mapPointerSource:null)??forecastFocusSource;
+  for(const row of $('forecastList').children)row.classList.toggle('source-highlighted',row.dataset.sourceId===id);
+  draw();
+}
 const sourceNumber=plan=>state.enemySources?.get(plan?.sourceId)?.index??state.sources.indexOf(plan);
 const selectedWeapon = () => previewParams().weapons[weaponType()];
 // 调试显示不写入探索记录，重新显示迷雾时仍保持真实探索进度。
 const sourceEditing=()=>$('settings').open&&state.phase==='build';
+function displayedEnemySources(){
+  const sources=sourceEditing()?[...state.enemySources.values()].map(s=>({...s,active:state.sources.some(p=>p.sourceId===s.id)})):knownSources(state);
+  const preview=editorSourcePreview?{...editorSourcePreview,hp:sourceMaxHP(editorSourcePreview,state.params),active:state.sources.some(p=>p.sourceId===editorSourcePreview.id)}:null;
+  return [...sources.filter(s=>s.id!==preview?.id),...(preview?[preview]:[])];
+}
+function updateMapSourceHover(){
+  const [x,y]=hover===null?[-1,-1]:xy(hover);
+  const source=displayedEnemySources().find(s=>x>=(s.bx??s.x)&&x<(s.bx??s.x)+(s.width??1)&&y>=(s.by??s.y)&&y<(s.by??s.y)+(s.height??1));
+  const id=source?sourceIdentity(source):null;
+  if(id!==mapPointerSource){mapPointerSource=id;syncSourceHighlight();}
+}
 const mapFogEnabled=()=>$('showFog').checked&&!sourceEditing();
 const visibleCell=id=>!mapFogEnabled()||isExplored(state,id);
 const currentlyVisible=id=>!mapFogEnabled()||sight.has(id);
@@ -174,7 +198,7 @@ function constrainCamera(){
 function changeZoom(factor, x = width / 2, y = (height-cameraBottom) / 2) {
   const old = zoom; zoom = limitZoom(zoom * factor,base);
   panX = x - (x - panX) * zoom / old; panY = y - (y - panY) * zoom / old;
-  constrainCamera();hover=null;
+  constrainCamera();hover=null;updateMapSourceHover();
   draw();
 }
 function cellAt(event) {
@@ -186,6 +210,31 @@ function cellAt(event) {
 let drawPending=false,mapView=null;
 // 输入与动画可以同时要求刷新，但同一浏览器帧只重画一次。
 function draw(){drawPending=true;}
+// 四角框包住编号和HP，尺寸按屏幕像素兜底，缩小时仍可快速定位。
+function drawSourceLocator(source,size){
+  const x=source.bx??source.x,y=source.by??source.y,w=source.width??1,h=source.height??1;
+  ctx.save();ctx.font=`600 ${Math.max(.44,10/size)}px system-ui`;
+  const shield=Math.max(.48,10/size),hasBadge=source.hp!==0&&source.id;
+  const contentW=hasBadge?Math.max(w,shield+.6+ctx.measureText(String(source.hp)).width):w;
+  const contentH=h+(hasBadge?shield*1.27:0),pad=Math.max(.5,4/size);
+  const fw=Math.max(contentW+pad*2,32/size),fh=Math.max(contentH+pad*2,32/size);
+  const cx=x+w/2,cy=y+contentH/2,corner=Math.min(fw*.25,fh*.25,12/size);
+  const corners=expand=>{
+    const left=cx-fw/2-expand,right=cx+fw/2+expand,top=cy-fh/2-expand,bottom=cy+fh/2+expand;
+    ctx.beginPath();
+    for(const [sx,sy,dx,dy] of [[left,top,1,1],[right,top,-1,1],[left,bottom,1,-1],[right,bottom,-1,-1]]){
+      ctx.moveTo(sx,sy+dy*corner);ctx.lineTo(sx,sy);ctx.lineTo(sx+dx*corner,sy);
+    }
+  };
+  ctx.lineJoin='round';ctx.lineCap='round';
+  if(sourceHighlightAt!==null&&!reducedMotion.matches){
+    const t=Math.min(1,(performance.now()-sourceHighlightAt)/360);
+    ctx.globalAlpha=.65*(1-t);ctx.strokeStyle='#e56851';ctx.lineWidth=3/size;
+    ctx.shadowColor='#b72d21';ctx.shadowBlur=12;corners((1-(1-t)**2)*12/size);ctx.stroke();
+  }
+  ctx.globalAlpha=1;ctx.shadowBlur=0;ctx.strokeStyle='#4a1313';ctx.lineWidth=5/size;corners(0);ctx.stroke();
+  ctx.strokeStyle='#f08062';ctx.lineWidth=2.5/size;ctx.shadowColor='#9f211b';ctx.shadowBlur=7;ctx.stroke();ctx.restore();
+}
 function mapDisplay(){
   if(!mapView){
     const params=previewParams(),controlState={...state,params},raw=rawControlMask(controlState),controlled=controlMask(controlState,params.controlRadius,raw);
@@ -508,27 +557,25 @@ function paintMap() {
   ctx.restore();
   if(mapFogEnabled())drawFog(ctx,SIZE,sight,state.explored,nightMix,reducedMotion.matches?0:performance.now()/1000,bounds);
   // 已知感染核心在雾上保留身份；危险状态只表达今晚计划，不预告激活日期。
-  const displayedSources=sourceEditing()?[...state.enemySources.values()].map(s=>({...s,active:state.sources.some(p=>p.sourceId===s.id)})):knownSources(state);
-  const sourcePreview=editorSourcePreview?{...editorSourcePreview,hp:sourceMaxHP(editorSourcePreview,state.params),active:state.sources.some(p=>p.sourceId===editorSourcePreview.id)}:null;
-  for(const source of [...displayedSources.filter(s=>s.id!==sourcePreview?.id),...(sourcePreview?[sourcePreview]:[])]){
+  for(const source of displayedEnemySources()){
     const x=source.bx??source.x,y=source.by??source.y,w=source.width??1,h=source.height??1,alive=source.hp!==0;
-    const pulse=reducedMotion.matches?1:.5+.5*Math.sin(performance.now()*Math.PI*2/1500),danger=alive&&source.active;
-    ctx.save();ctx.globalAlpha=alive?(danger?.7+.3*pulse:.48):.4;
-    ctx.fillStyle=alive?'#542b32':'#35433d';ctx.strokeStyle=alive?(danger?'#ff574b':'#b07e78'):'#9ac8ad';ctx.lineWidth=Math.max(.09,1.2/size);
+    const pulse=reducedMotion.matches?1:.5+.5*Math.sin(performance.now()*Math.PI*2/1500),danger=alive&&source.active,highlighted=sourceIdentity(source)===linkedSource();
+    ctx.save();ctx.globalAlpha=highlighted?1:alive?(danger?.7+.3*pulse:.48):.4;
+    ctx.fillStyle=alive?(highlighted?'#54231f':'#542b32'):'#35433d';ctx.strokeStyle=alive?(danger?'#ff574b':'#b07e78'):'#9ac8ad';ctx.lineWidth=Math.max(.09,1.2/size);
     ctx.setLineDash(danger?[]:[.2,.14]);
     if(danger){ctx.shadowColor='#ff3c31';ctx.shadowBlur=reducedMotion.matches?9:8+8*pulse;}
     ctx.beginPath();ctx.moveTo(x+.20,y+.04);ctx.lineTo(x+w-.20,y+.04);ctx.lineTo(x+w-.04,y+.20);ctx.lineTo(x+w-.04,y+h-.20);ctx.lineTo(x+w-.20,y+h-.04);ctx.lineTo(x+.20,y+h-.04);ctx.lineTo(x+.04,y+h-.20);ctx.lineTo(x+.04,y+.20);ctx.closePath();ctx.fill();ctx.stroke();
     ctx.shadowBlur=0;ctx.setLineDash([]);
     label(alive?source.index+1:'×',x+w/2,y+h/2,alive?'#edd4ca':'#b9d8c1',Math.max(.4,8/size));
     ctx.restore();
-    if($('settings').open&&Number.isInteger(source.x)&&Number.isInteger(source.y)){ctx.save();ctx.strokeStyle='#ffc17c';ctx.lineWidth=.12;ctx.strokeRect(source.x+.15,source.y+.15,.7,.7);ctx.restore();}
+    if(highlighted)drawSourceLocator(source,size);
     if(!alive||!source.id)continue;
     // 所有核心的徽记统一放占地下沿外，与中心编号分开，放大后也不会遮挡。
-    ctx.save();ctx.globalAlpha=danger?1:.72;ctx.font=`600 ${Math.max(.44,10/size)}px system-ui`;ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.save();ctx.globalAlpha=highlighted||danger?1:.72;ctx.font=`600 ${Math.max(.44,10/size)}px system-ui`;ctx.textAlign='left';ctx.textBaseline='middle';
     const shield=Math.max(.48,10/size),badgeWidth=shield+.18+ctx.measureText(String(source.hp)).width+.22;
     const cx=x+w/2,cy=y+h+shield*.65;
-    ctx.fillStyle='#211d24ee';ctx.fillRect(cx-badgeWidth/2-.10,cy-shield*.62,badgeWidth+.20,shield*1.24);
-    ctx.strokeStyle=danger?'#bb7865':'#6b5655';ctx.lineWidth=Math.max(.05,.7/size);ctx.strokeRect(cx-badgeWidth/2-.10,cy-shield*.62,badgeWidth+.20,shield*1.24);
+    ctx.fillStyle=highlighted?'#321817ee':'#211d24ee';ctx.fillRect(cx-badgeWidth/2-.10,cy-shield*.62,badgeWidth+.20,shield*1.24);
+    ctx.strokeStyle=highlighted?'#d55746':danger?'#bb7865':'#6b5655';ctx.lineWidth=Math.max(.05,.7/size);ctx.strokeRect(cx-badgeWidth/2-.10,cy-shield*.62,badgeWidth+.20,shield*1.24);
     drawShield(ctx,cx-badgeWidth/2,cy-shield/2,shield);ctx.fillStyle='#ffe6cc';ctx.fillText(source.hp,cx-badgeWidth/2+shield+.18,cy);
     const value=sourceDamage.get(source.id)||0;
     if(($('heat').checked||selectedSource===source.id)&&value){
@@ -788,8 +835,19 @@ function updateForecast() {
   if(!selectable)$('forecastDay').value=String(sourceEditing()?editingNight-1:state.day-1);
   const night=Number($('forecastDay').value)+1, sources=viewedSources();
   $('forecastTitle').textContent=`原定 ${sources.reduce((sum,s)=>sum+s.count,0)} 个敌群`;
-  $('forecastList').replaceChildren(...sources.map((s,i)=>{
-    const row=document.createElement('li'),name=document.createElement('div'),blocks=document.createElement('div');
+  // 复用同源行，逐拍刷新不会打断悬停、触摸选择或键盘聚焦。
+  const existing=new Map([...$('forecastList').children].map(row=>[row.dataset.sourceId,row]));
+  const rows=sources.map((s,i)=>{
+    const id=sourceIdentity(s),row=existing.get(id)??document.createElement('li'),name=document.createElement('div'),blocks=document.createElement('div');
+    if(!existing.has(id)){
+      row.dataset.sourceId=id;row.tabIndex=0;
+      const hoverRow=()=>{if(forecastPointerSource!==id){forecastPointerSource=id;syncSourceHighlight();}};
+      row.addEventListener('pointerenter',hoverRow);row.addEventListener('pointermove',hoverRow);
+      row.addEventListener('pointerleave',()=>{if(forecastPointerSource===id)forecastPointerSource=null;syncSourceHighlight();});
+      row.addEventListener('focus',()=>{forecastFocusSource=id;forecastPointerSource=null;mapPointerSource=null;syncSourceHighlight();});
+      row.addEventListener('blur',()=>{if(forecastFocusSource===id)forecastFocusSource=null;syncSourceHighlight();});
+      row.addEventListener('click',()=>row.focus({preventScroll:true}));
+    }
     row.style.setProperty('--source-color',colors[(s.sourceId?sourceNumber(s):i)%colors.length]);
     const cleared=s.sourceId&&state.enemySources.get(s.sourceId)?.hp===0;
     name.className='forecast-source';name.textContent=`敌源 ${s.sourceId?sourceNumber(s)+1:i+1}`;
@@ -806,9 +864,17 @@ function updateForecast() {
       const label={killed:'已消灭',blocked:'出兵已阻止，不计击杀、不发金币',leaked:'已抵达火光',withdrawn:'天亮撤退',pending:'待出场',active:'正在进攻'}[status];
       block.title=label;block.setAttribute('aria-label',`敌群 ${n+1}，${s.hp} HP，${label}`);blocks.append(block);
     }
-    row.append(name,blocks);return row;
-  }));
+    row.replaceChildren(name,blocks);return row;
+  });
+  const ids=new Set(rows.map(row=>row.dataset.sourceId));
+  if(!ids.has(forecastPointerSource))forecastPointerSource=null;
+  if(!ids.has(forecastFocusSource))forecastFocusSource=null;
+  if(rows.length!==$('forecastList').children.length||rows.some((row,i)=>$('forecastList').children[i]!==row))$('forecastList').replaceChildren(...rows);
+  syncSourceHighlight();
 }
+document.addEventListener('pointerdown',event=>{
+  if(forecastFocusSource&&!$('forecastList').contains(event.target)){forecastFocusSource=null;syncSourceHighlight();}
+});
 $('forecastDay').onchange=()=>{updateForecast();draw();};
 // 关闭跨晚预览时立即回到当晚，避免地图残留其他晚的路线。
 $('allowForecastSelection').onchange=()=>{updateForecast();draw();};
@@ -922,6 +988,8 @@ function refreshParams(){
   update();
 }
 function clearPlayback() {
+  forecastPointerSource=null;forecastFocusSource=null;mapPointerSource=null;
+  sourceHighlightId=null;sourceHighlightAt=null;
   $('campHitFlash').getAnimations().forEach(animation=>animation.cancel());
   nightOutro=null;dawnAt=0;receiptUntil=0;$('economyReceipt').hidden=true;
   selectedSource=null;paused=false;timer=0;motion=null;placementFx=null;impactAge=1000;incoming.clear();recentGain=0;gainUntil=0;$('moneyGain').textContent='';messages=[];$('log').replaceChildren();
@@ -1057,7 +1125,7 @@ $('sourceDefaults').onclick=()=>{
   notify('默认敌源与 15 晚计划已填入，应用并重开后生效。');update();
 };
 $('sourceAudit').onclick=()=>{if(sourceConfigurationDirty()||paramsDirty()){showTopNotice('请先应用或取消配置，再校验路线。');return;}$('auditRoutes').click();};
-$('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;constrainCamera();hover=null;draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;
+$('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;constrainCamera();hover=null;updateMapSourceHover();draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;
 // 右键退出当前工具，保留悬停查看与地图移动，不再执行建设或拆除。
 canvas.addEventListener('contextmenu',e=>{e.preventDefault();tool=null;selectedSource=null;dragging=null;notify('');update();});
 canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();changeZoom(e.deltaY<0?1.12:1/1.12,e.clientX-r.left,e.clientY-r.top);},{passive:false});
@@ -1073,7 +1141,7 @@ canvas.addEventListener('pointermove',e=>{
     if(dragging.moved||dragging.panOnly){panX+=e.clientX-dragging.x;panY+=e.clientY-dragging.y;constrainCamera();}
     dragging.x=e.clientX;dragging.y=e.clientY;
   }
-  hover=cellAt(e);draw();
+  hover=cellAt(e);updateMapSourceHover();draw();
 });
 canvas.addEventListener('pointerup',e=>{
   const shouldPlace=dragging&&!dragging.moved&&!dragging.panOnly;dragging=null;
@@ -1115,7 +1183,7 @@ canvas.addEventListener('pointerup',e=>{
 });
 canvas.addEventListener('pointercancel',()=>{dragging=null;});
 canvas.addEventListener('lostpointercapture',()=>{dragging=null;});
-canvas.addEventListener('pointerleave',()=>{hover=null;draw();});
+canvas.addEventListener('pointerleave',()=>{hover=null;updateMapSourceHover();draw();});
 new ResizeObserver(()=>resize()).observe(viewport);
 new ResizeObserver(fitResources).observe(document.querySelector('.wallet'));
 // 预告选项跟随实际波次，避免增加夜晚后界面仍停在前三晚。
@@ -1267,6 +1335,8 @@ function frame(now){
   if(($('showFog').checked||knownSources(state).some(s=>s.hp>0&&s.active))&&!reducedMotion.matches&&now-lastFogFrame>120){lastFogFrame=now;draw();}
   // 即使夜晚暂停或白天待修，低血量篝火仍提示；减少动态偏好改用常亮红色。
   if(!state.result&&campCritical(state)&&!reducedMotion.matches&&!document.hidden&&now-lastFogFrame>80){lastFogFrame=now;draw();}
+  // 一次短红光结束后停止额外重画，保留静态定位框。
+  if(sourceHighlightAt!==null){draw();if(reducedMotion.matches||now-sourceHighlightAt>=360)sourceHighlightAt=null;}
   if(nightOutro&&!document.hidden){
     nightOutro.elapsed=Math.min(nightOutro.duration,nightOutro.elapsed+elapsed);
     if(nightOutro.elapsed>=nightOutro.duration){nightOutro=null;if(finishIdleNight(state))presentNightEnd();else update();}
