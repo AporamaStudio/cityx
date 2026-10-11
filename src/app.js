@@ -558,9 +558,9 @@ function paintMap() {
     const occupants=(motion?motion.actors:state.enemies).filter(e=>e.id===enemy.id);
     if(occupants.length>1){const slot=Math.max(0,occupants.findIndex(e=>e.target===enemy.target));x+=(slot%2? .23:-.23);y+=Math.floor(slot/2)*.3;scale*=.55;}
     ctx.save();ctx.globalAlpha=alpha;ctx.translate(x+.5,y+.5);ctx.scale(scale,scale);ctx.translate(-.5,-.5);
-    ctx.fillStyle=enemy.members>1?'#ffb079':'#f28780';ctx.fillRect(.04,.06,.92,.83);
+    // 合流保持同一种敌人外观；瞬间膨胀在结算阶段表现。
+    ctx.fillStyle='#f28780';ctx.fillRect(.04,.06,.92,.83);
     label(enemy.hp,.5,.42,'#321d23',Math.max(.46,10/size));ctx.fillStyle='#552b30';ctx.fillRect(.08,.73,.84,.1);ctx.fillStyle='#fff1c4';ctx.fillRect(.08,.73,.84*Math.max(0,Math.min(1,barHP/enemy.max)),.1);
-    if(enemy.members>1){ctx.strokeStyle='#ffe6b9';ctx.lineWidth=.07;ctx.strokeRect(.04,.06,.92,.83);}
     if(!reducedMotion.matches&&impact<1&&state.events.some(e=>e.type==='hit'&&e.id===enemy.id&&e.target===enemy.target)){
       ctx.fillStyle=`rgba(255,250,220,${.45*(1-impact)})`;ctx.fillRect(.04,.06,.92,.83);
     }
@@ -573,7 +573,7 @@ function paintMap() {
     for(const enemy of state.enemies){
       const [x,y]=xy(enemy.id), before=incoming.get(enemyKey(enemy))?.hp ?? enemy.hp;
       const merged=state.events.some(e=>e.type==='merge'&&e.id===enemy.id&&e.target===enemy.target);
-      drawEnemy(enemy,x,y,merged?1+.16*Math.sin(impact*Math.PI):1,1,before+(enemy.hp-before)*impact);
+      drawEnemy(enemy,x,y,merged&&!reducedMotion.matches?1+.16*Math.sin(impact*Math.PI):1,1,before+(enemy.hp-before)*impact);
     }
     if(impact<1)for(const event of state.events){
       if(event.type==='nightSkip')continue; // 空闲跳时不是受击，不绘制伤害反馈。
