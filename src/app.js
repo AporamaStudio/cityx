@@ -1,11 +1,11 @@
-import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=7';
-import {createTowerOverlay} from './tower-overlay.js?v=6';
-import {drawRoadTexture,drawBlockTexture,drawCitySurroundings} from './city-textures.js?v=9';
+import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=9';
+import {createTowerOverlay} from './tower-overlay.js?v=7';
+import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings} from './city-textures.js?v=11';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG} from './icons.js?v=6';
 import {createGameAudio} from './audio.js?v=7';
-import { SIZE, DEFAULTS } from './config.js?v=64';
-import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=79';
+import { SIZE, DEFAULTS } from './config.js?v=65';
+import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=80';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -69,7 +69,7 @@ let dayEndHold=null,dayEndReturn=null,dayEndProgress=0,sceneProgress=-1,duskMix=
 let nightVisualTick=0;
 const effectiveSpeed=()=>sourceCleanup?Math.max(playbackSpeed,state.params.nightCleanupSpeed):playbackSpeed;
 // 只对环境配色插值，敌人、路线、血条等决策信息不经过压暗滤镜。
-const terrainColors={groundA:[[88,99,88],[21,32,49]],groundB:[[94,105,94],[25,37,54]],grid:[[114,125,112],[43,58,77]],wall:[[130,137,124],[69,82,101]],fog:[[86,103,98],[20,32,45]]};
+const terrainColors={groundA:[[88,99,88],[21,32,49]],groundB:[[94,105,94],[25,37,54]],grid:[[114,125,112],[43,58,77]],wall:[[130,137,124],[69,82,101]],fog:[[86,103,98],[20,32,45]],unknownGround:[[139,157,161],[59,80,93]],unknownRoad:[[120,141,150],[48,69,83]]};
 function terrainColor(name){
   const [day,night]=terrainColors[name];return `rgb(${day.map((v,i)=>Math.round(v+(night[i]-v)*nightMix)).join(',')})`;
 }
@@ -350,28 +350,29 @@ function paintMap() {
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
   drawCloudBackdrop(ctx,nightMix,cloudTime,{left:-panX/size,top:-panY/size,right:(width-panX)/size,bottom:(height-panY)/size},duskMix);
-  drawCitySurroundings(ctx,cityLayout,nightMix,mapFogEnabled()?state.explored:null,backdrop);
+  // 外围只有无交互的楼群与道路轮廓，可与地图内的未知体量连续衔接。
+  drawCitySurroundings(ctx,cityLayout,nightMix,null,backdrop);
   // 游玩时受探索遮罩约束；白天展开敌源编辑仅临时预览全图，不写探索记录。
   ctx.fillStyle=palette.fog;ctx.fillRect(0,0,SIZE,SIZE);
-  if(!visibleCell(key(30,15))){ctx.fillStyle='#8997a8';ctx.font='600 1.5px system-ui';ctx.textAlign='center';ctx.fillText('未探索 · 向北推进',30,15);}
 
   const eligibleCells=weaponPlacementReady?view.towers.eligible(weaponType()):new Set();
   for (let y = bounds.top; y < bounds.bottom; y++) for (let x = bounds.left; x < bounds.right; x++) {
     const id = key(x, y), power = fire.get(id) || 0;
+    if(!visibleCell(id)){
+      ctx.fillStyle=state.layout?.tiles[id]==='road'?palette.unknownRoad:palette.unknownGround;
+      ctx.fillRect(x,y,1,1);continue;
+    }
     ctx.fillStyle = tool!==null&&(x + y) % 2 ? palette.groundA : palette.groundB;
     ctx.fillRect(x, y, 1, 1);
     if(state.layout?.tiles[id]==='road')drawRoadTexture(ctx,state.layout,x,y,nightMix);
     if(view.towers.cellSites[id]&&!state.blocked.has(id)){ctx.fillStyle=nightMix>.5?'#2c4841':'#77967b';ctx.fillRect(x,y,1,1);}
-    if ($('heat').checked && power) { ctx.fillStyle = `rgba(99,211,166,${Math.min(.6,.17 + power * .045)})`; ctx.fillRect(x, y, 1, 1); }
+    if ($('heat').checked && power && currentlyVisible(id)) { ctx.fillStyle = `rgba(99,211,166,${Math.min(.6,.17 + power * .045)})`; ctx.fillRect(x, y, 1, 1); }
     if (state.walls.has(id)&&!state.blocked.has(id)) {
       ctx.fillStyle = palette.wall; ctx.fillRect(x + .05, y + .05, .9, .9);
       ctx.fillStyle='#0c171c77';ctx.fillRect(x+.05,y+.78,.9,.17);
       ctx.fillStyle='#93a197';ctx.fillRect(x+.05,y+.05,.9,.10);
       ctx.strokeStyle = '#81918b'; ctx.lineWidth = .045; ctx.beginPath(); ctx.moveTo(x + .15, y + .8); ctx.lineTo(x + .8, y + .15); ctx.stroke();
     }
-    const wallBody=state.wallHealth.get(id);
-    if(wallBody?.hp===0){ctx.fillStyle='#956b57';ctx.fillRect(x+.1,y+.6,.8,.24);ctx.strokeStyle='#dfaa81';ctx.lineWidth=.06;ctx.beginPath();ctx.moveTo(x+.2,y+.2);ctx.lineTo(x+.8,y+.8);ctx.stroke();}
-    if(wallBody&&wallBody.hp>0&&wallBody.hp<wallBody.max){ctx.fillStyle='#533a32';ctx.fillRect(x+.1,y+.85,.8,.1);ctx.fillStyle='#ecc58f';ctx.fillRect(x+.1,y+.85,.8*wallBody.hp/wallBody.max,.1);}
     if(postGhost&&previewControlled.has(id)&&!controlled.has(id)){ctx.fillStyle='#f0d18b66';ctx.fillRect(x,y,1,1);}
     if (!controlled.has(id)) {ctx.fillStyle=state.layout?.tiles[id]==='road'?'#07121522':'#07121577';ctx.fillRect(x,y,1,1);}
     else {
@@ -393,10 +394,42 @@ function paintMap() {
   if(nightMix>0){
     ctx.save();ctx.globalAlpha=nightMix;
     if(state.hp>0){const [x,y]=xy(state.camp);lamp(x+.5,y+.5,3,'#ffbe6855');}
-    for(const [id,p] of state.outposts){const [x,y]=xy(id);lamp(x+.5,y+.5,1.7,'#9bddf344');}
-    for(const p of state.sites)if(state.production.has(key(p.x,p.y))&&productionActive(state,key(p.x,p.y)))lamp(p.x+(p.width??p.size)/2,p.y+(p.height??p.size)/2,Math.max(p.width??p.size,p.height??p.size),'#f4d68b33');
+    for(const [id,p] of state.outposts){if(!currentlyVisible(id))continue;const [x,y]=xy(id);lamp(x+.5,y+.5,1.7,'#9bddf344');}
+    for(const p of state.sites)if(currentlyVisible(key(p.x,p.y))&&state.production.has(key(p.x,p.y))&&productionActive(state,key(p.x,p.y)))lamp(p.x+(p.width??p.size)/2,p.y+(p.height??p.size)/2,Math.max(p.width??p.size,p.height??p.size),'#f4d68b33');
     ctx.restore();
   }
+  for(const p of state.sites){
+    if(!inView(p.x,p.y,p.width??p.size,p.height??p.size))continue;
+    const {x,y}=p,n=p.width??p.size,m=p.height??p.size,id=key(x,y),built=state.production.has(id),active=built&&productionActive(state,id),selected=hoveredPlot===id&&(['production','housing'].includes(tool)||(tool==='erase'&&['production','housing','ruin'].includes(demolitionQuote(state,hover).type)));
+    const overlay=view.towers.plots.get(id),empty=overlay.content.status==='empty';
+    if(!overlay.controlled&&!overlay.cells.every(visibleCell)){
+      if(overlay.footprint.length)drawCitySilhouette(ctx,p,nightMix);continue;
+    }
+    // 悬停时把街区作为一个操作对象，盖住内部格线，避免误认为逐格恢复。
+    if(view.sourceSites.has(id)){ctx.fillStyle=nightMix>.5?'#322c36':'#67504f';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);continue;}
+    if(p.role==='camp'){ctx.fillStyle=nightMix>.5?'#49433a':'#ad9468';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);ctx.strokeStyle='#e8c481';ctx.lineWidth=.10;ctx.strokeRect(x+.12,y+.12,n-.24,m-.24);continue;}
+    if(empty){ctx.strokeStyle=selected?'#fff0ae':'#a8d5ad';ctx.lineWidth=selected?.12:.06;ctx.setLineDash([.2,.12]);ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);ctx.setLineDash([]);continue;}
+    // 按物理 footprint 画建筑，屋顶炮位保留建筑底色；经营面积独立计算。
+    ctx.save();if(!overlay.controlled&&!overlay.cells.some(currentlyVisible))ctx.globalAlpha=.68;ctx.beginPath();
+    for(const cell of overlay.footprint){if(postGhost&&cell===hover)continue;const [cx,cy]=xy(cell);ctx.rect(cx,cy,1,1);}ctx.clip();
+    ctx.fillStyle=selected?(active?'#527e59':built?'#80594e':'#655f3d'):active?'#527e59':built?'#80594e':nightMix>.5?'#494b42':'#81745b';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);
+    ctx.strokeStyle=selected?'#fff0ae':productionControlled(previewState,id)?'#f5d789':'#a29670';ctx.lineWidth=selected?.12:.06;ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);
+    // 同一整块用材质区分废墟、生产和居住，日夜分别取缓存贴图。
+    drawBlockTexture(ctx,p,overlay.content.status==='ruin'?`${overlay.content.type}-ruin`:overlay.content.type,nightMix);
+    if(p.role==='hospital'){ctx.fillStyle='#cbd7cb';ctx.fillRect(x+3,y+3,4,6);ctx.fillStyle='#478b80';ctx.fillRect(x+4.5,y+4,1,4);ctx.fillRect(x+3.5,y+5.5,3,1);}
+    if(p.special){ctx.strokeStyle='#d5b5fc';ctx.lineWidth=.12;ctx.strokeRect(x+.16,y+.16,n-.32,m-.32);}
+    if(selected)for(const cell of overlay.cells)if(!inControl(previewState,cell)){const [cx,cy]=xy(cell);ctx.fillStyle='#ed665877';ctx.fillRect(cx,cy,1,1);}
+    if(active&&nightMix>0){
+      ctx.save();ctx.globalAlpha=nightMix;ctx.fillStyle='#ffe4a1';
+      for(let i=0;i<n;i++){ctx.fillRect(x+.18+i,y+.18,.18,.18);ctx.fillRect(x+.18+i,y+m-.36,.18,.18);}ctx.restore();
+    }
+    ctx.restore();
+    const occupied=new Set(overlay.footprint);ctx.strokeStyle=selected?'#fff0ae':'#b2a47b';ctx.lineWidth=.06;ctx.beginPath();
+    for(const cell of occupied){const [cx,cy]=xy(cell);if(!occupied.has(key(cx-1,cy))){ctx.moveTo(cx,cy);ctx.lineTo(cx,cy+1);}if(!occupied.has(key(cx+1,cy))){ctx.moveTo(cx+1,cy);ctx.lineTo(cx+1,cy+1);}if(!occupied.has(key(cx,cy-1))){ctx.moveTo(cx,cy);ctx.lineTo(cx+1,cy);}if(!occupied.has(key(cx,cy+1))){ctx.moveTo(cx,cy+1);ctx.lineTo(cx+1,cy+1);}}ctx.stroke();
+    // 街区标签在屏幕空间绘制，缩小棋盘时仍保持可读。
+  }
+  if(mapFogEnabled())drawFog(ctx,SIZE,controlled,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom,controlState.params.fogThinCells,controlState.params.fogDenseCells);
+  // 信息先按既有权限筛选，再画在环境云上，避免战斗与操作被薄云盖住。
   const actualNight=state.phase==='battle'&&Number($('forecastDay').value)===state.day-1;
   const displayedRoutes=actualNight?battleRoutes(state):plannedRoutes.map(attack=>({...attack,future:false}));
   const routeSources=viewedSources(),linked=linkedSource();
@@ -456,7 +489,7 @@ function paintMap() {
   const label = (text,x,y,color,font=.4) => {ctx.fillStyle=color;ctx.font=`600 ${font}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,x,y);};
   for (const id of new Set([...($('heat').checked?fire.keys():[]),...added])) {
     const [x,y]=xy(id), changed=added.has(id);if(!inView(x,y))continue;
-    if(!state.walls.has(id)&&!sourceFootprint.has(id)){
+    if(currentlyVisible(id)&&!state.walls.has(id)&&!sourceFootprint.has(id)){
       // 数值使用深色小底与描边，局部遮住装饰中线，确保火力信息优先。
       const value=(fire.get(id)||0)+(changed?weapon.power:0),font=Math.max(changed?.43:.35,9/size);
       ctx.save();ctx.font=`600 ${font}px system-ui`;const tw=ctx.measureText(String(value)).width;
@@ -464,39 +497,17 @@ function paintMap() {
       label(value,x+.5,y+.5,changed?'#f0ffad':'#cbffe5',font);ctx.restore();
     }
   }
-  for(const p of state.sites){
-    if(!inView(p.x,p.y,p.width??p.size,p.height??p.size))continue;
-    const {x,y}=p,n=p.width??p.size,m=p.height??p.size,id=key(x,y),built=state.production.has(id),active=built&&productionActive(state,id),selected=hoveredPlot===id&&(['production','housing'].includes(tool)||(tool==='erase'&&['production','housing','ruin'].includes(demolitionQuote(state,hover).type)));
-    const overlay=view.towers.plots.get(id),empty=overlay.content.status==='empty';
-    // 悬停时把街区作为一个操作对象，盖住内部格线，避免误认为逐格恢复。
-    if(view.sourceSites.has(id)){ctx.fillStyle=nightMix>.5?'#322c36':'#67504f';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);continue;}
-    if(p.role==='camp'){ctx.fillStyle=nightMix>.5?'#49433a':'#ad9468';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);ctx.strokeStyle='#e8c481';ctx.lineWidth=.10;ctx.strokeRect(x+.12,y+.12,n-.24,m-.24);continue;}
-    if(empty){ctx.strokeStyle=selected?'#fff0ae':'#a8d5ad';ctx.lineWidth=selected?.12:.06;ctx.setLineDash([.2,.12]);ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);ctx.setLineDash([]);continue;}
-    // 按物理 footprint 画建筑，屋顶炮位保留建筑底色；经营面积独立计算。
-    ctx.save();ctx.beginPath();
-    for(const cell of overlay.footprint){if(postGhost&&cell===hover)continue;const [cx,cy]=xy(cell);ctx.rect(cx,cy,1,1);}ctx.clip();
-    ctx.fillStyle=selected?(active?'#527e59':built?'#80594e':'#655f3d'):active?'#527e59':built?'#80594e':nightMix>.5?'#494b42':'#81745b';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);
-    ctx.strokeStyle=selected?'#fff0ae':productionControlled(previewState,id)?'#f5d789':'#a29670';ctx.lineWidth=selected?.12:.06;ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);
-    // 同一整块用材质区分废墟、生产和居住，日夜分别取缓存贴图。
-    drawBlockTexture(ctx,p,overlay.content.status==='ruin'?`${overlay.content.type}-ruin`:overlay.content.type,nightMix);
-    if(p.role==='hospital'){ctx.fillStyle='#cbd7cb';ctx.fillRect(x+3,y+3,4,6);ctx.fillStyle='#478b80';ctx.fillRect(x+4.5,y+4,1,4);ctx.fillRect(x+3.5,y+5.5,3,1);}
-    if(p.special){ctx.strokeStyle='#d5b5fc';ctx.lineWidth=.12;ctx.strokeRect(x+.16,y+.16,n-.32,m-.32);}
-    if(selected)for(const cell of overlay.cells)if(!inControl(previewState,cell)){const [cx,cy]=xy(cell);ctx.fillStyle='#ed665877';ctx.fillRect(cx,cy,1,1);}
-    if(active&&nightMix>0){
-      ctx.save();ctx.globalAlpha=nightMix;ctx.fillStyle='#ffe4a1';
-      for(let i=0;i<n;i++){ctx.fillRect(x+.18+i,y+.18,.18,.18);ctx.fillRect(x+.18+i,y+m-.36,.18,.18);}ctx.restore();
-    }
-    ctx.restore();
-    const occupied=new Set(overlay.footprint);ctx.strokeStyle=selected?'#fff0ae':'#b2a47b';ctx.lineWidth=.06;ctx.beginPath();
-    for(const cell of occupied){const [cx,cy]=xy(cell);if(!occupied.has(key(cx-1,cy))){ctx.moveTo(cx,cy);ctx.lineTo(cx,cy+1);}if(!occupied.has(key(cx+1,cy))){ctx.moveTo(cx+1,cy);ctx.lineTo(cx+1,cy+1);}if(!occupied.has(key(cx,cy-1))){ctx.moveTo(cx,cy);ctx.lineTo(cx+1,cy);}if(!occupied.has(key(cx,cy+1))){ctx.moveTo(cx,cy+1);ctx.lineTo(cx+1,cy+1);}}ctx.stroke();
-    // 街区标签在屏幕空间绘制，缩小棋盘时仍保持可读。
-  }
   ctx.beginPath();
   for(const id of eligibleCells){const [x,y]=xy(id);if(inView(x,y))ctx.rect(x+(weaponSelected?.04:.45),y+(weaponSelected?.04:.45),weaponSelected?.92:.1,weaponSelected?.92:.1);}
   ctx.fillStyle=weaponSelected?'#75ebbe38':'#a9d4cb99';ctx.fill();
   if(weaponSelected){
     ctx.beginPath();for(const id of eligibleCells){const [x,y]=xy(id);if(inView(x,y))ctx.rect(x+.08,y+.08,.84,.84);}
     ctx.strokeStyle='#95f1cf';ctx.lineWidth=.07;ctx.stroke();
+  }
+  for(const [id,wallBody] of state.wallHealth){
+    if(!currentlyVisible(id))continue;const [x,y]=xy(id);if(!inView(x,y))continue;
+    if(wallBody?.hp===0){ctx.fillStyle='#956b57';ctx.fillRect(x+.1,y+.6,.8,.24);ctx.strokeStyle='#dfaa81';ctx.lineWidth=.06;ctx.beginPath();ctx.moveTo(x+.2,y+.2);ctx.lineTo(x+.8,y+.8);ctx.stroke();}
+    if(wallBody&&wallBody.hp>0&&wallBody.hp<wallBody.max){ctx.fillStyle='#533a32';ctx.fillRect(x+.1,y+.85,.8,.1);ctx.fillStyle='#ecc58f';ctx.fillRect(x+.1,y+.85,.8*wallBody.hp/wallBody.max,.1);}
   }
   // 建筑整体归属的轮廓最后绘制，避免被屋顶贴图盖住；开放地面仍逐格走边。
   ctx.strokeStyle='#86ccea';ctx.lineWidth=.08;ctx.setLineDash([.16,.12]);ctx.beginPath();
@@ -509,7 +520,7 @@ function paintMap() {
     for(const id of cells){const [x,y]=xy(id);ctx.fillRect(x+.04,y+.04,.92,.92);ctx.strokeRect(x+.04,y+.04,.92,.92);}
   }
   for (const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])]) {
-    const [x,y] = xy(id);if(!inView(x,y))continue;
+    const [x,y] = xy(id);if(!inView(x,y)||!currentlyVisible(id))continue;
     ctx.save();if(ghost&&id===hover)ctx.globalAlpha=.5;
     ctx.fillStyle='#253e3a';ctx.fillRect(x+.04,y+.04,.92,.92);ctx.strokeStyle='#92c8b8';ctx.lineWidth=.06;ctx.strokeRect(x+.04,y+.04,.92,.92);ctx.fillStyle=type==='B'?'#bab3f2':'#8bdbb9'; ctx.fillRect(x+.18,y+.22,.64,.6); ctx.fillStyle='#28483b'; ctx.fillRect(x+.37,y+.32,.26,.38); ctx.fillStyle='#ddffe7'; ctx.fillRect(x+.43,y+.08,.14,.35);if(type==='B'){ctx.fillRect(x+.22,y+.12,.12,.34);ctx.fillRect(x+.66,y+.12,.12,.34);}
     // 已有炮位与可建空位使用不同颜色；预览炮不计入已用容量。
@@ -528,7 +539,7 @@ function paintMap() {
     ctx.restore();
   }
   for(const [id,p] of previewState.outposts){
-    const [x,y]=xy(id);ctx.save();if(postGhost&&id===hover)ctx.globalAlpha=.5;
+    if(!currentlyVisible(id))continue;const [x,y]=xy(id);ctx.save();if(postGhost&&id===hover)ctx.globalAlpha=.5;
     if(resourceIcons.watch.complete&&resourceIcons.watch.naturalWidth)ctx.drawImage(resourceIcons.watch,x,y,1,1);
     ctx.restore();
   }
@@ -585,7 +596,6 @@ function paintMap() {
     }
   }
   ctx.restore();
-  if(mapFogEnabled())drawFog(ctx,SIZE,sight,state.explored,nightMix,fogTime,cloudTime,duskMix);
   // 已知感染核心在雾上保留身份；危险状态只表达今晚计划，不预告激活日期。
   for(const source of displayedEnemySources()){
     const x=source.bx??source.x,y=source.by??source.y,w=source.width??1,h=source.height??1,alive=source.hp!==0;
@@ -1009,7 +1019,7 @@ function paramsEditor(params) {
   fields('地图',params,'',[['cellMeters','每格距离（米）',1,1000]]);
   fields('日夜操作',params,'',[['dayEndHoldMs','结束白天长按时长（毫秒）',300,3000]]);
   fields('视野',params,'',[['campSight','火光外围格数',0,30],['outpostSight','瞭望塔外围格数',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealPadding','敌源边缘揭示格数',0,10]]);
-  fields('云层',params,'',[['cloudSpeedMultiplier','流速倍率（0静止）',0,3]]);
+  fields('云层',params,'',[['cloudSpeedMultiplier','流速倍率（0静止）',0,3],['fogThinCells','薄雾过渡格数（X）',1,20],['fogDenseCells','浓雾过渡格数（N）',1,20]]);
   fields('住房与人口',params,'',[['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房新建每格费用',1,1000]]);
   fields('经营建造',params,'',[['renovationCostPercent','修缮费用占新建价%',1,100]]);
   fields('街区生产',params,'',[['productionCostPerCell','基准每格新建费用',1,1000],['productionIncomePerCell','基准每格每晚收入',0,1000],['productionBaseArea','基准面积（格）',1,3600],['productionSmallCostFloor','小地块成本最低倍率',0.01,1],['productionDensityGrowthArea','密度增长面积（格）',1,3600],['productionMaxDensity','产出密度最高倍率',1,10]]);

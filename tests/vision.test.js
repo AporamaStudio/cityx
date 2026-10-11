@@ -8,6 +8,17 @@ test('云层流速只接受有限的0–3倍率，静止及小数合法',()=>{
  for(const cloudSpeedMultiplier of [0,.5,1,3])assert.equal(validateParams({...s.params,cloudSpeedMultiplier},s,false),'');
  for(const cloudSpeedMultiplier of [-1,3.1,NaN,Infinity])assert.match(validateParams({...s.params,cloudSpeedMultiplier},s,false),/云层流速/);
 });
+test('薄雾与浓雾宽度默认4/6格，仅接受1–20格整数且不改逻辑视野',()=>{
+ const s=createState(),before=visionField(s);
+ assert.equal(s.params.fogThinCells,4);assert.equal(s.params.fogDenseCells,6);
+ for(const name of ['fogThinCells','fogDenseCells']){
+  for(const value of [1,4,6,20]){
+   const params={...s.params,[name]:value};assert.equal(validateParams(params,s,false),'');
+   assert.deepEqual(visionField({...s,params}),before);
+  }
+  for(const value of [0,-1,1.5,21,NaN,Infinity])assert.match(validateParams({...s.params,[name]:value},s,false),/过渡格数/);
+ }
+});
 function state(){return createState([{x:40,y:10,hp:6,count:1,first:1,interval:12}],undefined,undefined,{...DEFAULTS,controlRadius:3});}
 test('瞭望塔当天拆返全部投入、收回独占视野，保留探索及重叠视野',()=>{
  const s=state();s.day=3;const id=key(15,27),before=visionField(s),cash=funds(s);s.explored=new Set(before);

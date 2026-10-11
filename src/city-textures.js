@@ -1,5 +1,5 @@
 // 轻量程序贴图：日/夜各生成一套并缓存，纹理只表达材质，不参与通行或受击规则。
-import {fogColor} from './fog.js?v=7';
+import {fogColor} from './fog.js?v=9';
 const cache=new Map(),PX=32;
 const palettes={
   day:{road:'#343e47',edge:'#a3aaa4',lane:'#b3aa87',yard:'#697b70',ruin:'#877f6b',roof:'#b0a084',crack:'#454b46',factory:'#739697',factoryRoof:'#a4c2b9',home:'#af775c',homeWall:'#dfc6a0',window:'#425d64',grass:'#738b67'},
@@ -35,7 +35,7 @@ export function drawCitySurroundings(ctx,layout,mix,explored,backdrop){
       const g=c.getContext('2d'),p=palettes[time],night=time==='night',marks=roadMarkings(layout);
       g.scale(16,16);g.translate(b,b);
       for(let y=-b;y<h+b;y++)for(let x=-b;x<w+b;x++)if(outside(x,y)){
-        g.fillStyle=road(x,y)?p.road:night?'#2b3b43':'#586964';g.fillRect(x,y,1,1);
+        g.fillStyle=road(x,y)?(night?'#304553':'#788d96'):(night?'#3b505d':'#8b9da1');g.fillRect(x,y,1,1);
         if(road(x,y)){
           const mark=marks.get(projected(x,y)),vertical=(y<0||y>=h)&&x>=0&&x<w;
           const horizontal=(x<0||x>=w)&&y>=0&&y<h;
@@ -54,7 +54,7 @@ export function drawCitySurroundings(ctx,layout,mix,explored,backdrop){
         for(let dy=0;dy<bh;dy++)for(let dx=0;dx<bw;dx++)if(!outside(x+dx,y+dy)||road(x+dx,y+dy))clear=false;
         if(!clear)continue;
         g.fillStyle='#101c2466';g.fillRect(x+.28,y+.35,bw-.3,bh-.3);
-        g.fillStyle=night?'#485158':'#808780';g.fillRect(x+.18,y+.18,bw-.4,bh-.4);
+        g.fillStyle=night?'#536674':'#a7b3b3';g.fillRect(x+.18,y+.18,bw-.4,bh-.4);
         g.strokeStyle=night?'#626a6a':'#a2a699';g.lineWidth=.06;g.strokeRect(x+.25,y+.25,bw-.54,bh-.54);
         g.fillStyle=night?'#303d44':'#536563';g.fillRect(x+.45,y+.45,.38,.3);
         if(n%3===0){g.beginPath();g.moveTo(x+.8,y+.25);g.lineTo(x+1.1,y+bh*.5);g.lineTo(x+.8,y+bh-.25);g.stroke();}
@@ -176,5 +176,16 @@ export function drawBlockTexture(ctx,p,kind,mix){
         g.fillRect(x+bw-.05,y+bh+.06,.18,.12);g.fillRect(x-.14,y+bh*.4,.12,.17);
       }
     }
+  }));
+}
+
+// 未知建筑只取位置与体量，不读取用途、特殊身份、经营或敌源状态。
+export function drawCitySilhouette(ctx,p,mix){
+  const w=p.width??p.size,h=p.height??p.size;
+  layers(ctx,p.x,p.y,w,h,mix,time=>texture(`silhouette:${w}:${h}:${time}`,w,h,g=>{
+    g.fillStyle=time==='night'?'#425766':'#8c9da1';g.fillRect(.18,.18,w-.36,h-.36);
+    g.fillStyle=time==='night'?'#536674':'#a7b3b3';
+    const cols=Math.max(1,Math.floor(w/2)),rows=Math.max(1,Math.floor(h/2)),cw=w/cols,ch=h/rows;
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)g.fillRect(x*cw+.3,y*ch+.3,cw-.6,ch-.6);
   }));
 }
