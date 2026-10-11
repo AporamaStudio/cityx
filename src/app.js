@@ -1,11 +1,11 @@
-import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=9';
-import {createTowerOverlay} from './tower-overlay.js?v=7';
+import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=10';
+import {createTowerOverlay} from './tower-overlay.js?v=8';
 import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings} from './city-textures.js?v=11';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG} from './icons.js?v=6';
 import {createGameAudio} from './audio.js?v=7';
-import { SIZE, DEFAULTS } from './config.js?v=65';
-import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=80';
+import { SIZE, DEFAULTS } from './config.js?v=66';
+import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=81';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -18,6 +18,8 @@ document.querySelector('#outpost .tool-name').innerHTML=WATCHTOWER_SVG+' 瞭望�
 document.querySelector('#populationTotalMetric .population-symbol').innerHTML=POPULATION_SVG;
 document.querySelector('#populationFreeMetric .population-symbol').innerHTML=WORKER_SVG;
 $('outpostWorkerIcon').innerHTML=WORKER_SVG;
+// 人口明细沿用总人口/工人图标，数字与图标分开更新，不再重复写单位文字。
+for(const name of ['Total','Free','Production','Watch'])$('populationDetail'+name).nextElementSibling.innerHTML=name==='Total'?POPULATION_SVG:WORKER_SVG;
 const resourceIcons={};
 for(const [name,selector] of [['coin','.wallet .coin-icon'],['people','#populationFreeMetric svg'],['residents','#populationTotalMetric svg'],['watch','#outpost svg'],['military','#build .weapon-icon']]){
   const svg=document.querySelector(selector).cloneNode(true);
@@ -87,6 +89,20 @@ document.addEventListener('pointerdown',dismissTopNotice,{capture:true});
 document.addEventListener('pointerdown',event=>{const button=event.target.closest('button');if(button?.disabled&&blockedActionReasons.get(button.id))showTopNotice(blockedActionReasons.get(button.id));},{capture:true});
 const weaponType = () => tool === 'long' ? 'B' : 'A';
 const viewedSources = () => sourcePlans(state,Number($('forecastDay').value)+1);
+let incomePinned=false,incomeHovered=false,incomeFocused=false,incomeUntil=0,incomeDay=null;
+// 收入仅在早晨暂显；之后悬停/聚焦查看、点击固定，在资源栏下展开并推开工具。
+function showIncomeDetails(){
+  const available=state.phase==='build'?!!state.lastNight:state.economySettled;
+  const open=available&&(incomePinned||incomeHovered||incomeFocused||performance.now()<incomeUntil);
+  $('nightReport').hidden=!open;$('moneySummary').setAttribute('aria-expanded',String(open));
+}
+$('money').addEventListener('pointerenter',event=>{if(event.pointerType!=='touch'){incomeHovered=true;showIncomeDetails();}});
+$('money').addEventListener('pointerleave',()=>{incomeHovered=false;showIncomeDetails();});
+$('moneySummary').addEventListener('focus',()=>{incomeFocused=true;showIncomeDetails();});
+$('moneySummary').addEventListener('blur',()=>{incomeFocused=false;showIncomeDetails();});
+$('moneySummary').onclick=()=>{incomePinned=!incomePinned;if(!incomePinned){incomeUntil=0;incomeHovered=false;incomeFocused=false;}showIncomeDetails();};
+document.addEventListener('click',event=>{if(!$('money').contains(event.target)&&!$('nightReport').contains(event.target)){incomePinned=false;incomeUntil=0;showIncomeDetails();}});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'){incomePinned=false;incomeHovered=false;incomeFocused=false;incomeUntil=0;showIncomeDetails();}});
 let populationPinned=false;
 function showPopulationDetails(open){
   $('populationDetails').hidden=!open;$('populationSummary').setAttribute('aria-expanded',String(open));
@@ -796,8 +812,8 @@ function update() {
   $('populationTotal').textContent=people.total;$('populationFree').textContent=people.free;
   $('populationFreeMetric').classList.toggle('no-workers',people.free===0);
   const watchWorkers=state.outposts.size*state.params.outpostWorkers;
-  $('populationDetailTotal').textContent=`${people.total} 人`;$('populationDetailFree').textContent=`${people.free} 人`;
-  $('populationDetailProduction').textContent=`${people.working-watchWorkers} 人`;$('populationDetailWatch').textContent=`${watchWorkers} 人`;
+  $('populationDetailTotal').textContent=people.total;$('populationDetailFree').textContent=people.free;
+  $('populationDetailProduction').textContent=people.working-watchWorkers;$('populationDetailWatch').textContent=watchWorkers;
   $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
   const critical=!state.result&&campCritical(state);
   $('campPanel').classList.toggle('camp-critical',critical);viewport.classList.toggle('camp-critical',critical);
@@ -855,9 +871,11 @@ function update() {
 // 收入卡只读取已结束夜晚的快照，不把白天新投资混入昨夜结果。
 function updateNightReport(){
   const report=state.phase==='build'?state.lastNight:state.economySettled?{day:state.day,economy:state.nightEconomy,earned:state.nightEarned,...state.productionReport}:null;
-  $('nightReport').hidden=!report;
-  if(!report)return;
+  if(!report){incomeDay=null;incomeUntil=0;incomePinned=false;showIncomeDetails();return;}
+  if(state.phase==='build'&&incomeDay!==report.day){incomeDay=report.day;incomeUntil=performance.now()+state.params.incomeReportMs;}
+  showIncomeDetails();
   $('reportTitle').textContent=`${state.phase==='build'?'昨天':'今天'}收入`;
+  $('nightReport').setAttribute('aria-label',$('reportTitle').textContent);
   $('reportTotal').textContent=`+${report.economy+report.earned}`;
   // 第一晚尚未开放经营，次日不展示无意义的经营收入项。
   $('reportEconomy').closest('.report-economy').hidden=report.day===1;
@@ -1017,7 +1035,7 @@ function paramsEditor(params) {
   }
   fields('全局',params,'',[['budget','资金',0,10000],['stepMs','移动节拍（毫秒）',50,5000],['wallCost','墙价',1,1000],['demolitionRefundPercent','旧投入拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campWarningPercent','火光危急阈值%',0,100],['campRepairCost','火光修复单价/HP',1,1000],['nightTicks','每晚拍数',1,500],['nightCleanupSpeed','夜末清源速度倍率',1,4],['nightIdleTransitionMs','空闲夜末过渡时长（毫秒）',0,3000]]);
   fields('地图',params,'',[['cellMeters','每格距离（米）',1,1000]]);
-  fields('日夜操作',params,'',[['dayEndHoldMs','结束白天长按时长（毫秒）',300,3000]]);
+  fields('日夜操作',params,'',[['dayEndHoldMs','结束白天长按时长（毫秒）',300,3000],['incomeReportMs','收入暂显时长（毫秒，0关闭）',0,15000]]);
   fields('视野',params,'',[['campSight','火光外围格数',0,30],['outpostSight','瞭望塔外围格数',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealPadding','敌源边缘揭示格数',0,10]]);
   fields('云层',params,'',[['cloudSpeedMultiplier','流速倍率（0静止）',0,3],['fogThinCells','薄雾过渡格数（X）',1,20],['fogDenseCells','浓雾过渡格数（N）',1,20]]);
   fields('住房与人口',params,'',[['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房新建每格费用',1,1000]]);
@@ -1051,6 +1069,7 @@ function clearPlayback() {
   forecastPointerSource=null;forecastFocusSource=null;mapPointerSource=null;
   sourceHighlightId=null;sourceHighlightAt=null;
   $('campHitFlash').getAnimations().forEach(animation=>animation.cancel());
+  incomeDay=null;incomeUntil=0;incomePinned=false;
   nightOutro=null;dawnAt=0;receiptUntil=0;$('economyReceipt').hidden=true;
   selectedSource=null;paused=false;timer=0;motion=null;placementFx=null;impactAge=1000;incoming.clear();recentGain=0;gainUntil=0;$('moneyGain').textContent='';messages=[];$('log').replaceChildren();
   document.querySelectorAll('.coin-drop').forEach(el=>el.remove());
@@ -1489,6 +1508,7 @@ function frame(now){
     if(nightOutro.elapsed>=nightOutro.duration){nightOutro=null;if(finishIdleNight(state))presentNightEnd();else update();}
   }
   if(dawnAt&&now>=dawnAt)finishDawn();
+  if(incomeUntil&&now>=incomeUntil){incomeUntil=0;showIncomeDetails();}
   if(receiptUntil&&now>=receiptUntil){receiptUntil=0;$('economyReceipt').hidden=true;}
   if(gainUntil&&now>=gainUntil){gainUntil=0;recentGain=0;$('moneyGain').textContent='';}
   if(placementFx){if(now-placementFx.start>=750)placementFx=null;draw();}

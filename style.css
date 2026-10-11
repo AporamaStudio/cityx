@@ -65,7 +65,7 @@ body[data-phase="won"] .arena{border-color:#85d1ad}body[data-phase="lost"] .aren
 .tool-name{white-space:nowrap}#production{flex-wrap:wrap}#production .tool-price{margin-left:auto}#moneyGain{font-size:11px}
 
 /* 昨夜收入与现有余额相邻，白天保留；瞬时到账提示只强调经营来源。 */
-.night-report{margin:0 0 16px;padding:11px 10px;border:1px solid #7a794c;border-radius:7px;background:#c7b9580a}.night-report .eyebrow{margin-bottom:8px}.report-economy,.report-kills{display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap}.report-economy{color:#ffe2a0;font-size:12px}.report-kills{color:var(--muted);font-size:11px;margin-top:7px}.night-report p{font-size:11px;line-height:1.6;margin:8px 0 0;color:#b9d1bc}.night-report .report-stopped{color:#ffb6a1}#economyReceipt{padding:9px;margin:-5px 0 12px;color:#ffe2a0;background:#504329;border-radius:5px;font-size:12px;font-weight:700}[hidden]{display:none!important}
+#economyReceipt{padding:9px;margin:-5px 0 12px;color:#ffe2a0;background:#504329;border-radius:5px;font-size:12px;font-weight:700}[hidden]{display:none!important}
 
 /* 中央场景昼夜变化：环境变色，路线与数值保持原有对比度。 */
 #viewport{transition:background-color .6s;background-image:none;background-color:#25333e}body[data-time="day"] #viewport{background-color:#48564c}body[data-time="day"] .mapbar{background:#354b40}body[data-time="day"] .phase-guide{background:#405848;color:#e0e6cf}body[data-time="day"] .phase-guide strong{color:#fff0bd}body[data-time="night"] .mapbar{background:#202e40}body[data-time="night"] .phase-guide{background:#26354b;border-color:#50617d;color:#c3d3e8}body[data-time="night"] .phase-guide strong{color:#f9dba5}.daylight-label{position:absolute;top:10px;left:12px;z-index:1;pointer-events:none;background:#172338ed;color:#d5e7ff;border:1px solid #637b9d;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:650}body[data-time="day"] .daylight-label{background:#e4dec5;color:#354738;border-color:#f3e7ba}
@@ -149,14 +149,14 @@ body[data-phase="battle"] .night-progress-track{background:#0c142b80}body[data-p
 .forecast-enemy.pending{background:transparent;color:#cabbb0}.forecast-enemy.blocked{background:#263033;color:#8b989a;border-color:#58656a;border-style:dashed}.forecast-enemy.blocked>span{opacity:.45}.blocked .forecast-outcome{color:#b4c1c1;width:16px;height:16px;top:-7px;right:-5px;background:#263033;border-radius:50%}.blocked .forecast-outcome svg{display:block;width:100%;height:100%}
 .forecast-enemy.withdrawn{background:#2b3946;color:#b1c3d2;border-color:#7b95aa}.withdrawn .forecast-outcome{color:#c0d6ed}
 
-.report-total{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;color:#ffe2a0;font-size:16px;font-weight:700}.report-total strong,.report-economy strong,.report-kills strong{display:flex;align-items:center;gap:5px}.report-total strong{font-size:20px}.report-economy,.report-kills{margin:7px 0 0 12px;font-size:12px;color:#c6d2d0}.report-economy strong,.report-kills strong{font-weight:600}
+
 
 .population{display:flex;flex-direction:column;gap:5px;margin:12px 0;color:#f4d3a2}.population strong{font-size:20px}.population span{font-size:12px;color:#bacdc6}
 
 .wallet{flex-wrap:wrap;gap:10px}.wallet .resource-people{width:100%;border-top:1px solid #d3bd7940;padding-top:10px;margin:0}.population-main{display:flex;align-items:center;gap:12px}.population-main svg{width:30px;height:30px}.population-main strong{font-size:28px}.resource-people span{font-size:11px}.test-fields{display:grid;gap:8px;margin:12px 0}.test-fields label{display:grid;grid-template-columns:42px 1fr;align-items:center}.test-fields input,.test-fields select{width:100%;min-width:0}
 
 .wallet .resource-people{align-items:stretch}.population-main svg{width:38px;height:38px}.population-main strong{font-size:36px}.resource-people span{text-align:left}
-.wallet .resource-people{position:relative;gap:0}.population-summary{display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;gap:6px 12px;width:100%;padding:0;border:0;background:transparent;color:#f4d3a2;text-align:left}.population-summary:hover{background:transparent;border-color:transparent}.population-metric{display:flex;align-items:center;gap:8px;min-width:0}.population-symbol{display:flex;flex:none}.population-symbol svg{width:32px;height:32px}.population-value{display:flex;align-items:baseline;flex-wrap:nowrap;gap:3px;white-space:nowrap}.wallet .population-metric strong{font-size:32px;color:inherit}.population-summary #populationFreeMetric{color:#bce4ce;gap:6px}#populationFreeMetric .population-symbol svg{width:24px;height:24px}.wallet #populationFree{font-size:26px}.population-summary #populationFreeMetric.no-workers{color:#eabb6f}.resource-people .population-preview{color:#bff5ce;font-size:13px;line-height:1.2;white-space:nowrap}.resource-people .population-decrease{color:#f3ad91}.population-details{position:absolute;top:calc(100% + 8px);left:0;z-index:20;width:100%;min-width:160px;padding:12px;border:1px solid #746953;border-radius:8px;background:#242b2b;box-shadow:0 8px 24px #0008;color:#e5edeb}.population-details dl{margin:0}.population-details dl>div{display:flex;justify-content:space-between;gap:12px;padding:4px 0}.population-details dt{font-size:12px;color:#acb8bb}.population-details dd{margin:0;font-size:12px;font-variant-numeric:tabular-nums}.worker-cost{display:inline-flex;align-items:center;gap:3px;margin-left:5px;padding-left:6px;border-left:1px solid #b9a47355}.worker-cost svg{display:block;width:14px;height:14px;fill:currentColor}.toolgrid button:disabled .worker-cost{color:inherit}
+.wallet .resource-people{position:relative;gap:0}.population-summary{display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;gap:6px 12px;width:100%;padding:0;border:0;background:transparent;color:#f4d3a2;text-align:left}.population-summary:hover{background:transparent;border-color:transparent}.population-metric{display:flex;align-items:center;gap:8px;min-width:0}.population-symbol{display:flex;flex:none}.population-symbol svg{width:32px;height:32px}.population-value{display:flex;align-items:baseline;flex-wrap:nowrap;gap:3px;white-space:nowrap}.wallet .population-metric strong{font-size:32px;color:inherit}.population-summary #populationFreeMetric{color:#bce4ce;gap:6px}#populationFreeMetric .population-symbol svg{width:24px;height:24px}.wallet #populationFree{font-size:26px}.population-summary #populationFreeMetric.no-workers{color:#eabb6f}.resource-people .population-preview{color:#bff5ce;font-size:13px;line-height:1.2;white-space:nowrap}.resource-people .population-decrease{color:#f3ad91}.resource-details{position:relative;width:100%;min-width:0;padding:12px;border:1px solid #746953;border-radius:8px;background:#242b2b;box-shadow:0 8px 24px #0008;color:#e5edeb}.resource-details dl{margin:0}.resource-details dl>div{display:flex;justify-content:space-between;gap:12px;padding:4px 0}.resource-details dt{font-size:12px;color:#acb8bb}.resource-details dd{margin:0;font-size:12px;font-variant-numeric:tabular-nums}.worker-cost{display:inline-flex;align-items:center;gap:3px;margin-left:5px;padding-left:6px;border-left:1px solid #b9a47355}.worker-cost svg{display:block;width:14px;height:14px;fill:currentColor}.toolgrid button:disabled .worker-cost{color:inherit}
 
 /* 括号和颜色区分待发生变化与已经到账的金币。 */
 .refund-preview{display:inline-block;color:#c6f0b5;font-size:14px;font-weight:700;white-space:nowrap}.refund-preview[hidden],#erasePreview[hidden],#repairPreview[hidden]{display:none}#repairPreview.unaffordable{color:var(--red)}
@@ -217,7 +217,7 @@ header{grid-template-columns:auto auto minmax(140px,1fr) minmax(240px,1.4fr) aut
 .wallet #moneyGain{font-size:max(9px,calc(11px * var(--resource-scale,1)))}
 .population-summary .population-metric,.population-summary #populationFreeMetric{flex:none;flex-wrap:nowrap;gap:max(3px,calc(8px * var(--resource-scale,1)))}
 .population-summary .population-symbol svg{width:max(16px,calc(32px * var(--resource-scale,1)));height:max(16px,calc(32px * var(--resource-scale,1)))}
-.population-summary #populationFreeMetric .population-symbol svg{width:max(14px,calc(24px * var(--resource-scale,1)));height:max(14px,calc(24px * var(--resource-scale,1)))}
+.population-summary #populationFreeMetric .population-symbol svg{width:max(16px,calc(32px * var(--resource-scale,1)));height:max(16px,calc(32px * var(--resource-scale,1)))}
 .wallet .population-metric strong{font-size:calc(32px * var(--resource-scale,1));letter-spacing:0}
 .wallet #populationFree{font-size:calc(26px * var(--resource-scale,1))}
 .resource-people .population-preview{display:block;flex:none;width:4ch;height:14px;font-size:max(9px,calc(13px * var(--resource-scale,1)))}
@@ -304,8 +304,8 @@ input[type=number]{background:var(--input);color:var(--text);border-color:var(--
 .build-sidebar .wallet{box-shadow:0 8px 12px var(--shadow)}
 .population-summary,.population-summary #populationTotalMetric{color:var(--wallet-ink)}
 .population-summary #populationFreeMetric{color:var(--success)}.population-summary #populationFreeMetric.no-workers{color:var(--orange)}
-.tool-price{color:var(--gold)}.population-details,.forecast-tooltip{background:var(--tooltip);color:var(--text);border-color:var(--line);box-shadow:0 8px 24px var(--shadow)}
-.population-details dt,.tool-section h2{color:var(--muted)}
+.tool-price{color:var(--gold)}.resource-details,.forecast-tooltip{background:var(--tooltip);color:var(--text);border-color:var(--line);box-shadow:0 8px 24px var(--shadow)}
+.resource-details dt,.tool-section h2{color:var(--muted)}
 .resource-people .population-preview,.refund-preview,#moneyGain{color:var(--success)}
 .resource-people .population-decrease,.refund-preview.spend-preview{color:var(--danger)}
 .tips-panel #toolInfo,.tips-panel #cellInfo{color:var(--text)}.tips-panel #notice{color:var(--success)}
@@ -322,6 +322,19 @@ input[type=number]{background:var(--input);color:var(--text);border-color:var(--
 .camp-warning,.camp-critical .camp-title h1{color:var(--red)}
 .meter{background:var(--meter-bg)}.meter i{background:var(--meter-fill)}.camp-critical #campBar{background:var(--red)}
 .map-tools .legend-building{color:var(--legend-building)}.map-tools .legend-land{color:var(--legend-land)}.map-tools .legend-control{color:var(--legend-control)}
-.night-report{background:var(--report-bg);border-color:var(--report-border)}
-.report-total,#economyReceipt{color:var(--gold)}.report-economy,.report-kills,.night-report p{color:var(--soft)}
-.night-report .report-stopped{color:var(--danger)}#economyReceipt{background:var(--wallet)}
+#economyReceipt{color:var(--gold);background:var(--wallet)}
+
+/* 明细按内容展开，始终在资源行下方；固定资源行高与稳定滚动条仍避免布局反馈。 */
+.money-resource{position:relative;width:100%;min-width:0}
+.wallet .wallet-money{padding:0;border:0;background:transparent;text-align:left;cursor:pointer}
+.wallet .wallet-money:hover{background:transparent;border-color:transparent}
+.resource-details .detail-total dt,.resource-details .detail-total dd{color:var(--wallet-ink);font-weight:700}
+.resource-details dd{display:flex;align-items:center;gap:5px;font-weight:400}
+.resource-details .price-coin{width:12px;height:12px;flex-shrink:0}
+.night-report{margin:0 0 14px}
+.population-details{margin-top:8px}
+.resource-details dl>div:not(.detail-total){padding-left:10px}
+.resource-details span{font-size:inherit;color:inherit}
+.resource-details .detail-symbol{display:inline-flex;flex:none;width:12px;height:12px;color:var(--wallet-ink)}
+.detail-symbol svg{width:100%;height:100%}
+.population-summary .population-symbol,.population-summary #populationFreeMetric .population-symbol{color:var(--wallet-ink)}

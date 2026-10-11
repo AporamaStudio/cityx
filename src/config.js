@@ -26,6 +26,8 @@ export const DEFAULTS = {
   nightIdleTransitionMs:800,
   // 结束白天需连续按住确认；仅影响操作，不占用夜晚战斗拍数。
   dayEndHoldMs:1000,
+  // 新一天收入明细短暂浮显，0关闭自动展示；悬停查看始终可用。
+  incomeReportMs:4000,
   weapons: {
     A: { shape: 'square', range: 1, power: 2, cost: 10 },
     B: { shape: 'square', range: 3, power: 1, cost: 20 },

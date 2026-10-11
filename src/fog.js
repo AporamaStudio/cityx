@@ -1,5 +1,5 @@
 // 信息层由探索/视野决定；云纹只改变外观，流动与缩放不能揭示新情报。
-import {DEFAULTS} from './config.js?v=65';
+import {DEFAULTS} from './config.js?v=66';
 const CLOUD_SPAN=48,TEXTURE_PX=512,MASK_PX=8,BORDER=8;
 let textures=null,field=null;
 const smooth=t=>t*t*(3-2*t);
