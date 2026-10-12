@@ -84,7 +84,7 @@ function cloneModel(asset,width=asset.width,roofLights=true,ruined=false){
     const lighting=new THREE.Group();lighting.userData.previewRoofLights=true;lighting.visible=false;
     group.traverse(node=>{
       for(const [x,y,z,w,d] of node.userData.roofLights??[]){const glow=groundGlow(w*2.0,d*2.8,'#ffc57d',.3);glow.position.set(x,y,z);lighting.add(glow);}
-      for(const [x,y,z,power,range] of node.userData.entryLights??[]){const light=new THREE.PointLight('#ffd08a',power,range,2);light.position.set(x,y,z);lighting.add(light);const pool=groundGlow(1.6,2.8,'#ffca72',.25);pool.position.set(x,.24,z);lighting.add(pool);}
+      for(const [x,y,z,power,range] of node.userData.entryLights??[]){const light=new THREE.PointLight('#ffd08a',power*scale**2,range*scale,2);light.position.set(x,y,z);lighting.add(light);const pool=groundGlow(12,18,'#ffca72',.25);pool.position.set(x,.9,z);lighting.add(pool);}
     });
     group.add(lighting);
   }
@@ -234,7 +234,7 @@ function updateSingleState(){
   if(singleVariants.ruined)singleVariants.ruined.visible=singleState==='ruined';
   setPower(singleVariants.normal,isBuilding(selected)?singleState==='operating':true);
   for(const button of document.querySelectorAll('[data-state]'))button.classList.toggle('active',button.dataset.state===singleState);
-  if(selected.landmark){$('download').href=root+'generated/'+selected.file+(singleState==='ruined'?'-ruined':'')+'.glb';$('download').textContent=singleState==='ruined'?'下载破损模型 ↓':'下载完好模型 ↓';}
+  if(selected.landmark){$('download').href=root+'generated/'+selected.file+(singleState==='ruined'?'-ruined':'')+'.glb?v=3';$('download').textContent=singleState==='ruined'?'下载破损模型 ↓':'下载完好模型 ↓';}
   if(mode==='single')$('sceneSubtitle').textContent=isBuilding(selected)?({intact:'完好 · 尚未运营',ruined:'原建筑局部塌损 · 占地与门窗保留',operating:'恢复运营 · 窗户与屋顶亮灯'})[singleState]:(selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0');
 }
 function setMode(next){
@@ -252,7 +252,7 @@ function selectAsset(asset,show=true){
   single.add(normal);if(ruined)single.add(ruined);singleVariants={normal,ruined};
   $('buildingStates').hidden=!isBuilding(asset);updateSingleState();
   $('assetTitle').textContent=asset.name;$('assetOrigin').textContent=asset.local?'自制样件':'Kenney · CC0';$('assetDescription').textContent=asset.description;
-  const path=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb';$('download').href=path;$('download').textContent='下载原模型 ↓';
+  const path=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb?v=3';$('download').href=path;$('download').textContent='下载原模型 ↓';
   $('source').href=asset.local?'assets/model-preview/ATTRIBUTION.md':kenney+({suburban:'city-kit-suburban',commercial:'city-kit-commercial',industrial:'city-kit-industrial'}[asset.file.split('/')[0]]);
   for(const btn of $('catalog').children)btn.classList.toggle('selected',btn.dataset.id===asset.id);
   if(show)setMode('single');else updateSingleState();
@@ -290,7 +290,7 @@ const loader=new GLTFLoader();let loaded=0;
 try{
   const files=assets.flatMap(asset=>[{asset,id:asset.id,file:asset.file},...(asset.landmark?[{asset,id:asset.id+'-ruined',file:asset.file+'-ruined'}]:[])]);
   await Promise.all(files.map(async ({asset,id,file})=>{
-    const url=root+(asset.local?'generated/':'kenney/')+file+'.glb';const gltf=await loader.loadAsync(url);models.set(id,gltf.scene);
+    const url=root+(asset.local?'generated/':'kenney/')+file+'.glb?v=3';const gltf=await loader.loadAsync(url);models.set(id,gltf.scene);
     loaded++;$('loading').textContent=`正在装载模型… ${loaded}/${files.length}`;
   }));
   ready=true;buildDistrict();selectAsset(selected,false);catalog();setMode('district');syncMotion();$('loading').hidden=true;$('loadStatus').textContent=`${assets.length} 个模型已就绪`;

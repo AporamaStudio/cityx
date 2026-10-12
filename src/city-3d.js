@@ -7,7 +7,7 @@ import {createCityEffects,facilityMotion,animateFacility} from './city-effects.j
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',source:'generated/enemy-source',street:'generated/streetlight',wreck:'generated/burnt-car'};
-const resource=file=>new URL('../assets/model-preview/'+file+'.glb',import.meta.url).href;
+const resource=file=>new URL('../assets/model-preview/'+file+'.glb?v=3',import.meta.url).href;
 
 function operatingLights(object){
   // 玻璃沿用同一色板发光，屋顶补少量暖灯，保证俯视也能辨认运营状态。
@@ -126,7 +126,7 @@ export function createCity3D(onReady){
       model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.material.roughness=.95;node.castShadow=true;node.receiveShadow=true;}});
       const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
       const scale=type==='hospital'?Math.min((w-.16)/size.x,(h-.16)/size.z):Math.min(slotW*.86/size.x,slotH*.86/size.z,(housing?12:22)/cellMeters/size.y);
-      model.scale.setScalar(scale);model.position.set(-w/2+(column+.5)*slotW-center.x*scale,podium-bounds.min.y*scale,-h/2+(row+.5)*slotH-center.z*scale);object.add(model);
+      model.scale.setScalar(scale);if(type==='hospital')model.scale.y=1/cellMeters;model.position.set(-w/2+(column+.5)*slotW-center.x*scale,podium-bounds.min.y*model.scale.y,-h/2+(row+.5)*slotH-center.z*scale);object.add(model);
     }
     object.position.set(x+w/2,0,y+h/2);buildings.add(object);
     if(type!=='hospital')mergePlot(object);

@@ -10,6 +10,31 @@ GLASS = '#587a91'
 LAMP = '#ffe1a3'
 
 
+def metric_point(name, color, point):
+    # 场地按20m格子定尺寸，楼层按约3m高度；小物件围绕原位置单独缩放。
+    x, y, z = point
+    anchor, factor = None, 1
+    if name == 'hospital-ambulance':
+        x = -2.9+(x+2.9)*(2.1/(.81*20))
+        z = 4.95+(z-4.95)*(5.7/(1.35*20))
+    elif name == 'hospital-campus' and color in ('#7d6951', '#82966d'):
+        anchor, factor = (-4.35 if x < 0 else 4.35, 3.6), .15 if color == '#7d6951' else .45
+    elif name == 'hospital-entrance' and color == '#9cae9e':
+        anchor, factor = (-1.1 if x < 0 else 1.1, 2.25), .15
+    elif name == 'bank-entrance' and color in ('#d0c5ad', '#b3ad9e'):
+        anchor, factor = (-1.22 if x < 0 else 1.22, 3.2), .25
+    elif name == 'hospital-entry-lights':
+        if color == '#718777': anchor, factor = (-4.35 if x < 0 else 4.35, 4.8), .06
+        elif color == LAMP:
+            anchor = min([(a, b) for a, b in [(-.85, 2.25), (.85, 2.25), (-4.35, 4.8), (4.35, 4.8)]], key=lambda p: (p[0]-x)**2+(p[1]-z)**2)
+            factor = .12
+    elif name == 'bank-entry-lights' and color == LAMP:
+        anchor, factor = (-1 if x < 0 else 1, 3.15), .12
+    if anchor:
+        x, z = anchor[0]+(x-anchor[0])*factor, anchor[1]+(z-anchor[1])*factor
+    return x*20, y*3.6, z*20
+
+
 class Landmark:
     def __init__(self, name, footprint, ruined):
         self.name, self.footprint, self.ruined = name, footprint, ruined
@@ -24,8 +49,12 @@ class Landmark:
         binary, views, accessors, materials, meshes, nodes = bytearray(), [], [], [], [], []
         colors = {}
         for name, model in self.components.items():
+            metric = Model()
+            for color, (positions, _) in model.parts.items():
+                for i in range(0, len(positions), 9):
+                    metric.triangle([metric_point(name, color, positions[i+j:i+j+3]) for j in (0, 3, 6)], color)
             primitives = []
-            for color, (positions, normals) in model.parts.items():
+            for color, (positions, normals) in metric.parts.items():
                 if color not in colors:
                     srgb = [int(color[i:i+2], 16)/255 for i in (1, 3, 5)]
                     rgb = [v/12.92 if v <= .04045 else ((v+.055)/1.055)**2.4 for v in srgb]
@@ -43,8 +72,10 @@ class Landmark:
             if primitives:
                 meshes.append({'name': name, 'primitives': primitives})
                 nodes.append({'mesh': len(meshes)-1, 'name': name})
+        roof_lights = [[x*20, y*3.6, z*20, w*20, d*20] for x, y, z, w, d in self.roof_lights]
+        entry_lights = [[x*20, y*3.6, z*20, power*3.6**2, distance*5] for x, y, z, power, distance in self.entry_lights]
         doc = {'asset': {'version': '2.0', 'generator': 'CityX low-poly landmarks'}, 'scene': 0,
-               'scenes': [{'nodes': [0]}], 'nodes': [{'name': self.name, 'children': list(range(1, len(nodes)+1)), 'extras': {'footprint': self.footprint, 'state': 'ruined' if self.ruined else 'intact', 'units': 'game-grid', 'visualOnly': True, 'roofLights': self.roof_lights, 'entryLights': self.entry_lights}}]+nodes,
+               'scenes': [{'nodes': [0]}], 'nodes': [{'name': self.name, 'children': list(range(1, len(nodes)+1)), 'extras': {'footprint': self.footprint, 'referenceCellMeters': 20, 'state': 'ruined' if self.ruined else 'intact', 'units': 'meters', 'visualOnly': True, 'roofLights': roof_lights, 'entryLights': entry_lights}}]+nodes,
                'meshes': meshes, 'materials': materials, 'buffers': [{'byteLength': len(binary)}], 'bufferViews': views, 'accessors': accessors}
         data = json.dumps(doc, separators=(',', ':')).encode(); data += b' '*((-len(data)) % 4)
         path = ROOT / (self.name + ('-ruined' if self.ruined else '') + '.glb')
@@ -122,9 +153,9 @@ def bank(ruined=False):
     base.box((0, .1, 0), (8, .2, 8), '#b8baa9')
     wall = '#b3ad9e' if ruined else '#d0c5ad'
     # 连续裙楼与中央退台属于同一大楼；大片平屋顶留给未来炮位适配。
-    building(scene, 'bank-main', 0, -.35, 7.35, 6.2, 2.6, 3, wall, '#697b79')
-    building(scene, 'bank-upper', -.45, -.65, 4.7, 3.7, 1.2, 1, wall, '#657473', bottom=2.96)
-    building(scene, 'bank-east-bay', 2.55, -.3, 1.6, 3.0, 1.0, 1, wall, '#697b79', damaged=ruined, bottom=2.96)
+    building(scene, 'bank-main', 0, -.35, 7.35, 6.2, 5.2, 6, wall, '#697b79')
+    building(scene, 'bank-upper', -.45, -.65, 4.7, 3.7, 2.4, 2, wall, '#657473', bottom=5.56)
+    building(scene, 'bank-east-bay', 2.55, -.3, 1.6, 3.0, 2.0, 2, wall, '#697b79', damaged=ruined, bottom=5.56)
     # 破损侧翼下方也露出内层，避免上层损坏看成屋顶杂物。
     if ruined:
         main = scene.components['bank-main']
@@ -134,7 +165,7 @@ def bank(ruined=False):
             positions, normals = data; kept_p, kept_n = [], []
             for i in range(0, len(positions), 9):
                 mid = [sum(positions[i+j+k] for j in (0, 3, 6))/3 for k in range(3)]
-                if mid[0] > 1.85 and abs(mid[2]+.3) < 1.55 and mid[1] > 2.75: continue
+                if mid[0] > 1.85 and abs(mid[2]+.3) < 1.55 and mid[1] > 5.35: continue
                 kept_p.extend(positions[i:i+9]); kept_n.extend(normals[i:i+9])
             roof_parts.parts[color] = (kept_p, kept_n)
         scene.components['bank-main'] = roof_parts
@@ -143,14 +174,14 @@ def bank(ruined=False):
     entrance.box((0, 1.45, 2.98), (3.1, .15, 1.0), '#a08b60')
     for x in (-1.22, 1.22): entrance.box((x, .88, 3.2), (.20, 1.25, .20), wall)
     scene.part('bank-entry-glass').box((0, .8, 2.78), (1.75, 1.05, .04), GLASS)
-    roof_pane(scene, -.45, 4.315, -.65, 2.0, 1.15)
-    for x in (-1.15, -.45, .25): entrance.box((x, 4.35, -.65), (.045, .05, 1.2), '#a08b60')
+    roof_pane(scene, -.45, 8.115, -.65, 2.0, 1.15)
+    for x in (-1.15, -.45, .25): entrance.box((x, 8.15, -.65), (.045, .05, 1.2), '#a08b60')
     # 圆形银行徽记置于屋顶与正面，横竖条让俯视也能辨认。
     badge = scene.part('bank-emblem')
-    badge.cylinder((-.45, 4.34, .78), .48, .055, '#a08b60', sides=12)
-    badge.box((-.64, 4.38, .78), (.08, .04, .62), '#e3d9b6')
-    for z in (.52, .78, 1.04): badge.box((-.46, 4.39, z), (.40, .04, .075), '#e3d9b6')
-    for z in (.65, .91): badge.box((-.25, 4.39, z), (.075, .04, .20), '#e3d9b6')
+    badge.cylinder((-.45, 8.14, .78), .48, .055, '#a08b60', sides=12)
+    badge.box((-.64, 8.18, .78), (.08, .04, .62), '#e3d9b6')
+    for z in (.52, .78, 1.04): badge.box((-.46, 8.19, z), (.40, .04, .075), '#e3d9b6')
+    for z in (.65, .91): badge.box((-.25, 8.19, z), (.075, .04, .20), '#e3d9b6')
     badge.box((0, 1.95, 2.82), (.88, .52, .035), '#a08b60')
     for x in (-.18, 0, .18): badge.box((x, 1.95, 2.85), (.06, .32, .025), '#e3d9b6')
     lamps = scene.part('bank-entry-lights')
@@ -171,11 +202,11 @@ def hospital(ruined=False):
     grounds.box((0, .36, -5.65), (9.25, .30, .14), '#9daea0')
     for x in (-3.0, 3.0): grounds.box((x, .36, 5.65), (3.3, .30, .14), '#9daea0')
     wall = '#c1c4b6' if ruined else '#dedfd0'
-    building(scene, 'hospital-main', 0, -.10, 4.65, 3.2, 2.6, 3, wall, '#778e82')
-    building(scene, 'hospital-west-ward', -2.7, -3.6, 3.0, 3.2, 3.55, 4, wall, '#778e82')
-    building(scene, 'hospital-east-ward', 2.7, -3.6, 3.0, 3.2, 3.55, 4, wall, '#778e82', damaged=ruined)
-    building(scene, 'hospital-emergency', -2.85, 3.0, 3.0, 2.15, 1.45, 2, wall, '#778e82')
-    building(scene, 'hospital-services', 2.85, 3.0, 2.6, 2.15, 1.1, 1, wall, '#778e82')
+    building(scene, 'hospital-main', 0, -.10, 4.65, 3.2, 5.2, 6, wall, '#778e82')
+    building(scene, 'hospital-west-ward', -2.7, -3.6, 3.0, 3.2, 7.1, 8, wall, '#778e82')
+    building(scene, 'hospital-east-ward', 2.7, -3.6, 3.0, 3.2, 7.1, 8, wall, '#778e82', damaged=ruined)
+    building(scene, 'hospital-emergency', -2.85, 3.0, 3.0, 2.15, 2.9, 4, wall, '#778e82')
+    building(scene, 'hospital-services', 2.85, 3.0, 2.6, 2.15, 2.2, 2, wall, '#778e82')
     building(scene, 'hospital-rear-link', 0, -2.45, 2.9, .78, .85, 1, wall, '#778e82')
     for x in (-2.1, 2.1):
         building(scene, 'hospital-front-link-'+('west' if x < 0 else 'east'), x, 1.95, .7, 1.5, .72, 1, wall, '#778e82')
@@ -183,10 +214,10 @@ def hospital(ruined=False):
     entrance.box((0, 1.12, 2.0), (2.7, .13, 1.0), '#8b9e91')
     for x in (-1.1, 1.1): entrance.box((x, .67, 2.25), (.11, .85, .11), '#9cae9e')
     scene.part('hospital-entry-glass').box((0, .74, 1.52), (1.45, .95, .045), GLASS)
-    medical_mark(scene.part('hospital-main-sign'), 0, 2.98, -.1, 1.50)
-    medical_mark(scene.part('hospital-emergency-sign'), -2.85, 1.85, 3.0, .70)
-    panes = [(-2.7, -3.6, 3.90), (2.85, 3.0, 1.45), (-1.55, -.7, 2.98), (1.55, -.7, 2.98)]
-    if not ruined: panes.append((2.7, -3.6, 3.90))
+    medical_mark(scene.part('hospital-main-sign'), 0, 5.58, -.1, 1.50)
+    medical_mark(scene.part('hospital-emergency-sign'), -2.85, 3.30, 3.0, .70)
+    panes = [(-2.7, -3.6, 7.45), (2.85, 3.0, 2.55), (-1.55, -.7, 5.58), (1.55, -.7, 5.58)]
+    if not ruined: panes.append((2.7, -3.6, 7.45))
     for x, z, y in panes: roof_pane(scene, x, y, z, .70, .30)
     lamps = scene.part('hospital-entry-lights')
     for x in (-.85, .85): lamps.box((x, 1.2, 2.25), (.24, .045, .24), LAMP)

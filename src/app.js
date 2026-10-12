@@ -1,4 +1,4 @@
-import {createCity3D} from './city-3d.js?v=13';
+import {createCity3D} from './city-3d.js?v=16';
 import {operatingStreetLamps} from './city-streets.js?v=1';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier} from './combat-visuals.js?v=3';
