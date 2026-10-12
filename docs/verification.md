@@ -915,3 +915,11 @@
 - 用户反馈上一轮点线过碎、红色之间区分不足。潜在路线改为每段0.75格、间隔0.5格的平头长虚线；待出场路线也加长段与间隔，实际在场进攻仍为实线。固定八色扩大到朱红、橙红、玫红及不同明暗的邻近色，路线与预告共用并随昼夜同步提亮。
 - Codex网页第一天并列路线确认敌源1朱红、敌源2玫红及对应预告一致；第三天、第三晚悬停休眠敌源可见长虚线，夜间关闭路线仍能临时查看，说明保持“潜在路线 · 今晚不出兵”。浏览器无error/warn，刷新恢复默认第一天100金币/6人及路线开启，保留网页供试玩。截图`/private/tmp/cityx-route-long-dashes-day.png`、`/private/tmp/cityx-route-long-dashes-night.png`。
 - 本轮仅调整绘制常量与文档，不改规则，不新增规则测试；JS语法、diff空白及本地Pages构建通过。未运行Godot、自动提交或发布。
+
+
+### 2026-10-12：增强控制边界的视觉权重
+
+- 第三次试玩反馈的第一项改造：短虚线改为连续蓝色轮廓，深色衬边保证道路/屋顶/云雾背景的对比；主线保持2.2–3屏幕像素。受控侧轻微蓝色色带在战术信息下绘制，裁剪于最终控制mask，不向外扩大权限。道路、建筑纹理与装饰线保留，昼夜同形并平滑提亮，不加入安全区或物理阻挡。
+- 边界和受控裁剪Path2D随状态缓存，镜头平移/缩放复用；仍沿整栋受控建筑和逐格开放地面绘制。既有建筑控制、连接、可见性29项检查通过，含Case A–F及墙/瞭望塔不可借建筑远端扩张。
+- Codex网页实际检查默认窗口及1280×720：白天200%和全图100%、选炮格框叠加、第三晚200%/全图100%/近景313%均可追踪连续轮廓。第三天道路建瞭望塔，金币100→75、可用6→5，边界即时扩张；拆除后100/6恢复、边界收缩回原范围。重新加载恢复第一天100金币/6人，取消工具后轮廓仍在，已重置临时视口并保留试玩页。
+- app v144本地加载正常，无浏览器error/warn；JS语法、Pages构建与diff检查通过。无新增规则测试，不运行Godot、不自动提交/推送/发布；控制表现是否改善玩家判断仍待真人试玩。截图：`/private/tmp/cityx-control-before.png`、`/private/tmp/cityx-control-final.png`、`/private/tmp/cityx-control-build.png`、`/private/tmp/cityx-control-night.png`、`/private/tmp/cityx-control-night-overview.png`、`/private/tmp/cityx-control-expanded.png`、`/private/tmp/cityx-control-shrunk.png`。

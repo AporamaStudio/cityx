@@ -339,7 +339,11 @@ function drawSourceLocator(source,size){
 function mapDisplay(){
   if(!mapView){
     const params=previewParams(),controlState={...state,params},raw=rawControlMask(controlState),controlled=controlMask(controlState,params.controlRadius,raw);
-    mapView={controlState,raw,controlled,visibility:createVisibility(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells),boundary:controlBoundary(controlled),dirty:paramsDirty(),
+    // 世界坐标路径随控制变化缓存；平移/缩放只重画，不能把描边当成新增权限。
+    const boundary=controlBoundary(controlled),boundaryPath=new Path2D(),controlPath=new Path2D();
+    for(const [a,b,c,d] of boundary){boundaryPath.moveTo(a,b);boundaryPath.lineTo(c,d);}
+    for(const id of controlled){const [x,y]=xy(id);controlPath.rect(x,y,1,1);}
+    mapView={controlState,raw,controlled,boundary,boundaryPath,controlPath,visibility:createVisibility(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells),dirty:paramsDirty(),
       towers:createTowerOverlay(state,controlled,new Set(motion?.actors.map(e=>e.to))),
       sourceSites:new Set([...state.enemySources.values()].map(s=>s.site)),
       sourceFootprint:new Set([...state.enemySources.values()].flatMap(sourceCells))};
@@ -529,6 +533,10 @@ function paintMap() {
     // 街区标签在屏幕空间绘制，缩小棋盘时仍保持可读。
   }
   if(mapFogEnabled())drawFog(ctx,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom);
+  // 淡色带只落在受控侧；放在战术信息下方，保留地形材质与建筑细节。
+  ctx.save();ctx.clip(view.controlPath);ctx.setLineDash([]);ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.strokeStyle=`rgba(83,180,222,${.16+nightMix*.04})`;ctx.lineWidth=Math.min(size*.75,12)/size;
+  ctx.stroke(view.boundaryPath);ctx.restore();
   // 信息先按既有权限筛选，再画在环境云上，避免战斗与操作被薄云盖住。
   const actualNight=state.phase==='battle'&&Number($('forecastDay').value)===state.day-1;
   const displayedRoutes=actualNight?battleRoutes(state):plannedRoutes.map(attack=>({...attack,future:false}));
@@ -624,10 +632,13 @@ function paintMap() {
     if(wallBody?.hp===0){ctx.fillStyle='#956b57';ctx.fillRect(x+.1,y+.6,.8,.24);ctx.strokeStyle='#dfaa81';ctx.lineWidth=.06;ctx.beginPath();ctx.moveTo(x+.2,y+.2);ctx.lineTo(x+.8,y+.8);ctx.stroke();}
     if(wallBody&&wallBody.hp>0&&wallBody.hp<wallBody.max){ctx.fillStyle='#533a32';ctx.fillRect(x+.1,y+.85,.8,.1);ctx.fillStyle='#ecc58f';ctx.fillRect(x+.1,y+.85,.8*wallBody.hp/wallBody.max,.1);}
   }
+  // 连续实线区别道路/格网，衬边保证昼夜对比；线宽用屏幕像素，不随远景消失。
   // 建筑整体归属的轮廓最后绘制，避免被屋顶贴图盖住；开放地面仍逐格走边。
-  ctx.strokeStyle='#86ccea';ctx.lineWidth=.08;ctx.setLineDash([.16,.12]);ctx.beginPath();
-  for(const [a,b,c,d] of view.boundary){ctx.moveTo(a,b);ctx.lineTo(c,d);}
-  ctx.stroke();ctx.setLineDash([]);
+  ctx.save();ctx.setLineDash([]);ctx.lineCap='round';ctx.lineJoin='round';
+  const boundaryWidth=Math.max(2.2,Math.min(3,size*.10));
+  ctx.strokeStyle='#172d3ee6';ctx.lineWidth=(boundaryWidth+2)/size;ctx.stroke(view.boundaryPath);
+  ctx.strokeStyle=`rgb(${Math.round(78+nightMix*54)},${Math.round(170+nightMix*40)},${Math.round(211+nightMix*30)})`;
+  ctx.lineWidth=boundaryWidth/size;ctx.stroke(view.boundaryPath);ctx.restore();
   // 拆除高亮只覆盖实际对象：物理建筑或独立设施一格。
   if(tool==='erase'&&hover!==null&&state.phase==='build'){
     const q=demolitionQuote(state,hover),cells=['production','housing','ruin'].includes(q.type)?buildingCells(state,hover):q.type?[hover]:[];
