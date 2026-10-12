@@ -1,3 +1,4 @@
+import {createCity3D} from './city-3d.js?v=1';
 import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
 import {createTowerOverlay} from './tower-overlay.js?v=18';
@@ -62,6 +63,7 @@ document.addEventListener('click',event=>{if(!$('audioSettings').contains(event.
 document.addEventListener('keydown',event=>{if(event.key==='Escape')$('audioSettings').open=false;});
 sound.setHidden(document.hidden);updateAudioControls();
 const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport');
+const city3D=createCity3D(()=>draw());
 let state = createCampaign(DEFAULTS,undefined,cityLayout), tool = 'wall', hover = null, dragging = null;
 let sourceDrafts=[],editingNight=1,editorSourcePreview=null;
 const blockedActionReasons=new Map();
@@ -514,6 +516,9 @@ function paintMap() {
     for(const p of state.sites)if(currentlyVisible(key(p.x,p.y))&&state.production.has(key(p.x,p.y))&&productionActive(state,key(p.x,p.y)))lamp(p.x+(p.width??p.size)/2,p.y+(p.height??p.size)/2,Math.max(p.width??p.size,p.height??p.size),'#f4d68b33');
     ctx.restore();
   }
+  // 仅把原画面允许显示完整外观的地块交给3D；未知城区继续用低细节轮廓。
+  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&!view.sourceSites.has(id)&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.role==='hospital'?'hospital':p.content.type,status:p.content.status}));
+  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,night:nightMix});
   for(const p of state.sites){
     if(!inView(p.x,p.y,p.width??p.size,p.height??p.size))continue;
     const {x,y}=p,n=p.width??p.size,m=p.height??p.size,id=key(x,y),built=state.production.has(id),active=built&&productionActive(state,id),selected=hoveredPlot===id&&(['production','housing'].includes(tool)||(tool==='erase'&&['production','housing','ruin'].includes(demolitionQuote(state,hover).type)));
@@ -528,18 +533,21 @@ function paintMap() {
     // 按物理 footprint 画建筑，屋顶炮位保留建筑底色；经营面积独立计算。
     ctx.save();if(!overlay.controlled&&!overlay.cells.some(currentlyVisible))ctx.globalAlpha=.68;ctx.beginPath();
     for(const cell of overlay.footprint){if(postGhost&&cell===hover)continue;const [cx,cy]=xy(cell);ctx.rect(cx,cy,1,1);}ctx.clip();
+    if(cityFrame&&city3D.has(id))ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);
+    else{
     ctx.fillStyle=selected?(active?'#527e59':built?'#80594e':'#655f3d'):active?'#527e59':built?'#80594e':nightMix>.5?'#494b42':'#81745b';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);
     ctx.strokeStyle=selected?'#fff0ae':productionControlled(previewState,id)?'#f5d789':'#a29670';ctx.lineWidth=selected?.12:.06;ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);
     // 同一整块用材质区分废墟、生产和居住，日夜分别取缓存贴图。
     drawBlockTexture(ctx,p,overlay.content.status==='ruin'?`${overlay.content.type}-ruin`:overlay.content.type,nightMix);
     if(p.role==='hospital'){ctx.fillStyle='#cbd7cb';ctx.fillRect(x+3,y+3,4,6);ctx.fillStyle='#478b80';ctx.fillRect(x+4.5,y+4,1,4);ctx.fillRect(x+3.5,y+5.5,3,1);}
+    }
     // 类型徽记放在建筑顶行未占用的位置，不覆盖炮位；废墟保留材质的破损表达。
     if(['production','housing'].includes(overlay.content.type)&&overlay.content.status==='building'&&overlay.iconCell!==null){
       const [ix,iy]=xy(overlay.iconCell);ctx.save();ctx.fillStyle=nightMix>.5?'#1c3037e8':'#e3e5d9e8';ctx.beginPath();ctx.roundRect(ix+.09,iy+.09,.82,.82,.1);ctx.fill();drawFacility(overlay.content.type,ix+.15,iy+.15,.7);ctx.restore();
     }
     if(p.special){ctx.strokeStyle='#d5b5fc';ctx.lineWidth=.12;ctx.strokeRect(x+.16,y+.16,n-.32,m-.32);}
     if(selected)for(const cell of overlay.cells)if(!inControl(previewState,cell)){const [cx,cy]=xy(cell);ctx.fillStyle='#ed665877';ctx.fillRect(cx,cy,1,1);}
-    if(active&&nightMix>0){
+    if(!cityFrame&&active&&nightMix>0){
       ctx.save();ctx.globalAlpha=nightMix;ctx.fillStyle='#ffe4a1';
       for(let i=0;i<n;i++){ctx.fillRect(x+.18+i,y+.18,.18,.18);ctx.fillRect(x+.18+i,y+m-.36,.18,.18);}ctx.restore();
     }

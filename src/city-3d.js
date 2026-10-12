@@ -1,0 +1,92 @@
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+
+// 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
+const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined'};
+const resource=file=>new URL('../assets/model-preview/'+file+'.glb',import.meta.url).href;
+
+function damageBuilding(object){
+  // 同楼局部塌损：保留入口和轮廓，屋顶缺口从俯视可辨；只在状态切换时生成。
+  object.updateMatrixWorld(true);
+  const bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+  object.traverse(node=>{
+    if(!node.isMesh)return;
+    const geometry=node.geometry.index?node.geometry.toNonIndexed():node.geometry.clone(),positions=geometry.attributes.position;
+    node.geometry=geometry;node.userData.ownGeometry=true;
+    const point=new THREE.Vector3(),inverse=node.matrixWorld.clone().invert(),kept=[];
+    for(let i=0;i<positions.count;i+=3){
+      const middle=new THREE.Vector3();for(let j=0;j<3;j++)middle.add(point.fromBufferAttribute(positions,i+j).applyMatrix4(node.matrixWorld));middle.multiplyScalar(1/3);
+      if(!(middle.x>center.x&&middle.z<center.z+size.z*.15&&middle.y>bounds.min.y+size.y*.4))kept.push(i,i+1,i+2);
+    }
+    geometry.setIndex(kept);
+    for(let i=0;i<positions.count;i++){
+      point.fromBufferAttribute(positions,i).applyMatrix4(node.matrixWorld);
+      if(point.x>center.x&&point.z<center.z+size.z*.15&&point.y>bounds.min.y+size.y*.35)point.y=bounds.min.y+size.y*.35+(point.y-bounds.min.y-size.y*.35)*.1;
+      point.applyMatrix4(inverse);positions.setXYZ(i,point.x,point.y,point.z);
+    }
+    geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
+    node.material.color.set('#a29c87');
+    node.material.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\ndiffuseColor.rgb=mix(diffuseColor.rgb,vec3(dot(diffuseColor.rgb,vec3(.2126,.7152,.0722))),.82);');};
+    node.material.customProgramCacheKey=()=> 'cityx-game-ruin';
+  });
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(size.x*.78,.05,size.z*.74),new THREE.MeshStandardMaterial({color:'#414a43',roughness:1}));
+  floor.position.set(center.x,bounds.min.y+size.y*.12,center.z);floor.userData.ownGeometry=true;object.attach(floor);
+}
+
+export function createCity3D(onReady){
+  let renderer;
+  try{renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,preserveDrawingBuffer:true});}
+  catch(error){console.warn('3D城市不可用，保留原地图显示。',error);return null;}
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+  renderer.setClearColor('#000000',0);
+  const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(0,60,0,-60,.1,200);
+  camera.position.set(0,100,0);camera.up.set(0,0,-1);camera.lookAt(0,0,0);
+  const sky=new THREE.HemisphereLight('#f4f6e2','#809180',2.4),sun=new THREE.DirectionalLight('#fff1cd',3.2);
+  sun.position.set(-30,60,20);sun.target.position.set(30,0,30);scene.add(sky,sun,sun.target);
+  const models=new Map(),entries=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',pixels='';
+  Promise.all(Object.entries(files).map(async ([name,file])=>{models.set(name,(await loader.loadAsync(resource(file))).scene);})).then(()=>{ready=true;onReady();}).catch(error=>console.error('城市模型装载失败，保留原地图。',error));
+  function release(entry){
+    scene.remove(entry.object);entry.object.traverse(node=>{if(node.isMesh){node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});
+  }
+  function build(plot){
+    const {id,x,y,w,h,type,status}=plot;
+    const pool=type==='housing'?['small','home','wide']:['factory','workshop'];
+    let name='hospital',rotation=0,best=Infinity;
+    if(type!=='hospital')for(const candidate of pool){
+      const size=new THREE.Box3().setFromObject(models.get(candidate)).getSize(new THREE.Vector3());
+      for(const turn of [0,1]){const ratio=turn?size.z/size.x:size.x/size.z,score=Math.abs(Math.log(w/h/ratio))+(id%3===pool.indexOf(candidate)?0:.06);if(score<best){best=score;name=candidate;rotation=turn*Math.PI/2;}}
+    }
+    if(type==='hospital'&&status==='ruin')name='hospitalRuined';
+    const object=new THREE.Group(),model=models.get(name).clone(true);object.add(model);model.rotation.y=rotation;
+    model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.material.roughness=.95;}});
+    object.updateMatrixWorld(true);
+    const bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+    const scale=Math.min((w-.16)/size.x,(h-.16)/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
+    object.position.set(x+w/2,0,y+h/2);scene.add(object);
+    if(status==='ruin'&&type!=='hospital')damageBuilding(object);
+    return {object,signature:`${type}:${status}:${w}:${h}`,roof:new THREE.Box3().setFromObject(object).max.y};
+  }
+  return {
+    has(id){return ready&&entries.has(id);},
+    render(plots,{width,height,panX,panY,cell,night}){
+      if(!ready)return null;
+      const active=new Set(plots.map(p=>p.id));
+      for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
+      for(const plot of plots){
+        const signature=`${plot.type}:${plot.status}:${plot.w}:${plot.h}`;
+        if(entries.get(plot.id)?.signature!==signature){if(entries.has(plot.id))release(entries.get(plot.id));entries.set(plot.id,build(plot));}
+      }
+      // 云纹/悬停刷新复用城市画面；仅镜头、地块状态或昼夜光照变化时重画WebGL。
+      const signature=plots.map(p=>`${p.id}:${entries.get(p.id).signature}`).join('|')+`/${width}:${height}:${panX}:${panY}:${cell}:${night}`;
+      if(signature!==lastFrame){
+        const dimensions=`${width}:${height}`;if(pixels!==dimensions){renderer.setSize(width,height,false);pixels=dimensions;}
+        camera.left=-panX/cell;camera.right=(width-panX)/cell;camera.top=panY/cell;camera.bottom=-(height-panY)/cell;camera.updateProjectionMatrix();
+        sky.color.set('#f4f6e2').lerp(new THREE.Color('#b9d7ed'),night);sky.groundColor.set('#809180').lerp(new THREE.Color('#4c676b'),night);sky.intensity=2.4-night*.9;
+        sun.color.set('#fff1cd').lerp(new THREE.Color('#b9cfff'),night);sun.intensity=3.2-night*2.3;
+        renderer.render(scene,camera);lastFrame=signature;
+      }
+      return renderer.domElement;
+    },
+  };
+}
