@@ -1,12 +1,12 @@
 import {createVisibility} from './visibility.js?v=3';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=15';
-import {createTowerOverlay} from './tower-overlay.js?v=14';
+import {createTowerOverlay} from './tower-overlay.js?v=15';
 import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings} from './city-textures.js?v=13';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=7';
 import {createGameAudio} from './audio.js?v=7';
 import { SIZE, DEFAULTS } from './config.js?v=71';
-import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=86';
+import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=87';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -86,7 +86,12 @@ const terrainColors={groundA:[[88,99,88],[21,32,49]],groundB:[[94,105,94],[25,37
 function terrainColor(name){
   const [day,night]=terrainColors[name];return `rgb(${day.map((v,i)=>Math.round(v+(night[i]-v)*nightMix)).join(',')})`;
 }
-const colors = ['#df9989', '#a6a1e9', '#d5bd79', '#78bcd3', '#bd98c8', '#b7c77d', '#dc9fb1', '#87c4af'];
+// 敌方在红色附近拉开橙红、玫红与明暗差；避开控制、经营与炮位的青绿/金/紫色。
+const enemyRouteColors=[['#cf392c','#ff7260'],['#b43277','#f278b5'],['#c9672b','#ffae72'],['#902537','#d64b68'],['#c96e55','#eeaa91'],['#833747','#b8768b'],['#bc657f','#f1c1d0'],['#a05330','#c88760']];
+function enemyRouteColor(index){
+  const pair=enemyRouteColors[((index%enemyRouteColors.length)+enemyRouteColors.length)%enemyRouteColors.length];
+  return '#'+[1,3,5].map(i=>{const day=parseInt(pair[0].slice(i,i+2),16),night=parseInt(pair[1].slice(i,i+2),16);return Math.round(day+(night-day)*nightMix).toString(16).padStart(2,'0');}).join('');
+}
 const notify = message => { $('notice').textContent = message; };
 let topNoticeTimer=null;
 // 拒绝操作统一在顶栏短暂显示；下次点击可提前清除，不占左下说明区。
@@ -528,12 +533,19 @@ function paintMap() {
   const actualNight=state.phase==='battle'&&Number($('forecastDay').value)===state.day-1;
   const displayedRoutes=actualNight?battleRoutes(state):plannedRoutes.map(attack=>({...attack,future:false}));
   const routeSources=viewedSources(),linked=linkedSource();
+  let potential=null;
+  if(linked&&forecastDay===state.day&&!sourceEditing()&&!routeSources.some(s=>sourceIdentity(s)===linked)){
+    // 同一目标只在状态/地形更新后重算，云纹和镜头重绘直接复用；不借用下一晚计划。
+    view.potentialRoutes??=new Map();
+    if(!view.potentialRoutes.has(linked))view.potentialRoutes.set(linked,potentialSourceRoute(state,linked));
+    potential=view.potentialRoutes.get(linked);
+  }
   const linkedRoute=route=>(route.sources??[route.index]).some(index=>routeSources[index]&&sourceIdentity(routeSources[index])===linked);
   const focusedRoutes=linked?displayedRoutes.filter(route=>route.path.length>1&&linkedRoute(route)):[];
-  const focusActive=focusedRoutes.length>0;
-  const routeColor=index=>colors[(sourceNumber(routeSources[index])>=0?sourceNumber(routeSources[index]):index)%colors.length];
+  const focusActive=focusedRoutes.length>0||!!potential;
+  const routeColor=index=>enemyRouteColor(sourceNumber(routeSources[index])>=0?sourceNumber(routeSources[index]):index);
   // 颜色继续表达来源；合流时按当前联动的源头着色，而不是只取第一来源。
-  const focusedColor=focusActive?routeColor(routeSources.findIndex(source=>sourceIdentity(source)===linked)):null;
+  const focusedColor=potential?enemyRouteColor(potential.index):focusedRoutes.length?routeColor(routeSources.findIndex(source=>sourceIdentity(source)===linked)):null;
   const brighten=amount=>`rgb(${[1,3,5].map(i=>{const value=parseInt(focusedColor.slice(i,i+2),16);return Math.round(value+(255-value)*amount);}).join(',')})`;
   ctx.save();clipSight();
   // 复用已锁定路径，关联路线最后描画；临时显线不修改开关或揭开迷雾。
@@ -551,15 +563,23 @@ function paintMap() {
   if ($('routes').checked || wallEdit || postGhost) displayedRoutes.forEach(route => {
     if(focusActive&&linkedRoute(route))return;
     const {path,index,future}=route;
-    ctx.setLineDash(future?[.25,.2]:[]);
+    ctx.setLineDash(future?[.45,.3]:[]);
+    ctx.strokeStyle='#392328';ctx.globalAlpha=(future?.35:.8)*(focusActive?.3:1);ctx.lineWidth=Math.max(future?.13:.18,2/size);strokeRoute(path,index);
     ctx.strokeStyle=routeColor(index);ctx.globalAlpha=(future?.35:.8)*(focusActive?.3:1);ctx.lineWidth=future?.065:.10;
     strokeRoute(path,index);routeArrows(path,index,4);
   });
   for(const {path,index,future} of focusedRoutes){
-    ctx.setLineDash(future?[.3,.18]:[]);ctx.lineJoin='round';ctx.lineCap='round';
+    ctx.setLineDash(future?[.5,.32]:[]);ctx.lineJoin='round';ctx.lineCap='round';
     ctx.globalAlpha=.95;ctx.strokeStyle='#172029';ctx.lineWidth=Math.max(.32,5/size);strokeRoute(path,index);
     ctx.strokeStyle=brighten(.18);ctx.lineWidth=Math.max(.16,2.5/size);strokeRoute(path,index);
     ctx.setLineDash([]);ctx.strokeStyle=brighten(.35);ctx.lineWidth=Math.max(.10,1.5/size);routeArrows(path,index,6);
+  }
+  if(potential){
+    // 潜在方向用更长、更疏的虚线；仍受同一S0/S1裁剪，不揭雾、不预告日期。
+    ctx.setLineDash([.75,.5]);ctx.lineCap='butt';ctx.lineJoin='round';ctx.globalAlpha=.7;
+    ctx.strokeStyle='#392328';ctx.lineWidth=Math.max(.24,3.5/size);strokeRoute(potential.path,potential.index);
+    ctx.strokeStyle=brighten(.12);ctx.lineWidth=Math.max(.11,1.6/size);strokeRoute(potential.path,potential.index);
+    ctx.setLineDash([]);ctx.globalAlpha=.6;ctx.strokeStyle=brighten(.25);ctx.lineWidth=Math.max(.08,1.2/size);routeArrows(potential.path,potential.index,6);
   }
   ctx.restore();
   if (tool !== null && hover !== null && (state.phase === 'build' || weaponHover) && (!productionSite(hover,state)||weaponHover||postHover)) {
@@ -836,6 +856,7 @@ function paintMap() {
     else type=state.layout?.tiles[hover]==='road'?'道路':'自然地形';
     $('cellInfo').textContent=w&&h?`${w}×${h} 地块 · ${type}`:type;
   }else $('cellInfo').textContent='';
+  if(potential)$('cellInfo').textContent='潜在路线 · 今晚不出兵';
 }
 // 动画只刷新显示值，不把插值后的拍数写回战斗状态。
 function updateNightProgress(){
@@ -1012,7 +1033,8 @@ function updateForecast() {
       row.addEventListener('blur',()=>{if(forecastFocusSource===id)forecastFocusSource=null;syncSourceHighlight();});
       row.addEventListener('click',()=>row.focus({preventScroll:true}));
     }
-    row.style.setProperty('--source-color',colors[(s.sourceId?sourceNumber(s):i)%colors.length]);
+    row.dataset.colorIndex=s.sourceId?sourceNumber(s):i;
+    row.style.setProperty('--source-color',enemyRouteColor(Number(row.dataset.colorIndex)));
     const cleared=s.sourceId&&state.enemySources.get(s.sourceId)?.hp===0;
     name.className='forecast-source';name.textContent=`敌源 ${s.sourceId?sourceNumber(s)+1:i+1}`;
     if(cleared){
@@ -1492,6 +1514,7 @@ function setSceneProgress(progress){
   if(sceneProgress===progress)return;
   sceneProgress=progress;
   nightMix=Math.max(0,(progress-.35)/.65);duskMix=Math.min(1,progress*2.5)*(1-nightMix);
+  for(const row of $('forecastList').children)row.style.setProperty('--source-color',enemyRouteColor(Number(row.dataset.colorIndex)));
   document.body.style.setProperty('--scene-night',`${nightMix*100}%`);
   document.body.style.setProperty('--scene-warm',`${duskMix*12}%`);
   document.body.style.setProperty('--scene-source-shade',nightMix>.5?'0%':'60%');

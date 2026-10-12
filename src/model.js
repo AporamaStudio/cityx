@@ -333,6 +333,13 @@ export function forecastAttacks(state,night=state.day) {
   if(night===state.day)return state.attacks;
   return sourcePlans(state,night).map((source,index)=>sourceAttack(state,source,index));
 }
+// 已知存活据点的假设进攻方向：只读当前地形，不读取未来出兵安排或改写锁定路线。
+export function potentialSourceRoute(state,sourceId){
+  const source=knownSources(state).find(s=>s.id===sourceId&&s.hp>0);
+  if(!source)return null;
+  const route=sourceAttack(state,{sourceId:source.id,x:source.x,y:source.y},source.index);
+  return campCells(state).includes(route.path.at(-1))?{sourceId:source.id,index:source.index,path:route.path,potential:true}:null;
+}
 // 只读校验出兵表：出生当拍不移动，进入火光任意一格即到达；不计墙与炮火。
 export function routeTimingReport(state) {
   const deadline=state.params.nightTicks,camp=new Set(campCells(state)),nights=[];

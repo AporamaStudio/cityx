@@ -50,7 +50,7 @@ body[data-phase="battle"] .phase-guide{background:#352c29;border-color:#b685553d
 body[data-phase="lost"] .phase-guide{background:#442c30}body[data-phase="lost"] .phase-guide strong{color:#ffb0a6}
 body[data-phase="won"] .arena{border-color:#85d1ad}body[data-phase="lost"] .arena{border-color:#cf837c}
 #income{padding:10px 0 0;color:#cde6be}.meter{height:7px}.stats{margin-top:12px}.stats b{font-size:20px}
-#result{padding-top:10px;border-top:1px solid var(--line)}#forecastList{list-style:none;padding:0}#forecastList li{padding:8px 10px;background:#101d234d;border-left:2px solid var(--source-color,#d5bd79);border-radius:0 5px 5px 0;color:#c1cdcd}
+#result{padding-top:10px;border-top:1px solid var(--line)}#forecastList{list-style:none;padding:0}#forecastList li{padding:8px 10px;background:#101d234d;border-left:2px solid var(--source-color,#b95542);border-radius:0 5px 5px 0;color:#c1cdcd}
 .forecast-help summary{font-size:12px;color:var(--muted)}.maplegend{background:#10191eea;border:1px solid #41565b;padding:7px 9px;color:#b5c6c8}.mapbar{background:#223238}.badge{font-variant-numeric:tabular-nums;background:#8ed7bd0a}
 @media(max-width:1100px) and (min-width:901px){main{padding:10px;gap:10px}.toolgrid button{--tool-inset:8px;padding:9px var(--tool-inset)}
 }

@@ -3,10 +3,32 @@ import assert from 'node:assert/strict';
 import {DEFAULTS} from '../src/config.js';
 import {MAP_DEFAULTS} from '../src/map-settings.js';
 import {generateCityMap} from '../src/city-map.js';
-import {createCampaign,routeTimingReport,key,beginBattle,stepBattle,campCells} from '../src/model.js';
+import {createCampaign,routeTimingReport,key,beginBattle,stepBattle,campCells,potentialSourceRoute,rebuildTerrain} from '../src/model.js';
 
 const wave={x:15,y:20,hp:1,count:3,first:2,interval:2};
 const setup=(nightTicks=10)=>createCampaign({...DEFAULTS,nightTicks,campHP:1000},[[wave],[wave]]);
+test('休眠已知敌源的潜在路线只读，不读取未来计划或增加探索',()=>{
+ const s=createCampaign(DEFAULTS,undefined,generateCityMap(MAP_DEFAULTS)),source=s.enemySources.get('source-3');
+ assert.equal(potentialSourceRoute(s,source.id),null);source.discovered=true;
+ const before=structuredClone(s),route=potentialSourceRoute(s,source.id);assert.ok(route.path.length>1);
+ assert.ok(campCells(s).includes(route.path.at(-1)));assert.deepEqual(s,before);
+ assert.deepEqual(Object.keys(route).sort(),['index','path','potential','sourceId']);
+ s.waves=s.waves.map(()=>[]);source.firstNight=Infinity;
+ assert.deepEqual(potentialSourceRoute(s,source.id),route);source.hp=0;
+ assert.equal(potentialSourceRoute(s,source.id),null);assert.equal(potentialSourceRoute(s,'missing'),null);
+});
+test('潜在路线按当前物理地形绕建筑，玩家墙不改路，不覆盖今晚锁定路径',()=>{
+ const source={id:'idle',index:0,bx:15,by:20,width:1,height:1,x:15,y:21,site:key(15,20)};
+ const layout={width:60,height:60,camp:{x:15,y:25},tiles:Array(3600).fill('road'),blocks:[{x:15,y:20,width:1,height:1,kind:'building'},{x:15,y:22,width:1,height:1,kind:'open'}]};
+ const s=createCampaign(DEFAULTS,[[]],layout,[source]);s.enemySources.get(source.id).discovered=true;
+ const initial=potentialSourceRoute(s,source.id);assert.ok(initial.path.includes(key(15,22)));
+ s.playerWalls.add(key(15,22));s.wallHealth.set(key(15,22),{hp:12,max:12});rebuildTerrain(s);
+ assert.deepEqual(potentialSourceRoute(s,source.id),initial);
+ s.plotContents.set(key(15,22),{status:'building',type:'production',cells:new Set([key(15,22)]),footprint:new Set([key(15,22)])});rebuildTerrain(s);
+ const locked=structuredClone(s.attacks),route=potentialSourceRoute(s,source.id);
+ assert.ok(!route.path.includes(key(15,22)));assert.ok(campCells(s).includes(route.path.at(-1)));assert.deepEqual(s.attacks,locked);
+ s.field={next:new Map(),distance:new Map()};assert.equal(potentialSourceRoute(s,source.id),null);
+});
 test('无墙到达按出生后移动计拍，末拍到达有效，统计每批超时而非只看末批',()=>{
  const s=setup(),report=routeTimingReport(s),row=report.nights[0].rows[0];
  assert.equal(row.steps,4);assert.equal(row.cells,5);assert.equal(row.lastSpawn,6);assert.equal(row.lastArrival,10);
