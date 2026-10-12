@@ -13,6 +13,16 @@ export function createTowerOverlay(state,controlled,movingCells=new Set()){
   }
   // 容量标签与占位行共用每栋的一次统计；候选格的完整权限检查仍由模型负责。
   for(const cell of state.towers.keys())if(cellSites[cell]){cellSites[cell].capacity.used++;cellSites[cell].towerCells.push(cell);}
+  // 类型图标挑顶行靠中的未架炮格；随布局更新一次，镜头重画不重新排序。
+  for(const entry of plots.values()){
+    const center=entry.site.x+(entry.site.width??entry.site.size)/2;
+    entry.iconCell=null;let best=Infinity;
+    for(const cell of entry.footprint){
+      if(state.towers.has(cell))continue;
+      const x=cell%SIZE,y=Math.floor(cell/SIZE),score=y*SIZE+Math.abs(x+.5-center);
+      if(score<best){best=score;entry.iconCell=cell;}
+    }
+  }
   for(const entry of plots.values()){
     if(!entry.controlled||!['production','housing'].includes(entry.content.type)||entry.capacity.used>=entry.capacity.max)continue;
     for(const cell of entry.footprint)if(!state.towers.has(cell)&&streetEdgeAccess(state,cell))candidates.push(cell);

@@ -1,8 +1,8 @@
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=10';
-import {createTowerOverlay} from './tower-overlay.js?v=8';
+import {createTowerOverlay} from './tower-overlay.js?v=9';
 import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings} from './city-textures.js?v=11';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
-import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG} from './icons.js?v=6';
+import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=7';
 import {createGameAudio} from './audio.js?v=7';
 import { SIZE, DEFAULTS } from './config.js?v=66';
 import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=81';
@@ -14,14 +14,24 @@ mapSettings.width=SIZE;mapSettings.height=SIZE;
 const cityLayout=generateCityMap(mapSettings);
 const $ = id => document.getElementById(id);
 // Canvas 报价直接复用钱包与工具 SVG，资源和炮图标不另建一套图形。
-document.querySelector('#outpost .tool-name').innerHTML=WATCHTOWER_SVG+' 瞭望塔';
+for(const [id,kind,label] of [['wall','wall','建墙'],['build','near','近防炮'],['long','far','远防炮'],['production','production','生产'],['housing','housing','住房'],['outpost','watch','瞭望塔']])document.querySelector('#'+id+' .tool-name').innerHTML=FACILITY_SVGS[kind]+' '+label;
+// 图标在启动时各缓存日/夜两张，不在移动镜头或每帧生成图片。
+const facilityImages={};
+for(const [name,svg] of Object.entries(FACILITY_SVGS))facilityImages[name]=FACILITY_COLORS[name].map(color=>{
+  const image=new Image();image.onload=()=>draw();image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg.replace(/style="[^"]*"/,`style="color:${color}"`).replace('width="32" height="32"','width="96" height="96"'));return image;
+});
+function drawFacility(name,x,y,size){
+  const images=facilityImages[name],alpha=ctx.globalAlpha;ctx.save();
+  images.forEach((image,index)=>{const blend=index?nightMix:1-nightMix;if(blend>0&&image.complete&&image.naturalWidth){ctx.globalAlpha=alpha*blend;ctx.drawImage(image,x,y,size,size);}});
+  ctx.restore();
+}
 document.querySelector('#populationTotalMetric .population-symbol').innerHTML=POPULATION_SVG;
 document.querySelector('#populationFreeMetric .population-symbol').innerHTML=WORKER_SVG;
 $('outpostWorkerIcon').innerHTML=WORKER_SVG;
 // 人口明细沿用总人口/工人图标，数字与图标分开更新，不再重复写单位文字。
 for(const name of ['Total','Free','Production','Watch'])$('populationDetail'+name).nextElementSibling.innerHTML=name==='Total'?POPULATION_SVG:WORKER_SVG;
 const resourceIcons={};
-for(const [name,selector] of [['coin','.wallet .coin-icon'],['people','#populationFreeMetric svg'],['residents','#populationTotalMetric svg'],['watch','#outpost svg'],['military','#build .weapon-icon']]){
+for(const [name,selector] of [['coin','.wallet .coin-icon'],['people','#populationFreeMetric svg'],['residents','#populationTotalMetric svg'],['military','#build .weapon-icon']]){
   const svg=document.querySelector(selector).cloneNode(true);
   svg.setAttribute('xmlns','http://www.w3.org/2000/svg');svg.setAttribute('width','32');svg.setAttribute('height','32');svg.style.color='#f4d3a2';
   if(name==='military')svg.setAttribute('fill','currentColor');
@@ -152,9 +162,29 @@ function fitResourcePreview(slot){
   const measured=value.getBoundingClientRect().width;
   if(measured>width)value.style.setProperty('--preview-scale',String(Math.max(0,width-1)/measured));
 }
+const toolPriceFitCache=new WeakMap();
+// 费用整体按名称右侧的剩余宽度缩放；宽度只由按钮和名称决定，避免缩放反向引起布局循环。
+function fitToolPrices(){
+  for(const price of document.querySelectorAll('.toolgrid .tool-price')){
+    const button=price.closest('button'),name=button.querySelector('.tool-name');
+    if(price.hidden||!button.clientWidth)continue;
+    let content=price.firstElementChild;
+    // 修复/拆除预览会重写子节点，因此与常驻费用共用同一个包装入口。
+    if(!content?.classList.contains('tool-price-content')){
+      content=document.createElement('span');content.className='tool-price-content';content.append(...price.childNodes);price.append(content);
+    }
+    const style=getComputedStyle(button),available=Math.max(0,button.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)-name.getBoundingClientRect().width-parseFloat(style.columnGap));
+    const natural=content.offsetWidth+1,signature=`${available}:${natural}`;
+    if(toolPriceFitCache.get(price)===signature)continue;
+    toolPriceFitCache.set(price,signature);
+    price.style.setProperty('--price-width',`${Math.min(natural,available)}px`);
+    price.style.setProperty('--price-scale',String(Math.min(1,available/natural)));
+  }
+}
 function fitResources(){
   for(const row of document.querySelectorAll('.resource-line'))fitResourceLine(row);
   for(const slot of document.querySelectorAll('.resource-preview'))fitResourcePreview(slot);
+  fitToolPrices();
 }
 let selectedSource=null;
 let forecastPointerSource=null,forecastFocusSource=null,mapPointerSource=null;
@@ -384,10 +414,8 @@ function paintMap() {
     if(view.towers.cellSites[id]&&!state.blocked.has(id)){ctx.fillStyle=nightMix>.5?'#2c4841':'#77967b';ctx.fillRect(x,y,1,1);}
     if ($('heat').checked && power && currentlyVisible(id)) { ctx.fillStyle = `rgba(99,211,166,${Math.min(.6,.17 + power * .045)})`; ctx.fillRect(x, y, 1, 1); }
     if (state.walls.has(id)&&!state.blocked.has(id)) {
-      ctx.fillStyle = palette.wall; ctx.fillRect(x + .05, y + .05, .9, .9);
-      ctx.fillStyle='#0c171c77';ctx.fillRect(x+.05,y+.78,.9,.17);
-      ctx.fillStyle='#93a197';ctx.fillRect(x+.05,y+.05,.9,.10);
-      ctx.strokeStyle = '#81918b'; ctx.lineWidth = .045; ctx.beginPath(); ctx.moveTo(x + .15, y + .8); ctx.lineTo(x + .8, y + .15); ctx.stroke();
+      ctx.fillStyle=nightMix>.5?'#39424a':'#b9bba8';ctx.fillRect(x+.04,y+.04,.92,.92);
+      drawFacility('wall',x+.05,y+.05,.9);
     }
     if(postGhost&&previewControlled.has(id)&&!controlled.has(id)){ctx.fillStyle='#f0d18b66';ctx.fillRect(x,y,1,1);}
     if (!controlled.has(id)) {ctx.fillStyle=state.layout?.tiles[id]==='road'?'#07121522':'#07121577';ctx.fillRect(x,y,1,1);}
@@ -433,6 +461,10 @@ function paintMap() {
     // 同一整块用材质区分废墟、生产和居住，日夜分别取缓存贴图。
     drawBlockTexture(ctx,p,overlay.content.status==='ruin'?`${overlay.content.type}-ruin`:overlay.content.type,nightMix);
     if(p.role==='hospital'){ctx.fillStyle='#cbd7cb';ctx.fillRect(x+3,y+3,4,6);ctx.fillStyle='#478b80';ctx.fillRect(x+4.5,y+4,1,4);ctx.fillRect(x+3.5,y+5.5,3,1);}
+    // 类型徽记放在建筑顶行未占用的位置，不覆盖炮位；废墟保留材质的破损表达。
+    if(['production','housing'].includes(overlay.content.type)&&overlay.content.status==='building'&&overlay.iconCell!==null){
+      const [ix,iy]=xy(overlay.iconCell);ctx.save();ctx.fillStyle=nightMix>.5?'#1c3037e8':'#e3e5d9e8';ctx.beginPath();ctx.roundRect(ix+.09,iy+.09,.82,.82,.1);ctx.fill();drawFacility(overlay.content.type,ix+.15,iy+.15,.7);ctx.restore();
+    }
     if(p.special){ctx.strokeStyle='#d5b5fc';ctx.lineWidth=.12;ctx.strokeRect(x+.16,y+.16,n-.32,m-.32);}
     if(selected)for(const cell of overlay.cells)if(!inControl(previewState,cell)){const [cx,cy]=xy(cell);ctx.fillStyle='#ed665877';ctx.fillRect(cx,cy,1,1);}
     if(active&&nightMix>0){
@@ -538,7 +570,8 @@ function paintMap() {
   for (const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])]) {
     const [x,y] = xy(id);if(!inView(x,y)||!currentlyVisible(id))continue;
     ctx.save();if(ghost&&id===hover)ctx.globalAlpha=.5;
-    ctx.fillStyle='#253e3a';ctx.fillRect(x+.04,y+.04,.92,.92);ctx.strokeStyle='#92c8b8';ctx.lineWidth=.06;ctx.strokeRect(x+.04,y+.04,.92,.92);ctx.fillStyle=type==='B'?'#bab3f2':'#8bdbb9'; ctx.fillRect(x+.18,y+.22,.64,.6); ctx.fillStyle='#28483b'; ctx.fillRect(x+.37,y+.32,.26,.38); ctx.fillStyle='#ddffe7'; ctx.fillRect(x+.43,y+.08,.14,.35);if(type==='B'){ctx.fillRect(x+.22,y+.12,.12,.34);ctx.fillRect(x+.66,y+.12,.12,.34);}
+    ctx.fillStyle=nightMix>.5?'#253e3a':'#c5cec0';ctx.fillRect(x+.04,y+.04,.92,.92);ctx.strokeStyle=nightMix>.5?'#92c8b8':'#52695e';ctx.lineWidth=.06;ctx.strokeRect(x+.04,y+.04,.92,.92);
+    drawFacility(type==='B'?'far':'near',x+.04,y+.04,.92);
     // 已有炮位与可建空位使用不同颜色；预览炮不计入已用容量。
     if(weaponSelected&&state.towers.has(id)){ctx.strokeStyle='#ffdb83';ctx.lineWidth=.10;ctx.strokeRect(x+.03,y+.03,.94,.94);}
     ctx.restore();
@@ -556,7 +589,8 @@ function paintMap() {
   }
   for(const [id,p] of previewState.outposts){
     if(!currentlyVisible(id))continue;const [x,y]=xy(id);ctx.save();if(postGhost&&id===hover)ctx.globalAlpha=.5;
-    if(resourceIcons.watch.complete&&resourceIcons.watch.naturalWidth)ctx.drawImage(resourceIcons.watch,x,y,1,1);
+    ctx.fillStyle=nightMix>.5?'#203746ea':'#e6e5d6ee';ctx.beginPath();ctx.roundRect(x+.02,y+.02,.96,.96,.12);ctx.fill();
+    drawFacility('watch',x,y,1);
     ctx.restore();
   }
   const [cx,cy] = xy(state.camp);
@@ -894,7 +928,7 @@ function appendForecastOutcome(block,status){
 }
 document.querySelectorAll('#forecastLegend .forecast-enemy').forEach(block=>appendForecastOutcome(block,block.dataset.status));
 // 手册复用玩家已经见过的图形，避免用开发术语或另一套符号解释规则。
-const manualIcons={wall:$('wall').querySelector('.tool-name>span').outerHTML,cannon:$('build').querySelector('svg').outerHTML,coin:$('wall').querySelector('.price-coin').outerHTML,housing:'⌂',worker:WORKER_SVG,watch:WATCHTOWER_SVG,destroyed:SOURCE_DESTROYED_SVG};
+const manualIcons={wall:FACILITY_SVGS.wall,cannon:$('build').querySelector('svg').outerHTML,coin:$('wall').querySelector('.price-coin').outerHTML,housing:FACILITY_SVGS.housing,production:FACILITY_SVGS.production,worker:WORKER_SVG,watch:WATCHTOWER_SVG,destroyed:SOURCE_DESTROYED_SVG};
 document.querySelectorAll('[data-manual-icon]').forEach(icon=>{
   const type=icon.dataset.manualIcon;
   if(type==='camp'){
