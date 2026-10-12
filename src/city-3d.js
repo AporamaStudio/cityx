@@ -162,6 +162,8 @@ export function createCity3D(onReady){
         if(props.get(item.id)?.signature!==shape){
           if(props.has(item.id))release(props.get(item.id));
           const object=new THREE.Group(),model=models.get(item.asset).clone(true);object.add(model);model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.material.userData.baseColor=node.material.color.clone();}});object.updateMatrixWorld(true);
+          // 灰色炮体与灰屋顶分离；材质名保留，后坐、炮口和弹迹仍读取原节点。
+          if(['near','far'].includes(item.asset))model.traverse(node=>{if(node.isMesh){const color=node.material.name==='#6c7775'?'#354b4b':['#3f5057','#1e2b32'].includes(node.material.name)?'#98aaa1':item.asset==='far'?'#c3c5d0':'#a8b7a0';node.material.color.set(color);node.material.userData.baseColor=node.material.color.clone();node.material.emissive.set(color);node.material.emissiveIntensity=.10;}});
           const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
           const scale=Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
           if(item.asset==='wall'){model.scale.z=item.h/size.z;model.position.z=-center.z*model.scale.z;}

@@ -1,4 +1,4 @@
-import {createCity3D} from './city-3d.js?v=6';
+import {createCity3D} from './city-3d.js?v=7';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView} from './combat-visuals.js?v=2';
 import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
@@ -28,6 +28,14 @@ function drawFacility(name,x,y,size){
   const images=facilityImages[name],alpha=ctx.globalAlpha;ctx.save();
   images.forEach((image,index)=>{const blend=index?nightMix:1-nightMix;if(blend>0&&image.complete&&image.naturalWidth){ctx.globalAlpha=alpha*blend;ctx.drawImage(image,x,y,size,size);}});
   ctx.restore();
+}
+// 设施实体保持世界尺度，战术标记保证远景仍可识别；复用工具图形，不增加命中区域。
+function drawFacilityMarker(name,x,y,cell,detail,emphasis=false){
+  const pixels=detail==='far'?12:Math.min(17,Math.max(12,cell*.34)),side=pixels/cell;
+  const offset=detail==='far'?.5:Math.min(.78,1-side*.5),cx=x+offset,cy=y+offset;
+  ctx.save();ctx.fillStyle=nightMix>.5?'#182a35f2':'#e8e9ddf2';ctx.strokeStyle=emphasis?'#ffda85':nightMix>.5?'#809799':'#677a70';ctx.lineWidth=(emphasis?1.6:1)/cell;
+  ctx.beginPath();ctx.roundRect(cx-side*.5,cy-side*.5,side,side,side*.22);ctx.fill();ctx.stroke();
+  drawFacility(name,cx-side*.41,cy-side*.41,side*.82);ctx.restore();
 }
 document.querySelector('#populationTotalMetric .population-symbol').innerHTML=POPULATION_SVG;
 document.querySelector('#populationFreeMetric .population-symbol').innerHTML=WORKER_SVG;
@@ -750,7 +758,7 @@ function paintMap() {
     if(!drawCityFacility('tower:'+id,x,y)){
     ctx.fillStyle=nightMix>.5?'#253e3a':'#c5cec0';ctx.fillRect(x+.04,y+.04,.92,.92);ctx.strokeStyle=nightMix>.5?'#92c8b8':'#52695e';ctx.lineWidth=.06;ctx.strokeRect(x+.04,y+.04,.92,.92);
     drawFacility(type==='B'?'far':'near',x+.04,y+.04,.92);
-    }
+    }else drawFacilityMarker(type==='B'?'far':'near',x,y,size,mapDetail,hover===id||weaponSelected);
     // 已有炮位与可建空位使用不同颜色；预览炮不计入已用容量。
     if(weaponSelected&&state.towers.has(id)){ctx.strokeStyle='#ffdb83';ctx.lineWidth=.10;ctx.strokeRect(x+.03,y+.03,.94,.94);}
     ctx.restore();
