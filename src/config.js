@@ -27,7 +27,11 @@ export const DEFAULTS = {
   // 结束白天需连续按住确认；仅影响操作，不占用夜晚战斗拍数。
   dayEndHoldMs:1000,
   // 新一天收入明细短暂浮显，0关闭自动展示；悬停查看始终可用。
-  incomeReportMs:4000,
+  incomeReportMs:2000,
+  // 金币/人口详情的静止悬停时间，0立即显示；不延迟操作报价。
+  resourceHoverMs:315,
+  // 静止悬停允许的小幅位移（CSS像素），以起点为准，不累计漂移。
+  resourceHoverTolerancePx:4,
   weapons: {
     A: { shape: 'square', range: 1, power: 2, cost: 10 },
     B: { shape: 'square', range: 3, power: 1, cost: 20 },

@@ -1,11 +1,11 @@
-import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=10';
-import {createTowerOverlay} from './tower-overlay.js?v=9';
+import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=13';
+import {createTowerOverlay} from './tower-overlay.js?v=12';
 import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings} from './city-textures.js?v=11';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=7';
 import {createGameAudio} from './audio.js?v=7';
-import { SIZE, DEFAULTS } from './config.js?v=66';
-import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=81';
+import { SIZE, DEFAULTS } from './config.js?v=69';
+import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=84';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -29,7 +29,7 @@ document.querySelector('#populationTotalMetric .population-symbol').innerHTML=PO
 document.querySelector('#populationFreeMetric .population-symbol').innerHTML=WORKER_SVG;
 $('outpostWorkerIcon').innerHTML=WORKER_SVG;
 // 人口明细沿用总人口/工人图标，数字与图标分开更新，不再重复写单位文字。
-for(const name of ['Total','Free','Production','Watch'])$('populationDetail'+name).nextElementSibling.innerHTML=name==='Total'?POPULATION_SVG:WORKER_SVG;
+for(const name of ['Total','Free','Production','Watch'])$('populationDetail'+name).previousElementSibling.innerHTML=name==='Total'?POPULATION_SVG:WORKER_SVG;
 const resourceIcons={};
 for(const [name,selector] of [['coin','.wallet .coin-icon'],['people','#populationFreeMetric svg'],['residents','#populationTotalMetric svg'],['military','#build .weapon-icon']]){
   const svg=document.querySelector(selector).cloneNode(true);
@@ -99,32 +99,76 @@ document.addEventListener('pointerdown',dismissTopNotice,{capture:true});
 document.addEventListener('pointerdown',event=>{const button=event.target.closest('button');if(button?.disabled&&blockedActionReasons.get(button.id))showTopNotice(blockedActionReasons.get(button.id));},{capture:true});
 const weaponType = () => tool === 'long' ? 'B' : 'A';
 const viewedSources = () => sourcePlans(state,Number($('forecastDay').value)+1);
-let incomePinned=false,incomeHovered=false,incomeFocused=false,incomeUntil=0,incomeDay=null;
-// 收入仅在早晨暂显；之后悬停/聚焦查看、点击固定，在资源栏下展开并推开工具。
+let incomeUntil=0,incomeDay=null,resourceDetail=null,resourceHover=null;
+const resourcePanels={money:['moneySummary','nightReport'],population:['populationSummary','populationDetails']};
+// 明细脱离滚动侧栏：浮在资源右侧，不能改变工具布局或被侧栏裁剪。
+for(const [,panel] of Object.values(resourcePanels))document.body.append($(panel));
+const hoverRing=document.createElement('div');hoverRing.className='resource-hover-ring';hoverRing.hidden=true;
+hoverRing.setAttribute('aria-hidden','true');document.body.append(hoverRing);
+const resourceAvailable=id=>id==='population'||(state.phase==='build'?!!state.lastNight:state.economySettled);
+function positionResourceDetails(){
+  if(!resourceDetail)return;
+  const [summary,panelId]=resourcePanels[resourceDetail.id],panel=$(panelId),anchor=$(summary).getBoundingClientRect();
+  const right=document.querySelector('.wallet').getBoundingClientRect().right+8;
+  const beside=right+panel.offsetWidth<=innerWidth-8;
+  const left=Math.max(8,Math.min(beside?right:anchor.left,innerWidth-panel.offsetWidth-8));
+  const top=Math.max(8,Math.min(beside?anchor.top:anchor.bottom+8,innerHeight-panel.offsetHeight-8));
+  panel.dataset.placement=beside?'right':'below';
+  panel.style.left=`${left}px`;panel.style.top=`${top}px`;
+  panel.style.setProperty('--detail-anchor',`${Math.max(12,Math.min(beside?anchor.top+anchor.height/2-top:anchor.left+anchor.width/2-left,(beside?panel.offsetHeight:panel.offsetWidth)-16))}px`);
+}
+function setResourceDetails(id=null,mode='hover'){
+  resourceDetail=id&&resourceAvailable(id)?{id,mode}:null;
+  for(const [name,[summary,panel]] of Object.entries(resourcePanels)){
+    const open=resourceDetail?.id===name;$(panel).hidden=!open;$(summary).setAttribute('aria-expanded',String(open));
+  }
+  positionResourceDetails();
+}
+function cancelResourceHover(){resourceHover=null;hoverRing.hidden=true;}
+function closeResourceDetails(){cancelResourceHover();incomeUntil=0;setResourceDetails();}
 function showIncomeDetails(){
-  const available=state.phase==='build'?!!state.lastNight:state.economySettled;
-  const open=available&&(incomePinned||incomeHovered||incomeFocused||performance.now()<incomeUntil);
-  $('nightReport').hidden=!open;$('moneySummary').setAttribute('aria-expanded',String(open));
+  if(resourceDetail?.id==='money'&&!resourceAvailable('money'))setResourceDetails();
+  if(incomeUntil>performance.now()&&(!resourceDetail||resourceDetail.mode==='auto'))setResourceDetails('money','auto');
+  else if(resourceDetail?.mode==='auto')setResourceDetails();
 }
-$('money').addEventListener('pointerenter',event=>{if(event.pointerType!=='touch'){incomeHovered=true;showIncomeDetails();}});
-$('money').addEventListener('pointerleave',()=>{incomeHovered=false;showIncomeDetails();});
-$('moneySummary').addEventListener('focus',()=>{incomeFocused=true;showIncomeDetails();});
-$('moneySummary').addEventListener('blur',()=>{incomeFocused=false;showIncomeDetails();});
-$('moneySummary').onclick=()=>{incomePinned=!incomePinned;if(!incomePinned){incomeUntil=0;incomeHovered=false;incomeFocused=false;}showIncomeDetails();};
-document.addEventListener('click',event=>{if(!$('money').contains(event.target)&&!$('nightReport').contains(event.target)){incomePinned=false;incomeUntil=0;showIncomeDetails();}});
-document.addEventListener('keydown',event=>{if(event.key==='Escape'){incomePinned=false;incomeHovered=false;incomeFocused=false;incomeUntil=0;showIncomeDetails();}});
-let populationPinned=false;
-function showPopulationDetails(open){
-  $('populationDetails').hidden=!open;$('populationSummary').setAttribute('aria-expanded',String(open));
+// 位移相对本次停留起点计算，容忍轻微手抖；不能靠连续小步移动绕过阈值。
+function armResourceHover(event){
+  if(event.pointerType==='touch')return;
+  const id=event.target.closest('#money,#population')?.id;
+  if(!event.buttons&&resourceHover&&resourceHover.id===id&&Math.hypot(resourceHover.x-event.clientX,resourceHover.y-event.clientY)<=state.params.resourceHoverTolerancePx)return;
+  cancelResourceHover();
+  if(resourceDetail&&resourceDetail.mode!=='auto')setResourceDetails();
+  if(event.buttons||!id||!resourceAvailable(id))return;
+  incomeUntil=0;setResourceDetails();
+  resourceHover={id,x:event.clientX,y:event.clientY,start:performance.now()};
+  hoverRing.style.left=`${Math.max(0,Math.min(event.clientX+14,innerWidth-22))}px`;
+  hoverRing.style.top=`${Math.max(0,Math.min(event.clientY+14,innerHeight-22))}px`;
+  hoverRing.style.setProperty('--hover-progress','0deg');hoverRing.hidden=true;
 }
-// 鼠标悬停与键盘聚焦暂显明细；点击固定展开，触屏也能查看，外部点击或Escape关闭。
-$('population').addEventListener('pointerenter',event=>{if(event.pointerType!=='touch')showPopulationDetails(true);});
-$('population').addEventListener('pointerleave',()=>{if(!populationPinned)showPopulationDetails(false);});
-$('populationSummary').addEventListener('focus',()=>showPopulationDetails(true));
-$('populationSummary').addEventListener('blur',()=>{if(!populationPinned)showPopulationDetails(false);});
-$('populationSummary').onclick=()=>{populationPinned=!populationPinned;showPopulationDetails(populationPinned);};
-document.addEventListener('click',event=>{if(!$('population').contains(event.target)){populationPinned=false;showPopulationDetails(false);}});
-document.addEventListener('keydown',event=>{if(event.key==='Escape'){populationPinned=false;showPopulationDetails(false);}});
+for(const [id,[summary]] of Object.entries(resourcePanels)){
+  $(id).addEventListener('pointerenter',armResourceHover);
+  $(id).addEventListener('pointerleave',()=>{cancelResourceHover();if(resourceDetail?.mode==='hover')setResourceDetails();});
+  $(summary).addEventListener('focus',()=>{if($(summary).matches(':focus-visible')){closeResourceDetails();setResourceDetails(id,'explicit');}});
+  $(summary).addEventListener('blur',()=>{if(resourceDetail?.mode==='explicit')closeResourceDetails();});
+  $(summary).onclick=event=>{
+    const open=resourceDetail?.id===id;closeResourceDetails();
+    if(!open){setResourceDetails(id,'explicit');if(event.detail>0&&event.pointerType!=='touch')resourceHover={id,x:event.clientX,y:event.clientY,open:true};}
+  };
+}
+document.addEventListener('pointermove',armResourceHover);
+document.addEventListener('pointerdown',()=>{cancelResourceHover();if(resourceDetail?.mode==='auto'){incomeUntil=0;setResourceDetails();}});
+document.addEventListener('click',event=>{if(!event.target.closest('#money,#population'))closeResourceDetails();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape')closeResourceDetails();});
+document.addEventListener('scroll',closeResourceDetails,{capture:true,passive:true});
+window.addEventListener('resize',closeResourceDetails);
+window.addEventListener('blur',closeResourceDetails);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)closeResourceDetails();});
+function updateResourceHover(now){
+  if(!resourceHover||resourceHover.open)return;
+  const progress=state.params.resourceHoverMs?Math.min(1,(now-resourceHover.start)/state.params.resourceHoverMs):1;
+  if(progress>=1){resourceHover.open=true;hoverRing.hidden=true;setResourceDetails(resourceHover.id);}
+  else{hoverRing.hidden=false;hoverRing.style.setProperty('--hover-progress',`${progress*360}deg`);}
+}
 const resourceChange=delta=>`(${delta>0?'+':delta<0?'−':''}${Math.abs(delta)})`;
 // 金币与人口都保留当前值，括号只表达本次变化；真实分配与明细不变。
 function previewPopulation(totalDelta=0,freeDelta=0){
@@ -355,8 +399,9 @@ function paintMap() {
       repairPreview.hidden=false;repairPreview.classList.toggle('unaffordable',!!error);
       const previewKey=`${quote.type}:${quote.cost}:${quote.restore}`;
       if(repairPreview.dataset.quote!==previewKey){
-        repairPreview.dataset.quote=previewKey;repairPreview.textContent=`−${quote.cost}`;
+        repairPreview.dataset.quote=previewKey;repairPreview.textContent='';
         repairPreview.append(document.querySelector('.price-coin').cloneNode(true));
+        const cost=document.createElement('span');cost.textContent=`−${quote.cost}`;repairPreview.append(cost);
         if(quote.type==='camp'){
           const gain=document.createElement('span');gain.className='repair-hp';gain.textContent=`+${quote.restore} HP`;repairPreview.append(gain);
         }
@@ -382,8 +427,9 @@ function paintMap() {
       // 预览独立于已到账提示，不改真实余额，也不覆盖战斗收入动画。
       goldDelta=quote.refund;erasePreview.hidden=false;
       if(erasePreview.dataset.refund!==String(quote.refund)){
-        erasePreview.dataset.refund=String(quote.refund);erasePreview.textContent=`↩${quote.refund}`;
+        erasePreview.dataset.refund=String(quote.refund);erasePreview.textContent='';
         erasePreview.append(document.querySelector('.price-coin').cloneNode(true));
+        const refund=document.createElement('span');refund.textContent=`↩${quote.refund}`;erasePreview.append(refund);
       }
     }
   }
@@ -740,10 +786,11 @@ function paintMap() {
     ctx.fillStyle='#142024f2';ctx.fillRect(x-width/2,y-height/2,width,height);
     rows.forEach((row,i)=>{
       const left=x-widths[i]/2,cy=y+(i-(rows.length-1)/2)*rowHeight;
-      ctx.fillStyle=row.color;ctx.fillText(row.text,left,cy);
-      const iconX=left+ctx.measureText(row.text).width+2,image=resourceIcons[row.icon];
+      ctx.fillStyle=row.color;
+      const iconX=left,image=resourceIcons[row.icon];
       if(image.complete&&image.naturalWidth)ctx.drawImage(image,iconX,cy-iconSize/2,iconSize,iconSize);
-      ctx.fillText(row.suffix,iconX+iconSize+1,cy);
+      ctx.fillText(row.text,iconX+iconSize+2,cy);
+      ctx.fillText(row.suffix,iconX+iconSize+3+ctx.measureText(row.text).width,cy);
 
     });ctx.restore();
   }
@@ -848,6 +895,10 @@ function update() {
   const watchWorkers=state.outposts.size*state.params.outpostWorkers;
   $('populationDetailTotal').textContent=people.total;$('populationDetailFree').textContent=people.free;
   $('populationDetailProduction').textContent=people.working-watchWorkers;$('populationDetailWatch').textContent=watchWorkers;
+  // 总数和可用数始终显示，零占用的经营子项不占明细行。
+  $('populationDetailProduction').closest('dl>div').hidden=people.working-watchWorkers===0;
+  $('populationDetailWatch').closest('dl>div').hidden=watchWorkers===0;
+  positionResourceDetails();
   $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
   const critical=!state.result&&campCritical(state);
   $('campPanel').classList.toggle('camp-critical',critical);viewport.classList.toggle('camp-critical',critical);
@@ -905,7 +956,7 @@ function update() {
 // 收入卡只读取已结束夜晚的快照，不把白天新投资混入昨夜结果。
 function updateNightReport(){
   const report=state.phase==='build'?state.lastNight:state.economySettled?{day:state.day,economy:state.nightEconomy,earned:state.nightEarned,...state.productionReport}:null;
-  if(!report){incomeDay=null;incomeUntil=0;incomePinned=false;showIncomeDetails();return;}
+  if(!report){incomeDay=null;incomeUntil=0;showIncomeDetails();return;}
   if(state.phase==='build'&&incomeDay!==report.day){incomeDay=report.day;incomeUntil=performance.now()+state.params.incomeReportMs;}
   showIncomeDetails();
   $('reportTitle').textContent=`${state.phase==='build'?'昨天':'今天'}收入`;
@@ -1069,7 +1120,7 @@ function paramsEditor(params) {
   }
   fields('全局',params,'',[['budget','资金',0,10000],['stepMs','移动节拍（毫秒）',50,5000],['wallCost','墙价',1,1000],['demolitionRefundPercent','旧投入拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campWarningPercent','火光危急阈值%',0,100],['campRepairCost','火光修复单价/HP',1,1000],['nightTicks','每晚拍数',1,500],['nightCleanupSpeed','夜末清源速度倍率',1,4],['nightIdleTransitionMs','空闲夜末过渡时长（毫秒）',0,3000]]);
   fields('地图',params,'',[['cellMeters','每格距离（米）',1,1000]]);
-  fields('日夜操作',params,'',[['dayEndHoldMs','结束白天长按时长（毫秒）',300,3000],['incomeReportMs','收入暂显时长（毫秒，0关闭）',0,15000]]);
+  fields('日夜操作',params,'',[['dayEndHoldMs','结束白天长按时长（毫秒）',300,3000],['incomeReportMs','收入暂显时长（毫秒，0关闭）',0,15000],['resourceHoverMs','资源详情悬停时长（毫秒）',0,2000],['resourceHoverTolerancePx','资源悬停位移容差（像素）',0,20]]);
   fields('视野',params,'',[['campSight','火光外围格数',0,30],['outpostSight','瞭望塔外围格数',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealPadding','敌源边缘揭示格数',0,10]]);
   fields('云层',params,'',[['cloudSpeedMultiplier','流速倍率（0静止）',0,3],['fogThinCells','薄雾过渡格数（X）',1,20],['fogDenseCells','浓雾过渡格数（N）',1,20]]);
   fields('住房与人口',params,'',[['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房新建每格费用',1,1000]]);
@@ -1103,7 +1154,7 @@ function clearPlayback() {
   forecastPointerSource=null;forecastFocusSource=null;mapPointerSource=null;
   sourceHighlightId=null;sourceHighlightAt=null;
   $('campHitFlash').getAnimations().forEach(animation=>animation.cancel());
-  incomeDay=null;incomeUntil=0;incomePinned=false;
+  incomeDay=null;closeResourceDetails();
   nightOutro=null;dawnAt=0;receiptUntil=0;$('economyReceipt').hidden=true;
   selectedSource=null;paused=false;timer=0;motion=null;placementFx=null;impactAge=1000;incoming.clear();recentGain=0;gainUntil=0;$('moneyGain').textContent='';messages=[];$('log').replaceChildren();
   document.querySelectorAll('.coin-drop').forEach(el=>el.remove());
@@ -1542,6 +1593,7 @@ function frame(now){
     if(nightOutro.elapsed>=nightOutro.duration){nightOutro=null;if(finishIdleNight(state))presentNightEnd();else update();}
   }
   if(dawnAt&&now>=dawnAt)finishDawn();
+  updateResourceHover(now);
   if(incomeUntil&&now>=incomeUntil){incomeUntil=0;showIncomeDetails();}
   if(receiptUntil&&now>=receiptUntil){receiptUntil=0;$('economyReceipt').hidden=true;}
   if(gainUntil&&now>=gainUntil){gainUntil=0;recentGain=0;$('moneyGain').textContent='';}

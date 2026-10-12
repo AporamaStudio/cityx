@@ -157,7 +157,7 @@ body[data-phase="battle"] .night-progress-track{background:#0c142b80}body[data-p
 .wallet{flex-wrap:wrap;gap:10px}.wallet .resource-people{width:100%;border-top:1px solid #d3bd7940;padding-top:10px;margin:0}.population-main{display:flex;align-items:center;gap:12px}.population-main svg{width:30px;height:30px}.population-main strong{font-size:28px}.resource-people span{font-size:11px}.test-fields{display:grid;gap:8px;margin:12px 0}.test-fields label{display:grid;grid-template-columns:42px 1fr;align-items:center}.test-fields input,.test-fields select{width:100%;min-width:0}
 
 .wallet .resource-people{align-items:stretch}.population-main svg{width:38px;height:38px}.population-main strong{font-size:36px}.resource-people span{text-align:left}
-.wallet .resource-people{position:relative;gap:0}.population-summary{display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;gap:6px 12px;width:100%;padding:0;border:0;background:transparent;color:#f4d3a2;text-align:left}.population-summary:hover{background:transparent;border-color:transparent}.population-metric{display:flex;align-items:center;gap:8px;min-width:0}.population-symbol{display:flex;flex:none}.population-symbol svg{width:32px;height:32px}.population-value{display:flex;align-items:baseline;flex-wrap:nowrap;gap:3px;white-space:nowrap}.wallet .population-metric strong{font-size:32px;color:inherit}.population-summary #populationFreeMetric{color:#bce4ce;gap:6px}#populationFreeMetric .population-symbol svg{width:24px;height:24px}.wallet #populationFree{font-size:26px}.population-summary #populationFreeMetric.no-workers{color:#eabb6f}.resource-people .population-preview{color:#bff5ce;font-size:13px;line-height:1.2;white-space:nowrap}.resource-people .population-decrease{color:#f3ad91}.resource-details{position:relative;width:100%;min-width:0;padding:12px;border:1px solid #746953;border-radius:8px;background:#242b2b;box-shadow:0 8px 24px #0008;color:#e5edeb}.resource-details dl{margin:0}.resource-details dl>div{display:flex;justify-content:space-between;gap:12px;padding:4px 0}.resource-details dt{font-size:12px;color:#acb8bb}.resource-details dd{margin:0;font-size:12px;font-variant-numeric:tabular-nums}.worker-cost{display:inline-flex;align-items:center;gap:3px;margin-left:5px;padding-left:6px;border-left:1px solid #b9a47355}.worker-cost svg{display:block;width:14px;height:14px;fill:currentColor}.toolgrid button:disabled .worker-cost{color:inherit}
+.wallet .resource-people{position:relative;gap:0}.population-summary{display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;gap:6px 12px;width:100%;padding:0;border:0;background:transparent;color:#f4d3a2;text-align:left}.population-summary:hover{background:transparent;border-color:transparent}.population-metric{display:flex;align-items:center;gap:8px;min-width:0}.population-symbol{display:flex;flex:none}.population-symbol svg{width:32px;height:32px}.population-value{display:flex;align-items:baseline;flex-wrap:nowrap;gap:3px;white-space:nowrap}.wallet .population-metric strong{font-size:32px;color:inherit}.population-summary #populationFreeMetric{color:#bce4ce;gap:6px}#populationFreeMetric .population-symbol svg{width:24px;height:24px}.wallet #populationFree{font-size:32px}.population-summary #populationFreeMetric.no-workers{color:#eabb6f}.resource-people .population-preview{color:#bff5ce;font-size:13px;line-height:1.2;white-space:nowrap}.resource-people .population-decrease{color:#f3ad91}.resource-details{position:relative;width:100%;min-width:0;padding:12px;border:1px solid #746953;border-radius:8px;background:#242b2b;box-shadow:0 8px 24px #0008;color:#e5edeb}.resource-details dl{margin:0}.resource-details dl>div{display:flex;justify-content:space-between;gap:12px;padding:4px 0}.resource-details dt{font-size:12px;color:#acb8bb}.resource-details dd{margin:0;font-size:12px;font-variant-numeric:tabular-nums}.worker-cost{color:var(--wallet-ink);display:inline-flex;align-items:center;gap:3px;margin-left:5px;padding-left:6px;border-left:1px solid #b9a47355}.worker-cost svg{display:block;width:14px;height:14px;fill:currentColor}.toolgrid button:disabled .worker-cost{color:inherit}
 
 /* 括号和颜色区分待发生变化与已经到账的金币。 */
 .refund-preview{display:inline-block;color:#c6f0b5;font-size:14px;font-weight:700;white-space:nowrap}.refund-preview[hidden],#erasePreview[hidden],#repairPreview[hidden]{display:none}#repairPreview.unaffordable{color:var(--red)}
@@ -220,7 +220,7 @@ header{grid-template-columns:auto auto minmax(140px,1fr) minmax(240px,1.4fr) aut
 .population-summary .population-symbol svg{width:max(16px,calc(32px * var(--resource-scale,1)));height:max(16px,calc(32px * var(--resource-scale,1)))}
 .population-summary #populationFreeMetric .population-symbol svg{width:max(16px,calc(32px * var(--resource-scale,1)));height:max(16px,calc(32px * var(--resource-scale,1)))}
 .wallet .population-metric strong{font-size:calc(32px * var(--resource-scale,1));letter-spacing:0}
-.wallet #populationFree{font-size:calc(26px * var(--resource-scale,1))}
+.wallet #populationFree{font-size:calc(32px * var(--resource-scale,1))}
 .resource-people .population-preview{display:block;flex:none;width:4ch;height:14px;font-size:max(9px,calc(13px * var(--resource-scale,1)))}
 .resource-preview{position:relative}
 .wallet .resource-preview-value{position:absolute;left:0;top:0;display:inline-block;width:max-content;font-size:calc(1em * var(--preview-scale,1));color:inherit;white-space:nowrap}
@@ -304,7 +304,7 @@ input[type=number]{background:var(--input);color:var(--text);border-color:var(--
 .wallet{background:var(--wallet);border-color:var(--gold)}.wallet strong,.wallet small{color:var(--wallet-ink)}
 .build-sidebar .wallet{box-shadow:0 8px 12px var(--shadow)}
 .population-summary,.population-summary #populationTotalMetric{color:var(--wallet-ink)}
-.population-summary #populationFreeMetric{color:var(--success)}.population-summary #populationFreeMetric.no-workers{color:var(--orange)}
+.population-summary #populationFreeMetric,.population-summary #populationFreeMetric.no-workers{color:var(--wallet-ink)}
 .tool-price{color:var(--gold)}.resource-details,.forecast-tooltip{background:var(--tooltip);color:var(--text);border-color:var(--line);box-shadow:0 8px 24px var(--shadow)}
 .resource-details dt,.tool-section h2{color:var(--muted)}
 .resource-people .population-preview,.refund-preview,#moneyGain{color:var(--success)}
@@ -325,15 +325,18 @@ input[type=number]{background:var(--input);color:var(--text);border-color:var(--
 .map-tools .legend-building{color:var(--legend-building)}.map-tools .legend-land{color:var(--legend-land)}.map-tools .legend-control{color:var(--legend-control)}
 #economyReceipt{color:var(--gold);background:var(--wallet)}
 
-/* 明细按内容展开，始终在资源行下方；固定资源行高与稳定滚动条仍避免布局反馈。 */
+/* 只读明细浮于资源右侧，不占侧栏高度；鼠标移动立即收起。 */
 .money-resource{position:relative;width:100%;min-width:0}
 .wallet .wallet-money{padding:0;border:0;background:transparent;text-align:left;cursor:pointer}
 .wallet .wallet-money:hover{background:transparent;border-color:transparent}
 .resource-details .detail-total dt,.resource-details .detail-total dd{color:var(--wallet-ink);font-weight:700}
 .resource-details dd{display:flex;align-items:center;gap:5px;font-weight:400}
 .resource-details .price-coin{width:12px;height:12px;flex-shrink:0}
-.night-report{margin:0 0 14px}
-.population-details{margin-top:8px}
+.resource-details{position:fixed;z-index:30;width:230px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);margin:0;pointer-events:none;background:var(--wallet);border-color:var(--gold);border-left-width:3px;box-shadow:0 8px 24px #0004,0 0 0 3px var(--panel)}
+/* 箭头连接资源栏，实底和外沿把界面浮层与地图分开。 */
+.resource-details::before{content:'';position:absolute;left:-7px;top:calc(var(--detail-anchor) - 5px);width:9px;height:9px;transform:rotate(45deg);background:var(--wallet);border-left:1px solid var(--gold);border-bottom:1px solid var(--gold)}
+.resource-details[data-placement="below"]::before{left:calc(var(--detail-anchor) - 5px);top:-5px;border-bottom:0;border-top:1px solid var(--gold)}
+.resource-hover-ring{position:fixed;z-index:31;width:14px;height:14px;border-radius:50%;pointer-events:none;background:conic-gradient(#fff0ba var(--hover-progress,0deg),#fff0ba80 0);mask:radial-gradient(circle,transparent 3px,#000 3.5px);filter:drop-shadow(0 1px 2px #382a1bcc)}
 .resource-details dl>div:not(.detail-total){padding-left:10px}
 .resource-details span{font-size:inherit;color:inherit}
 .resource-details .detail-symbol{display:inline-flex;flex:none;width:12px;height:12px;color:var(--wallet-ink)}
