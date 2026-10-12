@@ -98,3 +98,11 @@ test('敌源首次当日公开，停兵保留；第一晚必须有炮塔',()=>{
  s.day=2;s.sources=[later];assert.equal(firstNightReady(s),true);
  assert.deepEqual(knownSources(s).map(s=>s.active),[false,true]);assert.ok(visionField(s).has(key(50,10)));
 });
+
+test('敌人渐隐默认1.5格，可调0–3且不改变逻辑视野',()=>{
+ const s=createState(),before=visionField(s);assert.equal(s.params.enemyFogFadeCells,1.5);
+ for(const enemyFogFadeCells of [0,.5,1.5,3]){
+  const params={...s.params,enemyFogFadeCells};assert.equal(validateParams(params,s,false),'');assert.deepEqual(visionField({...s,params}),before);
+ }
+ for(const enemyFogFadeCells of [-1,3.1,NaN,Infinity])assert.match(validateParams({...s.params,enemyFogFadeCells},s,false),/敌人进出雾/);
+});

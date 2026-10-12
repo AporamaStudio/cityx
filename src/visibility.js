@@ -1,7 +1,16 @@
 // 云雾与移动敌人共用区域场；只在控制、实时视野或雾带宽度变化时重建。
+import {DEFAULTS} from './config.js?v=71';
 export const VISIBILITY_PX=4;
 let cached=null;
 const clamp=t=>Math.max(0,Math.min(1,t)),smooth=t=>t*t*(3-2*t);
+const gentle=t=>t*t*t*(t*(t*6-15)+10);
+
+// 中雾处保持同一斜率，两段接起来是一条连续曲线，不在分级点停顿。
+export function cloudDensity(distance,s12,s23){
+  const slope=1.5/(s12+s23);
+  if(distance<=s12){const t=clamp(distance/s12);return .5*smooth(t)+slope*s12*t*t*(t-1);}
+  const t=clamp((distance-s12)/s23);return .5+.5*smooth(t)+slope*s23*t*(t-1)*(t-1);
+}
 
 // 两次传播近似欧氏距离，保留真实格子权限，不把柔化边界当成额外视野。
 function distances(flags,width,seed){
@@ -20,9 +29,9 @@ function distances(flags,width,seed){
   return d;
 }
 
-export function createVisibility(size,controlled,sight,s12,s23){
+export function createVisibility(size,controlled,sight,s12,s23,fadeCells=DEFAULTS.enemyFogFadeCells){
   const cells=new Uint8Array(size*size);
-  let changed=!cached||cached.size!==size||cached.s12!==s12||cached.s23!==s23;
+  let changed=!cached||cached.size!==size||cached.s12!==s12||cached.s23!==s23||cached.fadeCells!==fadeCells;
   for(let i=0;i<cells.length;i++){
     cells[i]=controlled.has(i)?0:sight.has(i)?1:2;
     if(!changed&&cells[i]!==cached.cells[i])changed=true;
@@ -39,11 +48,11 @@ export function createVisibility(size,controlled,sight,s12,s23){
     if(flags[i]===0)continue;
     if(flags[i]===1){
       // S01在真实视野内由无雾渐入薄雾；远处敌源/医院的局部S1保持薄雾。
-      veil[i]=.30*smooth(controlDistance[i]/(controlDistance[i]+inside[i]));continue;
+      veil[i]=.30*gentle(controlDistance[i]/(controlDistance[i]+inside[i]));continue;
     }
-    const d=outside[i]/VISIBILITY_PX;
+    const d=Math.max(0,(outside[i]-.5)/VISIBILITY_PX);
     // S12到中等雾、S23到浓雾；两段都没有实时敌情，远端始终不透明。
-    cloud[i]=d<=s12?.5*smooth(clamp(d/s12)):.5+.5*smooth(clamp((d-s12)/s23));
+    cloud[i]=cloudDensity(d,s12,s23);
     veil[i]=.30+.70*cloud[i];
   }
   const at=(data,x,y)=>{
@@ -52,10 +61,15 @@ export function createVisibility(size,controlled,sight,s12,s23){
     return (data[top*n+left]*(1-fx)+data[top*n+right]*fx)*(1-fy)+(data[bottom*n+left]*(1-fx)+data[bottom*n+right]*fx)*fy;
   };
   const cellAt=(x,y)=>x>=0&&y>=0&&x<size&&y<size?cells[Math.floor(y)*size+Math.floor(x)]:2;
-  cached={size,s12,s23,border,span,n,cells,flags,cloud,veil,
+  cached={size,s12,s23,fadeCells,border,span,n,cells,flags,cloud,veil,
     levelAt(x,y){const cell=cellAt(x,y);return cell<2?cell:at(outside,x,y)/VISIBILITY_PX<s12+s23?2:3;},
-    // 仅在可见侧半格内淡入/淡出；用插值位置判断，数字和身体共享透明度。
-    enemyAlpha(x,y){const cell=cellAt(x,y);return cell===0?1:cell===1?smooth(clamp((at(inside,x,y)-.5)/VISIBILITY_PX/.5)):0;},
+    // 仅在可见侧渐隐，越界立即隐藏；0关闭渐隐，数字和身体共享透明度。
+    enemyAlpha(x,y){
+      const cell=cellAt(x,y);if(cell===0)return 1;if(cell!==1)return 0;if(!fadeCells)return 1;
+      const depth=Math.max(0,(at(inside,x,y)-.5)/VISIBILITY_PX),clear=Math.max(0,(at(controlDistance,x,y)-.5)/VISIBILITY_PX);
+      // 很窄的S1也应在进入控制区前恢复清晰，避免在S0边界突然变亮。
+      return smooth(clamp(depth/Math.max(.001,Math.min(fadeCells,depth+clear))));
+    },
   };
   return cached;
 }

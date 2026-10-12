@@ -1,12 +1,12 @@
-import {createVisibility} from './visibility.js?v=1';
-import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=14';
-import {createTowerOverlay} from './tower-overlay.js?v=13';
-import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings} from './city-textures.js?v=12';
+import {createVisibility} from './visibility.js?v=3';
+import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=15';
+import {createTowerOverlay} from './tower-overlay.js?v=14';
+import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings} from './city-textures.js?v=13';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=7';
 import {createGameAudio} from './audio.js?v=7';
-import { SIZE, DEFAULTS } from './config.js?v=70';
-import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=85';
+import { SIZE, DEFAULTS } from './config.js?v=71';
+import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=86';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -334,7 +334,7 @@ function drawSourceLocator(source,size){
 function mapDisplay(){
   if(!mapView){
     const params=previewParams(),controlState={...state,params},raw=rawControlMask(controlState),controlled=controlMask(controlState,params.controlRadius,raw);
-    mapView={controlState,raw,controlled,visibility:createVisibility(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23),boundary:controlBoundary(controlled),dirty:paramsDirty(),
+    mapView={controlState,raw,controlled,visibility:createVisibility(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells),boundary:controlBoundary(controlled),dirty:paramsDirty(),
       towers:createTowerOverlay(state,controlled,new Set(motion?.actors.map(e=>e.to))),
       sourceSites:new Set([...state.enemySources.values()].map(s=>s.site)),
       sourceFootprint:new Set([...state.enemySources.values()].flatMap(sourceCells))};
@@ -649,16 +649,19 @@ function paintMap() {
   drawCampfire(ctx,cx,cy,1,state.hp>0);
   ctx.restore();
   const impact = Math.min(1,impactAge/IMPACT_MS);
+  const mistColor=fogColor(nightMix).match(/\d+/g).map(Number);
   ctx.save();
   // 移动阶段仍显示出发时的生命，抵达后才展示结算结果。
   const drawEnemy = (enemy,x,y,scale=1,alpha=1,barHP=enemy.hp) => {
-    alpha*=mapFogEnabled()?view.visibility.enemyAlpha(x+.5,y+.5):1;
+    const fogAlpha=mapFogEnabled()?view.visibility.enemyAlpha(x+.5,y+.5):1;
+    alpha*=fogAlpha;
     if(alpha<=0)return;
     const occupants=(motion?motion.actors:state.enemies).filter(e=>e.id===enemy.id);
     if(occupants.length>1){const slot=Math.max(0,occupants.findIndex(e=>e.target===enemy.target));x+=(slot%2? .23:-.23);y+=Math.floor(slot/2)*.3;scale*=.55;}
     ctx.save();ctx.globalAlpha=alpha;ctx.translate(x+.5,y+.5);ctx.scale(scale,scale);ctx.translate(-.5,-.5);
     // 合流保持同一种敌人外观；瞬间膨胀在结算阶段表现。
-    ctx.fillStyle='#f28780';ctx.fillRect(.04,.06,.92,.83);
+    // 走进雾时逐渐失去鲜艳颜色，透明度和HP仍由同一可见权限决定。
+    ctx.fillStyle=`rgb(${[242,135,128].map((v,i)=>Math.round(v+(mistColor[i]-v)*(1-fogAlpha)*.75)).join(',')})`;ctx.fillRect(.04,.06,.92,.83);
     label(enemy.hp,.5,.42,'#321d23',Math.max(.46,10/size));ctx.fillStyle='#552b30';ctx.fillRect(.08,.73,.84,.1);ctx.fillStyle='#fff1c4';ctx.fillRect(.08,.73,.84*Math.max(0,Math.min(1,barHP/enemy.max)),.1);
     if(!reducedMotion.matches&&impact<1&&state.events.some(e=>e.type==='hit'&&e.id===enemy.id&&e.target===enemy.target)){
       ctx.fillStyle=`rgba(255,250,220,${.45*(1-impact)})`;ctx.fillRect(.04,.06,.92,.83);
@@ -1115,7 +1118,7 @@ function paramsEditor(params) {
       const wrap=document.createElement('label');wrap.textContent=label;
       const input=document.createElement(name==='shape'?'select':'input');
       if(name==='shape')for(const [value,text] of [['square','方形'],['diamond','菱形']]){const option=document.createElement('option');option.value=value;option.textContent=text;input.append(option);}
-      else{input.type='number';input.min=min;input.max=max;input.step=['productionIncomePerCell','productionSmallCostFloor','productionMaxDensity'].includes(name)||name.endsWith('Multiplier')?0.1:1;}
+      else{input.type='number';input.min=min;input.max=max;input.step=['productionIncomePerCell','productionSmallCostFloor','productionMaxDensity','enemyFogFadeCells'].includes(name)||name.endsWith('Multiplier')?0.1:1;}
       input.value=values[name];input.dataset.param=prefix+name;input.setAttribute('aria-label',`${title} ${label}`);
       input.addEventListener('input',refreshParams);wrap.append(input);row.append(wrap);
     }
@@ -1125,7 +1128,7 @@ function paramsEditor(params) {
   fields('地图',params,'',[['cellMeters','每格距离（米）',1,1000]]);
   fields('日夜操作',params,'',[['dayEndHoldMs','结束白天长按时长（毫秒）',300,3000],['incomeReportMs','收入暂显时长（毫秒，0关闭）',0,15000],['resourceHoverMs','资源详情悬停时长（毫秒）',0,2000],['resourceHoverTolerancePx','资源悬停位移容差（像素）',0,20]]);
   fields('视野',params,'',[['campS01','火光 S01 距离（格）',0,30],['outpostS01','瞭望塔 S01 距离（格）',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealPadding','敌源局部 S1 外扩（格）',0,10]]);
-  fields('云层',params,'',[['cloudSpeedMultiplier','流速倍率（0静止）',0,3],['fogS12','S12 薄雾→中雾距离（格）',1,20],['fogS23','S23 中雾→浓雾距离（格）',1,20]]);
+  fields('云层',params,'',[['cloudSpeedMultiplier','流速倍率（0静止）',0,3],['fogS12','S12 薄雾→中雾距离（格）',1,20],['fogS23','S23 中雾→浓雾距离（格）',1,20],['enemyFogFadeCells','敌人进出雾过渡（格）',0,3]]);
   fields('住房与人口',params,'',[['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房新建每格费用',1,1000]]);
   fields('经营建造',params,'',[['renovationCostPercent','修缮费用占新建价%',1,100]]);
   fields('街区生产',params,'',[['productionCostPerCell','基准每格新建费用',1,1000],['productionIncomePerCell','基准每格每晚收入',0,1000],['productionBaseArea','基准面积（格）',1,3600],['productionSmallCostFloor','小地块成本最低倍率',0.01,1],['productionDensityGrowthArea','密度增长面积（格）',1,3600],['productionMaxDensity','产出密度最高倍率',1,10]]);

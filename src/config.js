@@ -9,6 +9,8 @@ export const DEFAULTS = {
   cloudSpeedMultiplier: 1,
   // S01由火光/瞭望塔的有效视野决定；视野外S12/S23分别渐入中雾/浓雾。
   fogS12: 3, fogS23: 3,
+  // 仅在实时视野的可见侧融入雾中，0关闭渐隐，不扩大侦测范围。
+  enemyFogFadeCells: 1.5,
   initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 8,
   // 空地新建为基准；修缮只改变投入，不改变建成后的收入或人口。
   productionCostPerCell: 4, productionIncomePerCell: 0.5, renovationCostPercent: 50, killReward: 2,

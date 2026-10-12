@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=70';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=71';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -504,6 +504,7 @@ export function validateParams(params, state, checkLayout = true) {
   if(!['daySightMultiplier','nightSightMultiplier','eventSightMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=3))return '视野倍率须为 0–3，可使用小数。';
   if(!Number.isFinite(params.cloudSpeedMultiplier)||params.cloudSpeedMultiplier<0||params.cloudSpeedMultiplier>3)return '云层流速倍率须为 0–3，0 静止。';
   if(!integer(params.fogS12,1,20)||!integer(params.fogS23,1,20))return 'S12/S23 雾带距离须为 1–20 格整数。';
+  if(!Number.isFinite(params.enemyFogFadeCells)||params.enemyFogFadeCells<0||params.enemyFogFadeCells>3)return '敌人进出雾过渡须为 0–3 格，0 关闭渐隐，可使用小数。';
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
   if(!integer(params.outpostWorkers,0,100))return '每座瞭望塔用工须为0–100人整数。';
   if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产、瞭望塔或增加住房。';
