@@ -3,6 +3,8 @@ export const SIZE = 60;
 export const DEFAULTS = {
   // 每格的现实边长，仅用于地图比例尺；战斗和建设仍按格计算。
   cellMeters: 20,
+  // 精确火力只在路线格上显示；每格屏幕尺寸小于此值时收起数字，0关闭缩放门槛。
+  fireNumbersMinCellPx: 12,
   // 敌源按完整占地边缘外扩揭雾，0只显示占地；与视野面板同步。
   campS01: 6, outpostS01: 9, daySightMultiplier: 1, nightSightMultiplier: 0.6, eventSightMultiplier: 1, sourceRevealPadding: 2,
   // 云纹流速只影响外观，0静止；保持两层云的方向与速度比例。

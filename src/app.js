@@ -1,12 +1,12 @@
-import {createVisibility} from './visibility.js?v=3';
-import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=15';
-import {createTowerOverlay} from './tower-overlay.js?v=15';
-import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings} from './city-textures.js?v=13';
+import {createVisibility} from './visibility.js?v=4';
+import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=16';
+import {createTowerOverlay} from './tower-overlay.js?v=16';
+import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings} from './city-textures.js?v=14';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
 import {drawCampfire,drawShield,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=7';
 import {createGameAudio} from './audio.js?v=7';
-import { SIZE, DEFAULTS } from './config.js?v=71';
-import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=87';
+import { SIZE, DEFAULTS } from './config.js?v=72';
+import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=88';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -540,6 +540,13 @@ function paintMap() {
   // 信息先按既有权限筛选，再画在环境云上，避免战斗与操作被薄云盖住。
   const actualNight=state.phase==='battle'&&Number($('forecastDay').value)===state.day-1;
   const displayedRoutes=actualNight?battleRoutes(state):plannedRoutes.map(attack=>({...attack,future:false}));
+  // 只统计当前预告/在场进攻，不把休眠敌源的悬停潜在路线混进火力层。
+  const fireRouteKey=`${actualNight}:${forecastDay}`;
+  if(view.fireRouteKey!==fireRouteKey){
+    view.fireRouteKey=fireRouteKey;view.fireRouteCells=new Set(displayedRoutes.flatMap(route=>route.path));
+    view.routeFireCells=new Set([...fire.keys()].filter(id=>view.fireRouteCells.has(id)));
+  }
+  const fireRouteCells=view.fireRouteCells;
   const routeSources=viewedSources(),linked=linkedSource();
   let potential=null;
   if(linked&&forecastDay===state.day&&!sourceEditing()&&!routeSources.some(s=>sourceIdentity(s)===linked)){
@@ -551,6 +558,13 @@ function paintMap() {
   const linkedRoute=route=>(route.sources??[route.index]).some(index=>routeSources[index]&&sourceIdentity(routeSources[index])===linked);
   const focusedRoutes=linked?displayedRoutes.filter(route=>route.path.length>1&&linkedRoute(route)):[];
   const focusActive=focusedRoutes.length>0||!!potential;
+  // 联动火力按当前路线缓存；休眠源头只在主动预览时加入，不挤掉其他路线数字。
+  const fireFocusKey=`${fireRouteKey}:${linked??''}`;
+  if(view.fireFocusKey!==fireFocusKey){
+    view.fireFocusKey=fireFocusKey;
+    view.focusedRouteCells=new Set([...focusedRoutes.flatMap(route=>route.path),...(potential?.path??[])]);
+    view.focusedFireCells=new Set([...fire.keys()].filter(id=>view.focusedRouteCells.has(id)));
+  }
   const routeColor=index=>enemyRouteColor(sourceNumber(routeSources[index])>=0?sourceNumber(routeSources[index]):index);
   // 颜色继续表达来源；合流时按当前联动的源头着色，而不是只取第一来源。
   const focusedColor=potential?enemyRouteColor(potential.index):focusedRoutes.length?routeColor(routeSources.findIndex(source=>sourceIdentity(source)===linked)):null;
@@ -603,21 +617,41 @@ function paintMap() {
       }}ctx.stroke();ctx.setLineDash([]);
       // 提亮覆盖到的路线格，不把路线总长度误当作实际伤害。
       ctx.strokeStyle='#e5ef9b';ctx.lineWidth=.055;
-      for(const id of new Set(viewedSources().flatMap(sourcePath)))if(added.has(id)&&currentlyVisible(id)){
+      for(const id of fireRouteCells)if(added.has(id)&&currentlyVisible(id)){
         const [x,y]=xy(id);ctx.strokeRect(x+.12,y+.12,.76,.76);
       }
     }
     const [x,y] = xy(hover); ctx.strokeStyle = error ? '#ff8078' : '#d8f9e8'; ctx.lineWidth = .08; ctx.strokeRect(x+.04,y+.04,.92,.92);
   }
   const label = (text,x,y,color,font=.4) => {ctx.fillStyle=color;ctx.font=`600 ${font}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,x,y);};
-  for (const id of new Set([...($('heat').checked?fire.keys():[]),...added])) {
+  const fullFire=$('fullFire').checked,numbersVisible=fullFire||size>=controlState.params.fireNumbersMinCellPx;
+  // HP优先：按正在绘制的插值位置避让身体，雾外敌人不能通过隐藏数字透露位置。
+  const enemyLabelCells=new Set();
+  const reserveEnemyLabels=(x,y)=>{
+    if(mapFogEnabled()&&view.visibility.enemyAlpha(x+.5,y+.5)<=0)return;
+    for(let ey=Math.floor(y+.04);ey<=Math.floor(y+.96);ey++)for(let ex=Math.floor(x+.04);ex<=Math.floor(x+.96);ex++)if(inside(ex,ey))enemyLabelCells.add(key(ex,ey));
+  };
+  if(numbersVisible&&motion){
+    const t=Math.min(1,motion.elapsed/moveDuration()),eased=t*t*(3-2*t);
+    for(const enemy of motion.actors){const [x,y]=xy(enemy.id),[tx,ty]=xy(enemy.to);reserveEnemyLabels(x+(tx-x)*eased,y+(ty-y)*eased);}
+  }else if(numbersVisible){
+    for(const enemy of state.enemies)reserveEnemyLabels(...xy(enemy.id));
+    if(impactAge<IMPACT_MS)for(const event of state.events)if(event.type==='kill')reserveEnemyLabels(...xy(event.id));
+  }
+  const fireLabelCells=numbersVisible?new Set([
+    ...(fullFire?fire.keys():$('heat').checked?view.routeFireCells:[]),
+    ...view.focusedFireCells,
+    ...[...added].filter(id=>fullFire||fireRouteCells.has(id))
+  ]):[];
+  for (const id of fireLabelCells) {
     const [x,y]=xy(id), changed=added.has(id);if(!inView(x,y))continue;
-    if(currentlyVisible(id)&&!state.walls.has(id)&&!sourceFootprint.has(id)){
+    if(currentlyVisible(id)&&!state.terrainWalls.has(id)&&!state.walls.has(id)&&!sourceFootprint.has(id)&&!enemyLabelCells.has(id)){
       // 数值使用深色小底与描边，局部遮住装饰中线，确保火力信息优先。
       const value=(fire.get(id)||0)+(changed?weapon.power:0),font=Math.max(changed?.43:.35,9/size);
+      if(value<=0)continue;
       ctx.save();ctx.font=`600 ${font}px system-ui`;const tw=ctx.measureText(String(value)).width;
       ctx.fillStyle='#102b2be6';ctx.fillRect(x+.5-tw/2-.09,y+.5-font*.6,tw+.18,font*1.2);
-      label(value,x+.5,y+.5,changed?'#f0ffad':'#cbffe5',font);ctx.restore();
+      label(value,x+.5,y+.5,changed?'#f0ffad':view.focusedRouteCells.has(id)?'#fff4dd':'#cbffe5',font);ctx.restore();
     }
   }
   ctx.beginPath();
@@ -1159,6 +1193,7 @@ function paramsEditor(params) {
   }
   fields('全局',params,'',[['budget','资金',0,10000],['stepMs','移动节拍（毫秒）',50,5000],['wallCost','墙价',1,1000],['demolitionRefundPercent','旧投入拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campWarningPercent','火光危急阈值%',0,100],['campRepairCost','火光修复单价/HP',1,1000],['nightTicks','每晚拍数',1,500],['nightCleanupSpeed','夜末清源速度倍率',1,4],['nightIdleTransitionMs','空闲夜末过渡时长（毫秒）',0,3000]]);
   fields('地图',params,'',[['cellMeters','每格距离（米）',1,1000]]);
+  fields('火力显示',params,'',[['fireNumbersMinCellPx','数字最小格宽（像素，0始终显示）',0,48]]);
   fields('日夜操作',params,'',[['dayEndHoldMs','结束白天长按时长（毫秒）',300,3000],['incomeReportMs','收入暂显时长（毫秒，0关闭）',0,15000],['resourceHoverMs','资源详情悬停时长（毫秒）',0,2000],['resourceHoverTolerancePx','资源悬停位移容差（像素）',0,20]]);
   fields('视野',params,'',[['campS01','火光 S01 距离（格）',0,30],['outpostS01','瞭望塔 S01 距离（格）',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealPadding','敌源局部 S1 外扩（格）',0,10]]);
   fields('云层',params,'',[['cloudSpeedMultiplier','流速倍率（0静止）',0,3],['fogS12','S12 薄雾→中雾距离（格）',1,20],['fogS23','S23 中雾→浓雾距离（格）',1,20],['enemyFogFadeCells','敌人进出雾过渡（格）',0,3]]);
@@ -1328,7 +1363,7 @@ $('sourceDefaults').onclick=()=>{
   notify('默认敌源与 15 晚计划已填入，应用并重开后生效。');update();
 };
 $('sourceAudit').onclick=()=>{if(sourceConfigurationDirty()||paramsDirty()){showTopNotice('请先应用或取消配置，再校验路线。');return;}$('auditRoutes').click();};
-$('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;constrainCamera();hover=null;updateMapSourceHover();draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;
+$('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;constrainCamera();hover=null;updateMapSourceHover();draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;$('fullFire').onchange=draw;
 // 右键退出当前工具，保留悬停查看与地图移动，不再执行建设或拆除。
 canvas.addEventListener('contextmenu',e=>{e.preventDefault();tool=null;selectedSource=null;dragging=null;notify('');update();});
 canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();changeZoom(e.deltaY<0?1.12:1/1.12,e.clientX-r.left,e.clientY-r.top);},{passive:false});
