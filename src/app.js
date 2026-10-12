@@ -1,4 +1,5 @@
-import {createCity3D} from './city-3d.js?v=8';
+import {createCity3D} from './city-3d.js?v=9';
+import {operatingStreetLamps} from './city-streets.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier} from './combat-visuals.js?v=3';
 import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
@@ -491,12 +492,7 @@ function paintMap() {
 
   // 只把原画面允许显示完整外观的地块交给3D；运营灯光不新增经营或安全判断。
   const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&!view.sourceSites.has(id)&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.role==='hospital'?'hospital':p.content.type,status:p.content.status,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id))}));
-  const streetLamps=[];
-  for(const p of cityPlots)if(p.powered){
-    const candidates=[];for(let x=p.x;x<p.x+p.w;x++)candidates.push([x,p.y-1],[x,p.y+p.h]);for(let y=p.y;y<p.y+p.h;y++)candidates.push([p.x-1,y],[p.x+p.w,y]);
-    candidates.sort((a,b)=>Math.hypot(a[0]+.5-p.x-p.w/2,a[1]+.5-p.y-p.h/2)-Math.hypot(b[0]+.5-p.x-p.w/2,b[1]+.5-p.y-p.h/2));
-    let count=0;for(const [x,y] of candidates){const id=key(x,y);if(!inside(x,y)||state.layout?.tiles[id]!=='road'||!controlled.has(id)||!currentlyVisible(id)||state.walls.has(id)||state.outposts.has(id)||streetLamps.some(l=>Math.hypot(l.x-x-.5,l.y-y-.5)<3))continue;streetLamps.push({x:x+.5,y:y+.5});if(++count===2)break;}
-  }
+  const streetLamps=operatingStreetLamps(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
   const wrecks=[];
   // 燃烧车辆是已知废墟旁的装饰，不阻路；恢复邻楼或在此建设时直接移除。
   // 车辆按约4.6m长换算为地图格，不按道路格放大；火光随实体尺度一起收缩。
@@ -509,7 +505,7 @@ function paintMap() {
   const fx={time:effectTime,cell:size,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp);if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:1.3,h:1.3});
-  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,night:nightMix,layout:state.layout,lamps:streetLamps,fx});
+  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,night:nightMix,layout:state.layout,lamps:streetLamps,fx});
   // 道路承接真实点光与太阳阴影；在热力、格线和云雾下面一次性裁剪绘制。
   if(cityFrame){ctx.save();ctx.beginPath();for(let y=bounds.top;y<bounds.bottom;y++)for(let x=bounds.left;x<bounds.right;x++)if(visibleCell(key(x,y))&&state.layout?.tiles[key(x,y)]==='road')ctx.rect(x,y,1,1);ctx.clip();ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
   const eligibleCells=weaponPlacementReady?view.towers.eligible(weaponType()):new Set();

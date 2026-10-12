@@ -108,7 +108,7 @@ export function createCity3D(onReady){
       entry.object.updateMatrixWorld(true);const ray=new THREE.Raycaster(new THREE.Vector3(x,entry.roof+1,y),new THREE.Vector3(0,-1,0));
       return ray.intersectObject(entry.object,true)[0]?.point.y??entry.roof;
     },
-    render(plots,{width,height,panX,panY,cell,night,layout,lamps=[],fx}){
+    render(plots,{width,height,panX,panY,cell,cellMeters,night,layout,lamps=[],fx}){
       if(!ready)return null;
       const active=new Set(plots.map(p=>p.id));
       for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
@@ -124,20 +124,23 @@ export function createCity3D(onReady){
         const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
         terrain=new THREE.Mesh(new THREE.PlaneGeometry(layout.width,layout.height),new THREE.MeshStandardMaterial({map:texture,roughness:.95}));terrain.rotation.x=-Math.PI/2;terrain.position.set(layout.width/2,-.015,layout.height/2);terrain.receiveShadow=true;scene.add(terrain);roadLayout=layout;
       }
-      const nextStreets=JSON.stringify(lamps);
+      const nextStreets=cellMeters+JSON.stringify(lamps),streetLights=[];
+      const rawStreet=models.get('street'),streetBounds=new THREE.Box3().setFromObject(rawStreet),streetScale=7.5/cellMeters/(streetBounds.max.y-streetBounds.min.y);
+      let lightOffset=new THREE.Vector3();rawStreet.traverse(node=>{if(node.isMesh&&node.material.name==='#ffe1a3')lightOffset=new THREE.Box3().setFromObject(node).getCenter(new THREE.Vector3());});
+      for(const lamp of lamps){const offset=lightOffset.clone().multiplyScalar(streetScale).applyAxisAngle(new THREE.Vector3(0,1,0),lamp.angle);streetLights.push({x:lamp.x+offset.x,y:lamp.y+offset.z,height:offset.y});}
       if(nextStreets!==streetKey){
         for(const object of [...streets.children])release({object});streets.clear();
         for(const lamp of lamps){
           const object=new THREE.Group(),model=models.get('street').clone(true);object.add(model);model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.castShadow=true;}});
-          const bounds=new THREE.Box3().setFromObject(model),center=bounds.getCenter(new THREE.Vector3()),scale=1.45/(bounds.max.y-bounds.min.y);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);object.position.set(lamp.x,0,lamp.y);
-          const pool=groundGlow(2.6,3.4,'#ffca72',.32);pool.position.y=.012;pool.userData.ownGeometry=true;object.add(pool);streets.add(object);
+          model.scale.setScalar(streetScale);model.position.y=-streetBounds.min.y*streetScale;object.position.set(lamp.x,0,lamp.y);object.rotation.y=lamp.angle;
+          const pool=groundGlow(18/cellMeters,28/cellMeters,'#ffca72',.32);pool.position.set(lightOffset.x*streetScale,.012,lightOffset.z*streetScale);pool.userData.ownGeometry=true;object.add(pool);streets.add(object);
         }
         streetKey=nextStreets;
       }
       // 只启用镜头附近路灯的真实光源；远景保留灯具与光池，灯不投独立阴影。
-      const nearby=lamps.filter(p=>p.x>=-panX/cell-4&&p.x<=(width-panX)/cell+4&&p.y>=-panY/cell-4&&p.y<=(height-panY)/cell+4);
-      while(localLights.length<nearby.length){const light=new THREE.PointLight('#ffd08a',0,4,2);scene.add(light);localLights.push(light);}
-      localLights.forEach((light,i)=>{light.visible=i<nearby.length&&night>0;light.intensity=i<nearby.length?night*18:0;if(i<nearby.length)light.position.set(nearby[i].x,1.35,nearby[i].y);});
+      const reach=22/cellMeters,nearby=streetLights.filter(p=>p.x>=-panX/cell-reach&&p.x<=(width-panX)/cell+reach&&p.y>=-panY/cell-reach&&p.y<=(height-panY)/cell+reach);
+      while(localLights.length<nearby.length){const light=new THREE.PointLight('#ffd08a',0,reach,2);scene.add(light);localLights.push(light);}
+      localLights.forEach((light,i)=>{light.visible=i<nearby.length&&night>0;light.distance=reach;light.intensity=i<nearby.length?night*1.7*(20/cellMeters)**2:0;if(i<nearby.length)light.position.set(nearby[i].x,nearby[i].height,nearby[i].y);});
       streets.traverse(node=>{if(node.isMesh){if(node.material.map)node.material.opacity=night*.32;else if(node.material.name==='#ffe1a3'){node.material.emissive.set('#ffb75c');node.material.emissiveIntensity=night*1.8;}}});
       const lightItems=[...fx.sweeps,...fx.fires].map(item=>{const size=new THREE.Box3().setFromObject(models.get(item.asset)).getSize(new THREE.Vector3());return {...item,height:size.y*Math.min(item.w/size.x,item.h/size.z)*(item.asset==='watch'?.84:.65)};});
       effects.updateLights(lightItems,fx.time,night,{left:-panX/cell,right:(width-panX)/cell,top:-panY/cell,bottom:(height-panY)/cell});
