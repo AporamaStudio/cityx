@@ -11,7 +11,9 @@ const assets=[
   ['house-wide','连排住宅','building','suburban/building-type-u',4.8,'作为较大住房的体量候选；实际占地需按游戏格子适配。'],
   ['apartment','城市公寓','building','commercial/building-a',3.7,'中等高度建筑，测试斜视时对道路和屋顶炮位的遮挡。'],
   ['shop','商住楼','building','commercial/building-d',3.9,'作为商业经营外观候选，不意味着新增一种经营机制。'],
-  ['landmark','中型目标建筑','building','commercial/building-j',5.1,'先用于试医院的体量；医疗标识、布局和破损变体尚需适配。'],
+  ['landmark','中型商业楼','building','commercial/building-j',5.1,'通用中型商业建筑，用于与医院、银行对比体量。'],
+  ['hospital','医院园区','building','hospital',12,'10×12格：中央门诊、两栋病房楼、急诊与配套连廊；庭院仅作构图，仍是一个医院对象。'],
+  ['bank','大型银行','building','bank',8,'8×8格选型体量：单体大楼、中央退台屋顶与银行徽记；地图位置和银行玩法尚未接入。'],
   ['factory','生产厂房','building','industrial/building-a',4.8,'平屋顶与厂房体量适合生产地块，保留清楚的临街边缘。'],
   ['workshop','工业车间','building','industrial/building-f',4.7,'经营建筑的第二种外观候选，先观察烟囱与屋顶是否过于杂乱。'],
   ['tree','街道树','nature','suburban/tree-large',.9,'少量点缀恢复后的街区，不能挡住道路和建设提示。'],
@@ -27,7 +29,7 @@ const assets=[
   ['trash','垃圾堆','nature','trash',1.4,'废弃街区的杂物；恢复后清走，先验证清理带来的变化。'],
   ['rubble','瓦砾','nature','rubble',2,'附着原建筑的塌损位置，帮助关联废墟与完好状态。'],
   ['burnt-car','燃烧车辆','nature','burnt-car',2.7,'焦黑车身与少量火焰表现灾损，作为恢复前的局部视觉样件。']
-].map(([id,name,category,file,width,description])=>({id,name,category,file,width,description,local:!file.includes('/')}));
+].map(([id,name,category,file,width,description])=>({id,name,category,file,width,description,local:!file.includes('/'),landmark:['hospital','bank'].includes(id)}));
 const $=id=>document.getElementById(id),models=new Map(),district=new THREE.Group(),single=new THREE.Group();
 let selected=assets[0],mode='district',night=false,restored=false,angle='angle',ready=false,singleState='intact',singleVariants=null,effects=null;
 const motionPreference=matchMedia('(prefers-reduced-motion: reduce)');let animated=!motionPreference.matches;
@@ -41,7 +43,7 @@ const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamp
 controls.maxPolarAngle=Math.PI*.48;controls.addEventListener('change',render);
 const sky=new THREE.HemisphereLight('#f4f6e2','#809180',2.4),sun=new THREE.DirectionalLight('#fff1cd',3.2);
 sun.position.set(-16,28,12);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
-Object.assign(sun.shadow.camera,{left:-28,right:28,top:28,bottom:-28,near:1,far:75});sun.shadow.bias=-.00025;sun.shadow.normalBias=.03;
+Object.assign(sun.shadow.camera,{left:-38,right:38,top:38,bottom:-38,near:1,far:100});sun.shadow.bias=-.00025;sun.shadow.normalBias=.03;
 const fireLight=new THREE.PointLight('#ffb860',22,13,2);fireLight.position.set(4,2.2,0);
 const wreckLight=new THREE.PointLight('#ff9a49',9,6,2);wreckLight.position.set(-8,1.1,-.8);
 scene.add(sky,sun,fireLight,wreckLight,district,single);
@@ -58,24 +60,38 @@ function box(parent,x,y,z,w,h,d,color){
 function render(){effects?.update();renderer.shadowMap.needsUpdate=true;renderer.render(scene,camera);}
 function resize(){
   const {width,height}=$('viewer').getBoundingClientRect();renderer.setSize(width,height,false);
-  const aspect=width/height,frame=mode==='district'?54:selected.id.startsWith('cannon-')?6.2:['campfire','burnt-car','streetlight'].includes(selected.id)?8:11,half=Math.max(frame*.34,frame/aspect/2);
+  const aspect=width/height,frame=mode==='district'?68:selected.landmark?selected.width*1.85:selected.id.startsWith('cannon-')?6.2:['campfire','burnt-car','streetlight'].includes(selected.id)?8:11,half=Math.max(frame*.34,frame/aspect/2);
   camera.left=-half*aspect;camera.right=half*aspect;camera.top=half;camera.bottom=-half;camera.updateProjectionMatrix();render();
 }
 function frame(){
-  const target=new THREE.Vector3(0,mode==='district'?1:1.7,0),offset=angle==='top'?new THREE.Vector3(0,45,.01):new THREE.Vector3(32,34,40);
+  const target=new THREE.Vector3(0,mode==='district'?1:1.7,mode==='district'?-7:0),offset=angle==='top'?new THREE.Vector3(0,45,.01):new THREE.Vector3(32,34,40);
   controls.target.copy(target);camera.position.copy(target).add(offset);camera.zoom=1;camera.updateProjectionMatrix();controls.update();resize();
 }
-function cloneModel(asset,width=asset.width,roofLights=true){
-  const group=models.get(asset.id).clone(true),bounds=new THREE.Box3().setFromObject(group),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+function cloneModel(asset,width=asset.width,roofLights=true,ruined=false){
+  const group=models.get(asset.id+(ruined?'-ruined':'')).clone(true),bounds=new THREE.Box3().setFromObject(group),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
   const scale=width/Math.max(size.x,size.z);group.scale.setScalar(scale);
   group.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
   const anchor=new THREE.Group();anchor.add(group);anchor.updateMatrixWorld(true);
-  group.traverse(node=>{if(node.isMesh){node.castShadow=true;node.receiveShadow=true;node.material=node.material.clone();if(isBuilding(asset)){node.geometry=node.geometry.index?node.geometry.toNonIndexed():node.geometry.clone();node.userData.previewGeometry=true;windowMaterial(node.material,node.geometry,node.matrixWorld,size.y*scale);}}});
-  if(roofLights&&isBuilding(asset))addRoofLights(anchor);
+  group.traverse(node=>{if(node.isMesh){node.castShadow=true;node.receiveShadow=true;node.material=node.material.clone();
+    if(asset.landmark){
+      // 专用建筑明确指定玻璃/灯具材质；同一GLB昼夜共用，墙面不参与发光。
+      if(['#587a91','#ffe1a3'].includes(node.material.name)){node.material.userData.previewLamp=true;node.material.emissive.set('#ffb75c');node.material.emissiveIntensity=0;}
+    }else if(isBuilding(asset)){node.geometry=node.geometry.index?node.geometry.toNonIndexed():node.geometry.clone();node.userData.previewGeometry=true;windowMaterial(node.material,node.geometry,node.matrixWorld,size.y*scale);}
+  }});
+  if(asset.landmark&&!ruined){
+    // GLB保留灯位，局部屋顶光晕与入口真实光源随夜间运营开关一起变化。
+    const lighting=new THREE.Group();lighting.userData.previewRoofLights=true;lighting.visible=false;
+    group.traverse(node=>{
+      for(const [x,y,z,w,d] of node.userData.roofLights??[]){const glow=groundGlow(w*2.0,d*2.8,'#ffc57d',.3);glow.position.set(x,y,z);lighting.add(glow);}
+      for(const [x,y,z,power,range] of node.userData.entryLights??[]){const light=new THREE.PointLight('#ffd08a',power,range,2);light.position.set(x,y,z);lighting.add(light);const pool=groundGlow(1.6,2.8,'#ffca72',.25);pool.position.set(x,.24,z);lighting.add(pool);}
+    });
+    group.add(lighting);
+  }
+  if(roofLights&&isBuilding(asset)&&!asset.landmark)addRoofLights(anchor);
   effects.attach(asset.id,anchor);
   return anchor;
 }
-function isBuilding(asset){return asset.category==='building'&&!asset.local;}
+function isBuilding(asset){return asset.category==='building'&&(!asset.local||asset.landmark);}
 function addRoofLights(object){
   // 在真实屋顶表面放少量暖色天窗/檐口灯，俯视仍可辨认运营状态。
   object.updateWorldMatrix(true,true);
@@ -118,10 +134,12 @@ function windowMaterial(material,geometry,matrix,height){
 function setPower(object,powered){
   object.traverse(node=>{if(node.userData.previewRoofLights)node.visible=night&&powered;if(node.isMesh){
     const uniform=node.material.userData.previewPower;if(uniform)uniform.value=night&&powered?1:0;
-    if(node.material.name==='#ffe1a3')node.material.emissiveIntensity=night&&powered?1.8:0;
+    if(node.material.userData.previewLamp||node.material.name==='#ffe1a3')node.material.emissiveIntensity=night&&powered?(node.material.userData.previewLamp?1.0:1.8):0;
   }});
 }
 function ruinedModel(asset,width=asset.width){
+  // 医院/银行使用指定破损组件，保留同一场地和未塌主楼。
+  if(asset.landmark)return cloneModel(asset,width,false,true);
   // 原楼局部塌损：保留占地、入口与大部分门窗，避免换成无关联的通用废墟。
   const obj=cloneModel(asset,width,false);obj.updateMatrixWorld(true);
   const bounds=new THREE.Box3().setFromObject(obj),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3()),height=bounds.max.y,cut=height*.32;
@@ -162,16 +180,22 @@ function place(id,x,z,width,y=.14){
 }
 function buildDistrict(){
   // 一小片城市样景，仅拼已有模型；道路/灯光是预览装饰，不接入玩法。
-  box(district,0,-.42,0,35,.7,27,'#869b83');box(district,0,-.04,0,34,.12,26,palette.grass);
+  box(district,0,-.42,-8,35,.7,43,'#869b83');box(district,0,-.04,-8,34,.12,42,palette.grass);
   for(const x of [-8,0,8])box(district,x,.02,0,1.7,.06,26,palette.road);
   for(const z of [-4,4])box(district,0,.02,z,34,.06,1.7,palette.road);
   for(const x of [-8,0,8])for(let z=-12;z<=12;z+=1.5)box(district,x,.055,z,.09,.01,.6,'#c1c8b2');
   for(const z of [-4,4])for(let x=-16;x<=16;x+=1.5)box(district,x,.055,z,.6,.01,.09,'#c1c8b2');
+  // 后排大地块与普通街区同框比较体量；不调整可玩地图的生成器。
+  for(const z of [-13,-28])box(district,0,.02,z,34,.06,1.3,palette.road);
+  box(district,0,.02,-20,1.7,.06,15,palette.road);
   const lots=[['house-small',-12,8],['house',-4,8],['factory',4,8],['house-wide',12,8],['apartment',-12,0],['shop',-4,0],['house',12,0],['house-wide',-12,-8],['apartment',-4,-8],['workshop',4,-8],['landmark',12,-8]];
   for(const [id,x,z] of lots){
     box(district,x,.065,z,6.2,.13,5.7,palette.stone);
     const obj=place(id,x,z);structures.push({obj,x,z,id,front:z>=0});
     for(const [dx,dz] of [[-2.7,2.2],[2.65,2.3]])place('tree-small',x+dx,z+dz,.7);
+  }
+  for(const [id,x,z,width] of [['hospital',-8,-20,12],['bank',10,-21,8]]){
+    const obj=place(id,x,z,width);structures.push({obj,x,z,id,front:true});
   }
   place('campfire',4,0,2.2);place('watchtower',-1.7,5.5,1.7);place('watchtower',14,3,1.6);
   const factory=structures.find(s=>s.id==='factory'),roof=new THREE.Box3().setFromObject(factory.obj).max.y;
@@ -193,7 +217,7 @@ function buildDistrict(){
 }
 function updateRestore(){
   for(const s of structures){
-    const damaged=!restored&&s.front&&['house','shop','apartment'].includes(s.id);s.obj.visible=!damaged;s.ruins.visible=damaged;
+    const damaged=!restored&&s.front&&['house','shop','apartment','hospital','bank'].includes(s.id);s.obj.visible=!damaged;s.ruins.visible=damaged;
     s.obj.traverse(node=>{if(node.isMesh&&node.material.userData.previewPower){node.material.color.set(restored||s.front?'#ffffff':'#9ba7a0');}});
     setPower(s.obj,restored&&s.front);
   }
@@ -209,6 +233,7 @@ function updateSingleState(){
   if(singleVariants.ruined)singleVariants.ruined.visible=singleState==='ruined';
   setPower(singleVariants.normal,isBuilding(selected)?singleState==='operating':true);
   for(const button of document.querySelectorAll('[data-state]'))button.classList.toggle('active',button.dataset.state===singleState);
+  if(selected.landmark){$('download').href=root+'generated/'+selected.file+(singleState==='ruined'?'-ruined':'')+'.glb';$('download').textContent=singleState==='ruined'?'下载破损模型 ↓':'下载完好模型 ↓';}
   if(mode==='single')$('sceneSubtitle').textContent=isBuilding(selected)?({intact:'完好 · 尚未运营',ruined:'原建筑局部塌损 · 占地与门窗保留',operating:'恢复运营 · 窗户与屋顶亮灯'})[singleState]:(selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0');
 }
 function setMode(next){
@@ -222,21 +247,21 @@ function selectAsset(asset,show=true){
   selected=asset;
   if(singleVariants)effects.remove(singleVariants.normal);
   single.traverse(node=>{if(node.isMesh||node.isLine){node.material.dispose();if(node.userData.previewGeometry)node.geometry.dispose();}});single.clear();
-  const width=Math.min(asset.width,4.8),normal=cloneModel(asset,width),ruined=isBuilding(asset)?ruinedModel(asset,width):null;
+  const width=asset.landmark?asset.width:Math.min(asset.width,4.8),normal=cloneModel(asset,width),ruined=isBuilding(asset)?ruinedModel(asset,width):null;
   single.add(normal);if(ruined)single.add(ruined);singleVariants={normal,ruined};
   $('buildingStates').hidden=!isBuilding(asset);updateSingleState();
   $('assetTitle').textContent=asset.name;$('assetOrigin').textContent=asset.local?'自制样件':'Kenney · CC0';$('assetDescription').textContent=asset.description;
-  const path=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb';$('download').href=path;
+  const path=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb';$('download').href=path;$('download').textContent='下载原模型 ↓';
   $('source').href=asset.local?'assets/model-preview/ATTRIBUTION.md':kenney+({suburban:'city-kit-suburban',commercial:'city-kit-commercial',industrial:'city-kit-industrial'}[asset.file.split('/')[0]]);
   for(const btn of $('catalog').children)btn.classList.toggle('selected',btn.dataset.id===asset.id);
-  if(show)setMode('single');
+  if(show)setMode('single');else updateSingleState();
 }
 function catalog(filter='all'){
   $('catalog').replaceChildren();
   for(const a of assets.filter(a=>filter==='all'||a.category===filter)){
     const btn=document.createElement('button');btn.type='button';btn.className='asset';btn.dataset.id=a.id;
     if(!a.local){const img=document.createElement('img');img.src=root+'kenney/'+a.file+'.png';img.alt='';btn.append(img);}
-    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰'})[a.id];btn.append(icon);}
+    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰'})[a.id];btn.append(icon);}
     const label=document.createElement('span'),name=document.createElement('b'),origin=document.createElement('small');name.textContent=a.name;origin.textContent=a.local?'自制样件':'Kenney';label.append(name,origin);btn.append(label);
     btn.disabled=!ready;btn.classList.toggle('selected',a.id===selected.id);btn.addEventListener('click',()=>selectAsset(a));$('catalog').append(btn);
   }
@@ -262,11 +287,12 @@ for(const button of document.querySelectorAll('[data-filter]'))button.addEventLi
 new ResizeObserver(resize).observe($('viewer'));catalog();setLight();frame();
 const loader=new GLTFLoader();let loaded=0;
 try{
-  await Promise.all(assets.map(async asset=>{
-    const url=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb';const gltf=await loader.loadAsync(url);models.set(asset.id,gltf.scene);
-    loaded++;$('loading').textContent=`正在装载模型… ${loaded}/${assets.length}`;
+  const files=assets.flatMap(asset=>[{asset,id:asset.id,file:asset.file},...(asset.landmark?[{asset,id:asset.id+'-ruined',file:asset.file+'-ruined'}]:[])]);
+  await Promise.all(files.map(async ({asset,id,file})=>{
+    const url=root+(asset.local?'generated/':'kenney/')+file+'.glb';const gltf=await loader.loadAsync(url);models.set(id,gltf.scene);
+    loaded++;$('loading').textContent=`正在装载模型… ${loaded}/${files.length}`;
   }));
-  ready=true;buildDistrict();selectAsset(selected,false);catalog();setMode('district');syncMotion();$('loading').hidden=true;$('loadStatus').textContent=`${loaded} 个模型已就绪`;
+  ready=true;buildDistrict();selectAsset(selected,false);catalog();setMode('district');syncMotion();$('loading').hidden=true;$('loadStatus').textContent=`${assets.length} 个模型已就绪`;
 }catch(error){
   $('loading').textContent='模型装载失败，请刷新后重试。';$('loadStatus').textContent='装载失败';console.error(error);
 }
