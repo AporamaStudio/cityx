@@ -1,4 +1,4 @@
-import {createCity3D} from './city-3d.js?v=2';
+import {createCity3D} from './city-3d.js?v=3';
 import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
 import {createTowerOverlay} from './tower-overlay.js?v=18';
@@ -476,6 +476,17 @@ function paintMap() {
   // 游玩时受探索遮罩约束；白天展开敌源编辑仅临时预览全图，不写探索记录。
   ctx.fillStyle=palette.fog;ctx.fillRect(0,0,SIZE,SIZE);
 
+  // 只把原画面允许显示完整外观的地块交给3D；运营灯光不新增经营或安全判断。
+  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&!view.sourceSites.has(id)&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.role==='hospital'?'hospital':p.content.type,status:p.content.status,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id))}));
+  const streetLamps=[];
+  for(const p of cityPlots)if(p.powered){
+    const candidates=[];for(let x=p.x;x<p.x+p.w;x++)candidates.push([x,p.y-1],[x,p.y+p.h]);for(let y=p.y;y<p.y+p.h;y++)candidates.push([p.x-1,y],[p.x+p.w,y]);
+    candidates.sort((a,b)=>Math.hypot(a[0]+.5-p.x-p.w/2,a[1]+.5-p.y-p.h/2)-Math.hypot(b[0]+.5-p.x-p.w/2,b[1]+.5-p.y-p.h/2));
+    let count=0;for(const [x,y] of candidates){const id=key(x,y);if(!inside(x,y)||state.layout?.tiles[id]!=='road'||!controlled.has(id)||!currentlyVisible(id)||state.walls.has(id)||state.outposts.has(id)||streetLamps.some(l=>Math.hypot(l.x-x-.5,l.y-y-.5)<3))continue;streetLamps.push({x:x+.5,y:y+.5});if(++count===2)break;}
+  }
+  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,night:nightMix,layout:state.layout,lamps:streetLamps});
+  // 道路承接真实点光与太阳阴影；在热力、格线和云雾下面一次性裁剪绘制。
+  if(cityFrame){ctx.save();ctx.beginPath();for(let y=bounds.top;y<bounds.bottom;y++)for(let x=bounds.left;x<bounds.right;x++)if(visibleCell(key(x,y))&&state.layout?.tiles[key(x,y)]==='road')ctx.rect(x,y,1,1);ctx.clip();ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
   const eligibleCells=weaponPlacementReady?view.towers.eligible(weaponType()):new Set();
   for (let y = bounds.top; y < bounds.bottom; y++) for (let x = bounds.left; x < bounds.right; x++) {
     const id = key(x, y), power = fire.get(id) || 0;
@@ -483,9 +494,11 @@ function paintMap() {
       ctx.fillStyle=state.layout?.tiles[id]==='road'?palette.unknownRoad:palette.unknownGround;
       ctx.fillRect(x,y,1,1);continue;
     }
-    ctx.fillStyle = tool!==null&&(x + y) % 2 ? palette.groundA : palette.groundB;
-    ctx.fillRect(x, y, 1, 1);
-    if(state.layout?.tiles[id]==='road')drawRoadTexture(ctx,state.layout,x,y,nightMix);
+    if(!cityFrame||state.layout?.tiles[id]!=='road'){
+      ctx.fillStyle = tool!==null&&(x + y) % 2 ? palette.groundA : palette.groundB;
+      ctx.fillRect(x, y, 1, 1);
+      if(state.layout?.tiles[id]==='road')drawRoadTexture(ctx,state.layout,x,y,nightMix);
+    }
     if(view.towers.cellSites[id]&&!state.blocked.has(id)){ctx.fillStyle=nightMix>.5?'#2c4841':'#77967b';ctx.fillRect(x,y,1,1);}
     if ($('heat').checked && power && currentlyVisible(id)) { ctx.fillStyle = `rgba(99,211,166,${Math.min(.6,.17 + power * .045)})`; ctx.fillRect(x, y, 1, 1); }
     if (state.walls.has(id)&&!state.blocked.has(id)) {
@@ -513,12 +526,9 @@ function paintMap() {
     ctx.save();ctx.globalAlpha=nightMix;
     if(state.hp>0){const [x,y]=xy(state.camp);lamp(x+.5,y+.5,3,'#ffbe6855');}
     for(const [id,p] of state.outposts){if(!currentlyVisible(id))continue;const [x,y]=xy(id);lamp(x+.5,y+.5,1.7,'#9bddf344');}
-    for(const p of state.sites)if(currentlyVisible(key(p.x,p.y))&&state.production.has(key(p.x,p.y))&&productionActive(state,key(p.x,p.y)))lamp(p.x+(p.width??p.size)/2,p.y+(p.height??p.size)/2,Math.max(p.width??p.size,p.height??p.size),'#f4d68b33');
+    if(!cityFrame)for(const p of state.sites)if(currentlyVisible(key(p.x,p.y))&&state.production.has(key(p.x,p.y))&&productionActive(state,key(p.x,p.y)))lamp(p.x+(p.width??p.size)/2,p.y+(p.height??p.size)/2,Math.max(p.width??p.size,p.height??p.size),'#f4d68b33');
     ctx.restore();
   }
-  // 仅把原画面允许显示完整外观的地块交给3D；未知城区继续用低细节轮廓。
-  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&!view.sourceSites.has(id)&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.role==='hospital'?'hospital':p.content.type,status:p.content.status}));
-  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,night:nightMix});
   const facilityItems=[];
   const prop=(id,asset,x,y,w=.86,h=.86,extra={})=>facilityItems.push({id,asset,x,y,w,h,...extra});
   for(const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])])if(currentlyVisible(id)){const [x,y]=xy(id),plot=productionId(id,state);prop('tower:'+id,type==='B'?'far':'near',x+.5,y+.5,.82,.88,{roof:city3D?.roofAt(plot,x+.5,y+.5)??0});}

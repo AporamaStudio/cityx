@@ -1,9 +1,31 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {drawRoadTexture} from './city-textures.js?v=16';
+import {groundGlow} from './model-preview-effects.js?v=3';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
-const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',source:'generated/enemy-source'};
+const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',source:'generated/enemy-source',street:'generated/streetlight'};
 const resource=file=>new URL('../assets/model-preview/'+file+'.glb',import.meta.url).href;
+
+function operatingLights(object){
+  // 玻璃沿用同一色板发光，屋顶补少量暖灯，保证俯视也能辨认运营状态。
+  object.traverse(node=>{if(node.isMesh){const material=node.material;material.userData.cityPower={value:0};material.onBeforeCompile=shader=>{
+    shader.uniforms.cityWindowPower=material.userData.cityPower;
+    shader.vertexShader='varying float cityWindowSurface;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncityWindowSurface=1.-smoothstep(.35,.6,abs(normal.y));');
+    shader.fragmentShader='uniform float cityWindowPower;\nvarying float cityWindowSurface;\n'+shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\nfloat cityGlass=step(diffuseColor.r*1.8,diffuseColor.b)*step(diffuseColor.g*1.25,diffuseColor.b)*step(.1,diffuseColor.b)*cityWindowSurface;\ntotalEmissiveRadiance+=vec3(1.,.54,.18)*cityGlass*cityWindowPower*1.1;');
+  };material.customProgramCacheKey=()=> 'cityx-game-windows';}});
+  object.updateMatrixWorld(true);
+  const bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3()),group=new THREE.Group();
+  const ray=new THREE.Raycaster(),normal=new THREE.Vector3();
+  for(const [dx,dz] of [[-.22,-.18],[.22,-.18],[-.22,.18],[.22,.18]]){
+    ray.set(new THREE.Vector3(center.x+size.x*dx,bounds.max.y+1,center.z+size.z*dz),new THREE.Vector3(0,-1,0));const hit=ray.intersectObject(object,true)[0];if(!hit||hit.point.y<bounds.min.y+size.y*.38)continue;
+    normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);if(normal.y<.28)continue;
+    const point=object.worldToLocal(hit.point.clone()),lamp=new THREE.Mesh(new THREE.PlaneGeometry(size.x*.11,size.z*.07),new THREE.MeshBasicMaterial({color:'#ffd28a',transparent:true,toneMapped:false}));
+    lamp.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal);lamp.position.copy(point).addScaledVector(normal,.025);lamp.userData.ownGeometry=true;
+    const halo=groundGlow(size.x*.28,size.z*.24,'#ffc174',.28);halo.quaternion.copy(lamp.quaternion);halo.position.copy(point).addScaledVector(normal,.035);halo.userData.ownGeometry=true;group.add(lamp,halo);
+  }
+  group.userData.cityRoofLights=true;group.visible=false;object.add(group);
+}
 
 function damageBuilding(object){
   // 同楼局部塌损：保留入口和轮廓，屋顶缺口从俯视可辨；只在状态切换时生成。
@@ -38,13 +60,17 @@ export function createCity3D(onReady){
   try{renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,preserveDrawingBuffer:true});}
   catch(error){console.warn('3D城市不可用，保留原地图显示。',error);return null;}
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
   renderer.setClearColor('#000000',0);
   const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(0,60,0,-60,.1,200);
   camera.position.set(0,100,0);camera.up.set(0,0,-1);camera.lookAt(0,0,0);
   const sky=new THREE.HemisphereLight('#f4f6e2','#809180',2.4),sun=new THREE.DirectionalLight('#fff1cd',3.2);
   sun.position.set(-30,60,20);sun.target.position.set(30,0,30);scene.add(sky,sun,sun.target);
+  sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-64,right:64,top:64,bottom:-64,near:1,far:180});sun.shadow.bias=-.00025;sun.shadow.normalBias=.03;
   const buildings=new THREE.Group(),facilities=new THREE.Group();scene.add(buildings,facilities);
+  const streets=new THREE.Group();scene.add(streets);let terrain=null,roadLayout=null,streetKey='',lastShadow='';
+  const localLights=[];
   const cityCanvas=document.createElement('canvas'),facilityCanvas=document.createElement('canvas');
   const models=new Map(),entries=new Map(),props=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',lastProps='',pixels='';
   function capture(canvas){if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(renderer.domElement,0,0);return canvas;}
@@ -62,12 +88,13 @@ export function createCity3D(onReady){
     }
     if(type==='hospital'&&status==='ruin')name='hospitalRuined';
     const object=new THREE.Group(),model=models.get(name).clone(true);object.add(model);model.rotation.y=rotation;
-    model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.material.roughness=.95;}});
+    model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.material.roughness=.95;node.castShadow=true;node.receiveShadow=true;}});
     object.updateMatrixWorld(true);
     const bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
     const scale=Math.min((w-.16)/size.x,(h-.16)/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
     object.position.set(x+w/2,0,y+h/2);buildings.add(object);
     if(status==='ruin'&&type!=='hospital')damageBuilding(object);
+    if(status==='building')operatingLights(object);
     return {object,signature:`${type}:${status}:${w}:${h}`,roof:new THREE.Box3().setFromObject(object).max.y};
   }
   return {
@@ -78,22 +105,47 @@ export function createCity3D(onReady){
       entry.object.updateMatrixWorld(true);const ray=new THREE.Raycaster(new THREE.Vector3(x,entry.roof+1,y),new THREE.Vector3(0,-1,0));
       return ray.intersectObject(entry.object,true)[0]?.point.y??entry.roof;
     },
-    render(plots,{width,height,panX,panY,cell,night}){
+    render(plots,{width,height,panX,panY,cell,night,layout,lamps=[]}){
       if(!ready)return null;
       const active=new Set(plots.map(p=>p.id));
       for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
       for(const plot of plots){
         const signature=`${plot.type}:${plot.status}:${plot.w}:${plot.h}`;
         if(entries.get(plot.id)?.signature!==signature){if(entries.has(plot.id))release(entries.get(plot.id));entries.set(plot.id,build(plot));}
+        entries.get(plot.id).object.traverse(node=>{if(node.userData.cityRoofLights)node.visible=plot.powered&&night>0;if(node.isMesh){if(node.material.userData.cityPower)node.material.userData.cityPower.value=plot.powered?night:0;if(node.parent?.userData.cityRoofLights)node.material.opacity=plot.powered?night*(node.material.map?.28:1):0;}});
       }
+      if(layout&&roadLayout!==layout){
+        if(terrain){terrain.removeFromParent();terrain.geometry.dispose();terrain.material.map.dispose();terrain.material.dispose();}
+        const canvas=document.createElement('canvas');canvas.width=layout.width*16;canvas.height=layout.height*16;const ctx=canvas.getContext('2d');ctx.scale(16,16);ctx.fillStyle='#697b70';ctx.fillRect(0,0,layout.width,layout.height);
+        for(let y=0;y<layout.height;y++)for(let x=0;x<layout.width;x++)if(layout.tiles[y*layout.width+x]==='road')drawRoadTexture(ctx,layout,x,y,0);
+        const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
+        terrain=new THREE.Mesh(new THREE.PlaneGeometry(layout.width,layout.height),new THREE.MeshStandardMaterial({map:texture,roughness:.95}));terrain.rotation.x=-Math.PI/2;terrain.position.set(layout.width/2,-.015,layout.height/2);terrain.receiveShadow=true;scene.add(terrain);roadLayout=layout;
+      }
+      const nextStreets=JSON.stringify(lamps);
+      if(nextStreets!==streetKey){
+        for(const object of [...streets.children])release({object});streets.clear();
+        for(const lamp of lamps){
+          const object=new THREE.Group(),model=models.get('street').clone(true);object.add(model);model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.castShadow=true;}});
+          const bounds=new THREE.Box3().setFromObject(model),center=bounds.getCenter(new THREE.Vector3()),scale=1.45/(bounds.max.y-bounds.min.y);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);object.position.set(lamp.x,0,lamp.y);
+          const pool=groundGlow(2.6,3.4,'#ffca72',.32);pool.position.y=.012;pool.userData.ownGeometry=true;object.add(pool);streets.add(object);
+        }
+        streetKey=nextStreets;
+      }
+      // 只启用镜头附近路灯的真实光源；远景保留灯具与光池，灯不投独立阴影。
+      const nearby=lamps.filter(p=>p.x>=-panX/cell-4&&p.x<=(width-panX)/cell+4&&p.y>=-panY/cell-4&&p.y<=(height-panY)/cell+4);
+      while(localLights.length<nearby.length){const light=new THREE.PointLight('#ffd08a',0,4,2);scene.add(light);localLights.push(light);}
+      localLights.forEach((light,i)=>{light.visible=i<nearby.length&&night>0;light.intensity=i<nearby.length?night*18:0;if(i<nearby.length)light.position.set(nearby[i].x,1.35,nearby[i].y);});
+      streets.traverse(node=>{if(node.isMesh){if(node.material.map)node.material.opacity=night*.32;else if(node.material.name==='#ffe1a3'){node.material.emissive.set('#ffb75c');node.material.emissiveIntensity=night*1.8;}}});
       // 云纹/悬停刷新复用城市画面；仅镜头、地块状态或昼夜光照变化时重画WebGL。
-      const signature=plots.map(p=>`${p.id}:${entries.get(p.id).signature}`).join('|')+`/${width}:${height}:${panX}:${panY}:${cell}:${night}`;
+      const shapes=plots.map(p=>`${p.id}:${entries.get(p.id).signature}`).join('|');
+      const signature=shapes+plots.map(p=>p.powered?'1':'0').join('')+streetKey+`/${width}:${height}:${panX}:${panY}:${cell}:${night}`;
       if(signature!==lastFrame){
         const dimensions=`${width}:${height}`;if(pixels!==dimensions){renderer.setSize(width,height,false);pixels=dimensions;}
         camera.left=-panX/cell;camera.right=(width-panX)/cell;camera.top=panY/cell;camera.bottom=-(height-panY)/cell;camera.updateProjectionMatrix();
         sky.color.set('#f4f6e2').lerp(new THREE.Color('#b9d7ed'),night);sky.groundColor.set('#809180').lerp(new THREE.Color('#4c676b'),night);sky.intensity=2.4-night*.9;
         sun.color.set('#fff1cd').lerp(new THREE.Color('#b9cfff'),night);sun.intensity=3.2-night*2.3;
-        buildings.visible=true;facilities.visible=false;renderer.render(scene,camera);capture(cityCanvas);lastFrame=signature;
+        const shadowKey=shapes+streetKey;if(shadowKey!==lastShadow){renderer.shadowMap.needsUpdate=true;lastShadow=shadowKey;}
+        buildings.visible=true;facilities.visible=false;streets.visible=true;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);lastFrame=signature;
       }
       return cityCanvas;
     },
@@ -114,7 +166,7 @@ export function createCity3D(onReady){
         object.traverse(node=>{if(node.isMesh){node.material.opacity=item.alpha??1;node.material.transparent=node.material.opacity<1;node.material.color.copy(node.material.userData.baseColor).lerp(new THREE.Color('#84867a'),item.dead?.85:(1-(item.health??1))*.5);if(['#ff9538','#ffd36b'].includes(node.material.name))node.visible=!item.dead;}});
       }
       const signature=JSON.stringify(items)+`/${lastFrame}:${night}`;
-      if(signature!==lastProps){buildings.visible=false;facilities.visible=true;renderer.render(scene,camera);capture(facilityCanvas);lastProps=signature;}
+      if(signature!==lastProps){buildings.visible=false;facilities.visible=true;streets.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);lastProps=signature;}
       return facilityCanvas;
     },
   };
