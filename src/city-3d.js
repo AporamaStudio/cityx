@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {drawRoadTexture} from './city-textures.js?v=16';
 import {groundGlow} from './model-preview-effects.js?v=3';
-import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=2';
+import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=3';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',source:'generated/enemy-source',street:'generated/streetlight',wreck:'generated/burnt-car'};
