@@ -1,5 +1,5 @@
 // 云雾与移动敌人共用区域场；只在控制、实时视野或雾带宽度变化时重建。
-import {DEFAULTS} from './config.js?v=73';
+import {DEFAULTS} from './config.js?v=74';
 export const VISIBILITY_PX=4;
 let cached=null;
 const clamp=t=>Math.max(0,Math.min(1,t)),smooth=t=>t*t*(3-2*t);

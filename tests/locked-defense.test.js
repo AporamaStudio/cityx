@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {key,createCampaign,campCells,beginBattle,stepBattle,enterMorning,lockAttacks,forecastAttacks,battleRoutes,changeWall,buildTower,buildOutpost,buildProduction,removeOutpost,repairFacility,repairQuote,fireField,funds,restoreNight,restartCampaign,validateParams} from '../src/model.js';
+import {key,createCampaign,campCells,beginBattle,stepBattle,enterMorning,lockAttacks,forecastAttacks,battleRoutes,changeWall,buildTower,buildOutpost,buildProduction,removeOutpost,repairFacility,repairQuote,fireField,funds,restoreNight,restartCampaign,validateParams,controlMask,rawControlMask} from '../src/model.js';
 
 // 路旁保留一栋炮位建筑，敌人的纵向道路不变。
 const layout=()=>({width:SIZE,height:SIZE,camp:{x:15,y:25},tiles:Array(SIZE*SIZE).fill('road'),blocks:[{x:13,y:22,width:2,height:3,kind:'building'}]});
@@ -17,6 +17,17 @@ test('地图密度倍率须有序且为整数，调节不会改变火力和锁�
   const params={...s.params,mapMidZoomPercent:200,mapNearZoomPercent:400};
   assert.equal(validateParams(params,s),'');s.params=params;
   assert.deepEqual(fireField(s),fire);assert.deepEqual(forecastAttacks(s,1).map(attack=>attack.path),routes);
+});
+
+test('控制边缘参数校验，视觉外溢不扩大地面或建筑控制',()=>{
+  const s=make(),raw=rawControlMask(s),controlled=controlMask(s),routes=forecastAttacks(s,1).map(a=>a.path);
+  for(const changes of [{controlBorderInnerCells:-.1},{controlBorderOuterCells:2.1},{controlBorderInnerCells:NaN},{controlBorderInnerOpacity:61},{controlBorderOuterOpacity:10.5},{controlBorderLinePx:.9},{controlBorderLinePx:6.1}]){
+    assert.match(validateParams({...s.params,...changes},s),/控制边缘/);
+  }
+  const params={...s.params,controlBorderInnerCells:0,controlBorderOuterCells:2,controlBorderInnerOpacity:0,controlBorderOuterOpacity:60,controlBorderLinePx:4.5};
+  assert.equal(validateParams(params,s),'');s.params=params;
+  assert.deepEqual(rawControlMask(s),raw);assert.deepEqual(controlMask(s),controlled);
+  assert.deepEqual(forecastAttacks(s,1).map(a=>a.path),routes);
 });
 
 // 使用真实的特殊地块占地，外侧与角落都不能被中央图标缩小成一格目标。

@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=73';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=74';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -506,6 +506,9 @@ export function validateParams(params, state, checkLayout = true) {
   if(!integer(params.cellMeters,1,1000))return '每格距离须为 1–1000 米整数。';
   if(!integer(params.fireNumbersMinCellPx,0,48))return '火力数字最小格宽须为 0–48 像素整数，0 始终显示。';
   if(!integer(params.mapMidZoomPercent,100,1000)||!integer(params.mapNearZoomPercent,100,1000)||params.mapMidZoomPercent>=params.mapNearZoomPercent)return '中景/近景门槛须为 100–1000% 整数，且中景低于近景。';
+  if(!['controlBorderInnerCells','controlBorderOuterCells'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=2))return '控制边缘内/外渐隐宽度须为 0–2 格，0 关闭，可使用小数。';
+  if(!integer(params.controlBorderInnerOpacity,0,60)||!integer(params.controlBorderOuterOpacity,0,60))return '控制边缘内/外色带强度须为 0–60% 整数。';
+  if(!Number.isFinite(params.controlBorderLinePx)||params.controlBorderLinePx<1||params.controlBorderLinePx>6)return '控制边缘主线粗细须为 1–6 像素，可使用小数。';
   if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
   if(!integer(params.campWarningPercent,0,100))return '火光危急阈值须为 0–100% 整数，0 关闭持续警示。';
   if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';

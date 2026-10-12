@@ -7,6 +7,9 @@ export const DEFAULTS = {
   fireNumbersMinCellPx: 12,
   // 两条倍率分界划分远/中/近景；报价另按实际空间保住可读字号。
   mapMidZoomPercent: 160, mapNearZoomPercent: 300,
+  // 控制边缘内侧明显、外侧轻薄；宽度按格、强度按百分比，仅改变表现。
+  controlBorderInnerCells:0.5, controlBorderOuterCells:0.5,
+  controlBorderInnerOpacity:36, controlBorderOuterOpacity:10, controlBorderLinePx:3,
   // 敌源按完整占地边缘外扩揭雾，0只显示占地；与视野面板同步。
   campS01: 6, outpostS01: 9, daySightMultiplier: 1, nightSightMultiplier: 0.6, eventSightMultiplier: 1, sourceRevealPadding: 2,
   // 云纹流速只影响外观，0静止；保持两层云的方向与速度比例。
