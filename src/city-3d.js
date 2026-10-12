@@ -6,7 +6,7 @@ import {groundGlow} from './model-preview-effects.js?v=3';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=4';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
-const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',source:'generated/enemy-source',street:'generated/streetlight',wreck:'generated/burnt-car'};
+const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',enemy:'generated/enemy-squad',source:'generated/enemy-source',street:'generated/streetlight',wreck:'generated/burnt-car'};
 const resource=file=>new URL('../assets/model-preview/'+file+'.glb?v=3',import.meta.url).href;
 
 function operatingLights(object){
@@ -99,11 +99,11 @@ export function createCity3D(onReady){
   const sky=new THREE.HemisphereLight('#f4f6e2','#809180',2.4),sun=new THREE.DirectionalLight('#fff1cd',3.2);
   sun.position.set(-30,60,20);sun.target.position.set(30,0,30);scene.add(sky,sun,sun.target);
   sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-64,right:64,top:64,bottom:-64,near:1,far:180});sun.shadow.bias=-.00025;sun.shadow.normalBias=.03;
-  const buildings=new THREE.Group(),facilities=new THREE.Group();scene.add(buildings,facilities);
+  const buildings=new THREE.Group(),facilities=new THREE.Group(),enemies=new THREE.Group();scene.add(buildings,facilities,enemies);
   const streets=new THREE.Group();scene.add(streets);let terrain=null,roadLayout=null,streetKey='',lastShadow='';
   const localLights=[];
   const effects=createCityEffects(scene),effectCanvas=document.createElement('canvas');
-  const cityCanvas=document.createElement('canvas'),facilityCanvas=document.createElement('canvas');
+  const cityCanvas=document.createElement('canvas'),facilityCanvas=document.createElement('canvas'),enemyCanvas=document.createElement('canvas');
   const models=new Map(),entries=new Map(),props=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',lastProps='',pixels='';
   function capture(canvas){if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(renderer.domElement,0,0);return canvas;}
   Promise.all(Object.entries(files).map(async ([name,file])=>{models.set(name,(await loader.loadAsync(resource(file))).scene);})).then(()=>{ready=true;onReady();}).catch(error=>console.error('城市模型装载失败，保留原地图。',error));
@@ -138,6 +138,7 @@ export function createCity3D(onReady){
     has(id){return ready&&entries.has(id);},
     hasFacility(id){return ready&&props.has(id);},
     effectsFrame(){return ready?effectCanvas:null;},
+    enemiesFrame(){return ready?enemyCanvas:null;},
     roofAt(id,x,y){
       const entry=entries.get(id);if(!entry)return 0;
       entry.object.updateMatrixWorld(true);const ray=new THREE.Raycaster(new THREE.Vector3(x,entry.roof+1,y),new THREE.Vector3(0,-1,0));
@@ -188,7 +189,7 @@ export function createCity3D(onReady){
         sky.color.set('#f4f6e2').lerp(new THREE.Color('#b9d7ed'),night);sky.groundColor.set('#809180').lerp(new THREE.Color('#4c676b'),night);sky.intensity=2.4-night*.9;
         sun.color.set('#fff1cd').lerp(new THREE.Color('#b9cfff'),night);sun.intensity=3.2-night*2.3;
         const shadowKey=shapes+streetKey;if(shadowKey!==lastShadow){renderer.shadowMap.needsUpdate=true;lastShadow=shadowKey;}
-        buildings.visible=true;facilities.visible=false;streets.visible=true;effects.group.visible=false;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);lastFrame=signature;
+        buildings.visible=true;facilities.visible=false;enemies.visible=false;streets.visible=true;effects.group.visible=false;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);lastFrame=signature;
       }
       return cityCanvas;
     },
@@ -204,15 +205,17 @@ export function createCity3D(onReady){
           if(['near','far'].includes(item.asset))model.traverse(node=>{if(node.isMesh){const color=node.material.name==='#6c7775'?'#354b4b':['#3f5057','#1e2b32'].includes(node.material.name)?'#98aaa1':item.asset==='far'?'#c3c5d0':'#a8b7a0';node.material.color.set(color);node.material.userData.baseColor=node.material.color.clone();node.material.emissive.set(color);node.material.emissiveIntensity=.10;}});
           const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
           if(item.asset!=='wall'){const scale=Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);}
-          facilities.add(object);props.set(item.id,{object,signature:shape,motion:facilityMotion(object)});
+          (item.asset==='enemy'?enemies:facilities).add(object);props.set(item.id,{object,signature:shape,motion:facilityMotion(object)});
         }
-        const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);object.scale.y=item.dead?.3:1;
+        const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);if(item.asset==='enemy'){object.scale.setScalar(item.visualScale??1);if(item.angle!==undefined)object.rotation.y=item.angle;}else object.scale.y=item.dead?.3:1;
         object.traverse(node=>{if(node.isMesh){node.material.opacity=item.alpha??1;node.material.transparent=node.material.opacity<1;node.material.color.copy(node.material.userData.baseColor).lerp(new THREE.Color('#84867a'),item.dead?.85:(1-(item.health??1))*.5);if(['#ff9538','#ffd36b'].includes(node.material.name))node.visible=!item.dead;}});
+        if(item.asset==='enemy')object.traverse(node=>{if(node.isMesh){node.material.color.lerp(new THREE.Color(item.fogColor),(1-item.fogAlpha)*.75);node.material.emissive.copy(node.material.color);node.material.emissiveIntensity=.08;}});
         animateFacility(props.get(item.id),item,fx);
       }
       const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+`/${lastFrame}:${night}:${fx.time}`;
       if(signature!==lastProps){
-        buildings.visible=false;facilities.visible=true;streets.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
+        buildings.visible=false;facilities.visible=true;enemies.visible=false;streets.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
+        facilities.visible=false;enemies.visible=true;renderer.render(scene,camera);capture(enemyCanvas);enemies.visible=false;
         effects.updateShots(fx.shots,props,fx.time,fx.cell);facilities.visible=false;effects.group.visible=true;renderer.render(scene,camera);capture(effectCanvas);lastProps=signature;
       }
       return facilityCanvas;

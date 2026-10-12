@@ -1,5 +1,5 @@
 import {SIZE} from './config.js?v=74';
-import {coverage,sourceAttackPlan,sourceCells,xy,key,inside,inStationRange} from './model.js?v=90';
+import {coverage,sourceAttackPlan,sourceCells,xy,key,inside,inStationRange,enemyKey} from './model.js?v=90';
 
 // 只准备显示方向；范围累计伤害和清源优先级仍由原结算负责。
 export function attackVisualPlan(state,enemies,visible){
@@ -31,6 +31,25 @@ export function shotSoundView(id,{panX,panY,cell,width,height,zoom}){
   if(sx<0||sy<0||sx>=width||sy>=height)return null;
   const dx=(sx-width/2)/(width/2),dy=(sy-height/2)/(height/2),distance=Math.min(1,Math.hypot(dx,dy)/Math.SQRT2);
   return {gain:Math.min(1,(zoom/2)**1.3)*(1-distance*.35),pan:Math.max(-.8,Math.min(.8,dx*.8))};
+}
+
+// 实体和HP共用原插值/合流表现；只返回绘制描述，不推进战斗或读取隐藏目标。
+export function enemyDisplayFrames(state,motion,incoming,impact,reducedMotion=false){
+  const frames=[],actors=motion?motion.actors:state.enemies;
+  const add=(enemy,x,y,scale=1,alpha=1,barHP=enemy.hp)=>{
+    const rawX=x,rawY=y,occupants=actors.filter(e=>e.id===enemy.id);
+    if(occupants.length>1){const slot=Math.max(0,occupants.findIndex(e=>e.target===enemy.target));x+=(slot%2?.23:-.23);y+=Math.floor(slot/2)*.3;scale*=.55;}
+    const identity=enemy.origins?.length?[...enemy.origins].sort().join(','):`${enemy.id}:${enemy.target}`;
+    frames.push({enemy,x,y,rawX,rawY,scale,alpha,barHP,id:'enemy:'+identity});
+  };
+  if(motion){
+    const t=Math.min(1,motion.elapsed/motion.duration),eased=t*t*(3-2*t);
+    for(const enemy of actors){const [x,y]=xy(enemy.id),[tx,ty]=xy(enemy.to);add(enemy,x+(tx-x)*eased,y+(ty-y)*eased);frames.at(-1).angle=enemy.to===enemy.id?undefined:Math.atan2(x-tx,y-ty);}
+  }else{
+    for(const enemy of actors){const [x,y]=xy(enemy.id),before=incoming.get(enemyKey(enemy))?.hp??enemy.hp,merged=state.events.some(e=>e.type==='merge'&&e.id===enemy.id&&e.target===enemy.target);add(enemy,x,y,merged&&!reducedMotion?1+.16*Math.sin(impact*Math.PI):1,1,before+(enemy.hp-before)*impact);}
+    if(impact<1)for(const event of state.events)if(event.type==='kill'){const old=incoming.get(`${event.id}:${event.target}`);if(old){const [x,y]=xy(event.id);add({...old,hp:0},x,y,1-.7*impact,1-impact,0);}}
+  }
+  return frames;
 }
 
 // 塔自己的基础范围接到真实控制外沿才算前线；远处仍有可见边界不能让后方塔持续扫光。

@@ -55,7 +55,7 @@ class Model:
             for points in [(p,s,r),(p,r,q),((center[0],lo,center[2]),p,q),((center[0],hi,center[2]),r,s)]:
                 self.triangle(points,color)
 
-    def save(self, name):
+    def save(self, name, extras=None):
         # 按材质合并几何，无贴图GLB可直接下载并导入引擎。
         binary = bytearray(); views = []; accessors = []; materials = []; primitives = []
         for color, (positions,normals) in self.parts.items():
@@ -75,6 +75,7 @@ class Model:
             materials.append(material)
             primitives.append({'attributes':{'POSITION':refs[0],'NORMAL':refs[1]},'material':len(materials)-1})
         doc = {'asset':{'version':'2.0','generator':'CityX low-poly preview props'},'scene':0,'scenes':[{'nodes':[0]}],'nodes':[{'mesh':0,'name':name}], 'meshes':[{'primitives':primitives}], 'materials':materials,'buffers':[{'byteLength':len(binary)}],'bufferViews':views,'accessors':accessors}
+        if extras: doc['nodes'][0]['extras'] = extras
         js = json.dumps(doc,separators=(',',':')).encode();js += b' '*((-len(js))%4)
         ROOT.mkdir(parents=True,exist_ok=True)
         (ROOT/(name+'.glb')).write_bytes(struct.pack('<III',0x46546c67,2,28+len(js)+len(binary))+struct.pack('<II',len(js),0x4e4f534a)+js+struct.pack('<II',len(binary),0x004e4942)+binary)
@@ -189,9 +190,24 @@ def camp_plaza():
     for x in (-23,23):
         for z in (-23,23):
             m.box((x,.22,z),(3,.44,3),'#879078');m.cylinder((x,.48,z),1.15,.1,'#64775b',sides=6)
-    m.save('camp-plaza')
+    m.save('camp-plaza', {'units':'meters','footprint':[3,3],'referenceCellMeters':20,'visualOnly':True})
+
+
+def enemy_squad():
+    # 三个人形只构成统一敌群符号；不是新增兵种/单位，实际成员数仍读主游戏。
+    m=Model()
+    for x,z in [(-1,.7),(1,.7),(0,-.8)]:
+        for dx in (-.13,.13):
+            m.box((x+dx,.06,z-.08),(.19,.12,.34),'#384140')
+            m.box((x+dx,.45,z),(.16,.78,.17),'#4d5048')
+        m.box((x,.93,z),(.46,.25,.29),'#66564c')
+        m.box((x,1.30,z),(.55,.60,.30),'#a55b53')
+        for dx in (-.36,.36):m.box((x+dx,1.23,z-.02),(.13,.60,.15),'#884e48')
+        m.cylinder((x,1.63,z),.065,.11,'#b2a292',sides=5)
+        m.box((x,1.82,z),(.32,.33,.31),'#b2a292')
+    m.save('enemy-squad', {'units':'meters','visualOnly':True})
 
 
 if __name__ == '__main__':
-    tower();cannon();cannon(True);props();street_props();camp_plaza()
-    print('已生成12个独立GLB样件，含路灯、垃圾、瓦砾、燃烧车辆与营地广场')
+    tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad()
+    print('已生成13个独立GLB样件，含环境、营地广场与普通敌群')

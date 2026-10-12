@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
 import {createCampaign,key,beginBattle,stepBattle,controlMask,visionField,enemyKey} from '../src/model.js';
-import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier} from '../src/combat-visuals.js';
+import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from '../src/combat-visuals.js';
 
 function setup(){
   const layout={width:SIZE,height:SIZE,camp:{x:15,y:25},tiles:Array(SIZE*SIZE).fill('road'),blocks:[{x:13,y:22,width:2,height:3,kind:'building'},{x:16,y:22,width:2,height:2,kind:'building'}]};
@@ -56,4 +56,19 @@ test('后方塔不因仍能看见远处边界扫光，扩张到外沿后只扫�
   assert.ok(frontier.size);const sector=searchTargets(front,controlled,sight,18,frontier);assert.ok(sector.points.length);
   for(let t=0;t<30;t+=.2){const p=searchAim(sector,t,front,controlled,sight);assert.ok(!controlled.has(key(Math.floor(p.x),Math.floor(p.y))));assert.ok(sight.has(key(Math.floor(p.x),Math.floor(p.y))));assert.ok(p.x>23);}
   assert.equal(outpostFrontier(front,state.params.outpostRadius,new Set(Array.from({length:SIZE*SIZE},(_,i)=>i))).size,0);
+});
+
+test('敌群模型与HP共用旧插值、合流和死亡显示，不推进或修改战斗状态',()=>{
+  const enemy={id:key(5,5),target:key(15,25),hp:12,max:18,members:3,origins:['0:0','1:0']},state={enemies:[enemy],events:[{type:'merge',id:enemy.id,target:enemy.target}]},incoming=new Map([[enemyKey(enemy),{...enemy,hp:18}]]),before=structuredClone({state,incoming});
+  let frames=enemyDisplayFrames(state,null,incoming,.5);assert.equal(frames[0].barHP,15);assert.equal(frames[0].enemy.hp,12);assert.equal(frames[0].scale,1.16);
+  assert.equal(enemyDisplayFrames(state,null,incoming,.5,true)[0].scale,1);
+  const motion={actors:[{...enemy,to:key(6,5)}],elapsed:80,duration:160};frames=enemyDisplayFrames(state,motion,incoming,.5);
+  assert.equal(frames[0].rawX,5.5);assert.equal(frames[0].rawY,5);assert.equal(frames[0].enemy.hp,12);assert.equal(frames[0].id,'enemy:0:0,1:0');
+  assert.deepEqual({state,incoming},before);
+  const dead={enemies:[],events:[{type:'kill',id:enemy.id,target:enemy.target}]};frames=enemyDisplayFrames(dead,null,incoming,.5);assert.equal(frames[0].enemy.hp,0);assert.equal(frames[0].alpha,.5);assert.equal(frames[0].scale,.65);assert.equal(enemyDisplayFrames(dead,null,incoming,1).length,0);
+});
+test('同格不同目标沿用错开显示，模型身份不依赖本拍所在格',()=>{
+  const a={id:key(5,5),target:1,hp:6,max:6,origins:['0:0']},b={...a,target:2,origins:['1:0']},state={enemies:[a,b],events:[]},frames=enemyDisplayFrames(state,null,new Map(),1);
+  assert.equal(frames[0].scale,.55);assert.equal(frames[1].scale,.55);assert.ok(frames[0].x<5&&frames[1].x>5);assert.notEqual(frames[0].id,frames[1].id);
+  assert.equal(enemyDisplayFrames({enemies:[{...a,id:key(7,5)}],events:[]},null,new Map(),1)[0].id,frames[0].id);
 });

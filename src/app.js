@@ -1,7 +1,7 @@
-import {createCity3D} from './city-3d.js?v=16';
+import {createCity3D} from './city-3d.js?v=17';
 import {operatingStreetLamps} from './city-streets.js?v=1';
 import {wallConnections} from './city-facilities.js?v=1';
-import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier} from './combat-visuals.js?v=3';
+import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=4';
 import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
 import {createTowerOverlay} from './tower-overlay.js?v=18';
@@ -492,6 +492,8 @@ function paintMap() {
   ctx.fillStyle=palette.fog;ctx.fillRect(0,0,SIZE,SIZE);
 
   // 只把原画面允许显示完整外观的地块交给3D；运营灯光不新增经营或安全判断。
+  const impact=Math.min(1,impactAge/IMPACT_MS),enemyFrames=enemyDisplayFrames(state,motion?{...motion,duration:moveDuration()}:null,incoming,impact,reducedMotion.matches);
+  for(const frame of enemyFrames){frame.fogAlpha=mapFogEnabled()?view.visibility.enemyAlpha(frame.rawX+.5,frame.rawY+.5):1;frame.alpha*=frame.fogAlpha;if(frame.enemy.hp===0&&!currentlyVisible(frame.enemy.id))frame.alpha=0;}
   const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&!view.sourceSites.has(id)&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.role==='hospital'?'hospital':p.content.type,status:p.content.status,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id)),cellMeters:controlState.params.cellMeters}));
   const streetLamps=operatingStreetLamps(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
   const wrecks=[];
@@ -560,6 +562,7 @@ function paintMap() {
   const campPlot=state.sites.find(p=>p.role==='camp');if(campPlot)prop('camp-plaza','plaza',campPlot.x+(campPlot.width??campPlot.size)/2,campPlot.y+(campPlot.height??campPlot.size)/2,campPlot.width??campPlot.size,campPlot.height??campPlot.size);
   for(const source of displayedEnemySources()){const w=source.width??1,h=source.height??1;prop('source:'+sourceIdentity(source),'source',(source.bx??source.x)+w/2,(source.by??source.y)+h/2,w*.72,h*.72,{dead:source.hp===0});}
   facilityItems.push(...wrecks);
+  for(const frame of enemyFrames)if(frame.alpha>0)prop(frame.id,'enemy',frame.x+.5,frame.y+.5,2.85/controlState.params.cellMeters,1.9/controlState.params.cellMeters,{alpha:frame.alpha,visualScale:frame.scale,angle:frame.angle,fogAlpha:frame.fogAlpha,fogColor:fogColor(nightMix)});
   const facilityFrame=city3D?.renderFacilities(facilityItems,nightMix,fx);
   // 3D对象分层显示：先按原权限筛选，再在原绘制位置裁剪，不挡住路线和HP。
   const drawCityFacility=(id,x,y,w=1,h=1)=>{
@@ -796,35 +799,36 @@ function paintMap() {
   if(!drawCityFacility('camp',cx,cy))drawCampfire(ctx,cx,cy,1,state.hp>0);
   else drawFacilityMarker('camp',cx,cy,size,mapDetail,!state.result&&campCritical(state));
   ctx.restore();
-  const impact = Math.min(1,impactAge/IMPACT_MS);
   const mistColor=fogColor(nightMix).match(/\d+/g).map(Number);
   ctx.save();
+  const enemyFrame=city3D?.enemiesFrame();if(enemyFrame){
+    // 接触暗影让小尺寸实体从道路标线中分离，仍与同一可见度一起淡出。
+    for(const frame of enemyFrames)if(frame.alpha>0){ctx.save();ctx.globalAlpha=frame.alpha*.45;ctx.fillStyle='#111b23';ctx.beginPath();ctx.ellipse(frame.x+.5,frame.y+.5,2/controlState.params.cellMeters*frame.scale,1.4/controlState.params.cellMeters*frame.scale,0,0,Math.PI*2);ctx.fill();ctx.restore();}
+    ctx.drawImage(enemyFrame,-panX/size,-panY/size,width/size,height/size);
+  }
   // 移动阶段仍显示出发时的生命，抵达后才展示结算结果。
-  const drawEnemy = (enemy,x,y,scale=1,alpha=1,barHP=enemy.hp) => {
-    const fogAlpha=mapFogEnabled()?view.visibility.enemyAlpha(x+.5,y+.5):1;
-    alpha*=fogAlpha;
+  const drawEnemy = ({enemy,x,y,scale,alpha,barHP,fogAlpha}) => {
     if(alpha<=0)return;
-    const occupants=(motion?motion.actors:state.enemies).filter(e=>e.id===enemy.id);
-    if(occupants.length>1){const slot=Math.max(0,occupants.findIndex(e=>e.target===enemy.target));x+=(slot%2? .23:-.23);y+=Math.floor(slot/2)*.3;scale*=.55;}
     ctx.save();ctx.globalAlpha=alpha;ctx.translate(x+.5,y+.5);ctx.scale(scale,scale);ctx.translate(-.5,-.5);
     // 合流保持同一种敌人外观；瞬间膨胀在结算阶段表现。
     // 走进雾时逐渐失去鲜艳颜色，透明度和HP仍由同一可见权限决定。
-    ctx.fillStyle=`rgb(${[242,135,128].map((v,i)=>Math.round(v+(mistColor[i]-v)*(1-fogAlpha)*.75)).join(',')})`;ctx.fillRect(.04,.06,.92,.83);
-    label(enemy.hp,.5,.42,'#321d23',Math.max(.46,10/size));ctx.fillStyle='#552b30';ctx.fillRect(.08,.73,.84,.1);ctx.fillStyle='#fff1c4';ctx.fillRect(.08,.73,.84*Math.max(0,Math.min(1,barHP/enemy.max)),.1);
+    const color=`rgb(${[242,135,128].map((v,i)=>Math.round(v+(mistColor[i]-v)*(1-fogAlpha)*.75)).join(',')})`;
+    if(enemyFrame){
+      // 格心实体不随镜头挪动；HP牌以屏幕尺寸悬在模型上方，生命条收进同一牌子。
+      const font=Math.min(14,Math.max(10,size*.46))/size;ctx.font=`600 ${font}px system-ui`;
+      const w=Math.max(12/size,ctx.measureText(String(enemy.hp)).width+6/size),h=font+2/size,y=.5-h*.5-.08-2/size;
+      ctx.fillStyle=color;ctx.fillRect(.5-w*.5,y-h*.5,w,h);label(enemy.hp,.5,y,'#321d23',font);
+      ctx.fillStyle='#552b30';ctx.fillRect(.5-w*.42,y+h*.5-1.6/size,w*.84,1.2/size);ctx.fillStyle='#fff1c4';ctx.fillRect(.5-w*.42,y+h*.5-1.6/size,w*.84*Math.max(0,Math.min(1,barHP/enemy.max)),1.2/size);
+    }else{
+      ctx.fillStyle=color;ctx.fillRect(.04,.06,.92,.83);label(enemy.hp,.5,.42,'#321d23',Math.max(.46,10/size));ctx.fillStyle='#552b30';ctx.fillRect(.08,.73,.84,.1);ctx.fillStyle='#fff1c4';ctx.fillRect(.08,.73,.84*Math.max(0,Math.min(1,barHP/enemy.max)),.1);
+    }
     if(!reducedMotion.matches&&impact<1&&state.events.some(e=>e.type==='hit'&&e.id===enemy.id&&e.target===enemy.target)){
       ctx.fillStyle=`rgba(255,250,220,${.45*(1-impact)})`;ctx.fillRect(.04,.06,.92,.83);
     }
     ctx.restore();
   };
-  if(motion){
-    const t=Math.min(1,motion.elapsed/moveDuration()), eased=t*t*(3-2*t);
-    for(const enemy of motion.actors){const [x,y]=xy(enemy.id),[tx,ty]=xy(enemy.to);drawEnemy(enemy,x+(tx-x)*eased,y+(ty-y)*eased);}
-  } else {
-    for(const enemy of state.enemies){
-      const [x,y]=xy(enemy.id), before=incoming.get(enemyKey(enemy))?.hp ?? enemy.hp;
-      const merged=state.events.some(e=>e.type==='merge'&&e.id===enemy.id&&e.target===enemy.target);
-      drawEnemy(enemy,x,y,merged&&!reducedMotion.matches?1+.16*Math.sin(impact*Math.PI):1,1,before+(enemy.hp-before)*impact);
-    }
+  for(const frame of enemyFrames)drawEnemy(frame);
+  if(!motion){
     if(impact<1){ctx.save();clipSight();for(const event of state.events){
       if(event.type==='nightSkip'||!currentlyVisible(event.id))continue; // 空闲跳时不是受击，不绘制伤害反馈。
       const [x,y]=xy(event.id);
@@ -832,7 +836,6 @@ function paintMap() {
         const source=state.enemySources.get(event.sourceId);ctx.save();ctx.globalAlpha=1-impact;
         ctx.strokeStyle=event.type==='sourceLost'?'#b9d8c1':'#ffbbb0';ctx.lineWidth=.10;ctx.strokeRect(x+.02,y+.02,source.width-.04,source.height-.04);ctx.restore();continue;
       }
-      if(event.type==='kill'){const old=incoming.get(`${event.id}:${event.target}`);if(old)drawEnemy({...old,hp:0},x,y,1-.7*impact,1-impact,0);}
       if(!reducedMotion.matches&&event.type==='kill'){
         ctx.strokeStyle=`rgba(255,222,151,${1-impact})`;ctx.lineWidth=.08;
         for(let i=0;i<4;i++){const angle=i*Math.PI/2+.4,r=.3+impact*.6;ctx.beginPath();ctx.moveTo(x+.5+Math.cos(angle)*r,y+.5+Math.sin(angle)*r);ctx.lineTo(x+.5+Math.cos(angle)*(r+.2),y+.5+Math.sin(angle)*(r+.2));ctx.stroke();}

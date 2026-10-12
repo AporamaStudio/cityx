@@ -24,6 +24,7 @@ const assets=[
   ['brick-wall','墙体','facility','brick-wall',2.5,'自制砖墙段，便于后续表现连续墙、破损及拆除。'],
   ['campfire','篝火','facility','campfire',1.9,'木柴、石圈与缓慢跳动的火焰，夜间暖光轻微闪动。'],
   ['camp-plaza','篝火广场','nature','camp-plaza',6,'主地图3×3格营地广场，默认60×60m；铺装、长椅与花池只作装饰，火堆独立适配，不增加阻挡。'],
+  ['enemy-squad','普通敌群','facility','enemy-squad',2.85,'约2m高的人形组成统一小队符号，不代表新增单位；主图HP、合流和迷雾权限沿用原规则。'],
   ['ruins','废墟样件','building','ruins',4.7,'自制断墙与瓦砾，只验证破损感觉；正式恢复应沿用同一栋建筑轮廓。'],
   ['enemy-source','敌源样件','facility','enemy-source',1.9,'自制暗色核心与暖红标识，先区分敌我；敌源最终造型尚未确定。'],
   ['streetlight','路灯','nature','streetlight',1.2,'同一盏灯白天不发光，恢复运营的街区夜晚亮灯。'],
