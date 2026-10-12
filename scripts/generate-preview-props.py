@@ -175,6 +175,23 @@ def street_props():
     m.save('burnt-car')
 
 
+def camp_plaza():
+    # 默认20m格子的3×3营地广场：米制装饰，不新增障碍或经营对象。
+    m=Model();m.box((0,.06,0),(60,.12,60),'#a6aa98')
+    m.box((0,.13,0),(60,.02,5),'#b9b8a2');m.box((0,.14,0),(5,.02,60),'#b9b8a2')
+    m.cylinder((0,.16,0),4,.05,'#9a957f',sides=12)
+    for z in (-8,8):
+        for x in (-.85,.85):m.box((x,.23,z),(.12,.46,.6),'#526056')
+        m.box((0,.49,z),(2.2,.12,.7),'#8d7554');m.box((0,.84,z+.30),(2.2,.6,.10),'#8d7554')
+    for x in (-8,8):
+        for z in (-.85,.85):m.box((x,.23,z),(.6,.46,.12),'#526056')
+        m.box((x,.49,0),(.7,.12,2.2),'#8d7554');m.box((x+.30,.84,0),(.10,.6,2.2),'#8d7554')
+    for x in (-23,23):
+        for z in (-23,23):
+            m.box((x,.22,z),(3,.44,3),'#879078');m.cylinder((x,.48,z),1.15,.1,'#64775b',sides=6)
+    m.save('camp-plaza')
+
+
 if __name__ == '__main__':
-    tower();cannon();cannon(True);props();street_props()
-    print('已生成11个独立GLB样件，含路灯、垃圾、瓦砾与燃烧车辆')
+    tower();cannon();cannon(True);props();street_props();camp_plaza()
+    print('已生成12个独立GLB样件，含路灯、垃圾、瓦砾、燃烧车辆与营地广场')

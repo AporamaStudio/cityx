@@ -1,4 +1,4 @@
-import {createCity3D} from './city-3d.js?v=9';
+import {createCity3D} from './city-3d.js?v=10';
 import {operatingStreetLamps} from './city-streets.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier} from './combat-visuals.js?v=3';
 import {createVisibility} from './visibility.js?v=6';
@@ -36,7 +36,7 @@ function drawFacilityMarker(name,x,y,cell,detail,emphasis=false){
   const offset=detail==='far'?.5:Math.min(.78,1-side*.5),cx=x+offset,cy=y+offset;
   ctx.save();ctx.fillStyle=nightMix>.5?'#182a35f2':'#e8e9ddf2';ctx.strokeStyle=emphasis?'#ffda85':nightMix>.5?'#809799':'#677a70';ctx.lineWidth=(emphasis?1.6:1)/cell;
   ctx.beginPath();ctx.roundRect(cx-side*.5,cy-side*.5,side,side,side*.22);ctx.fill();ctx.stroke();
-  drawFacility(name,cx-side*.41,cy-side*.41,side*.82);ctx.restore();
+  if(name==='camp')drawCampfire(ctx,cx-side*.41,cy-side*.41,side*.82,state.hp>0);else drawFacility(name,cx-side*.41,cy-side*.41,side*.82);ctx.restore();
 }
 document.querySelector('#populationTotalMetric .population-symbol').innerHTML=POPULATION_SVG;
 document.querySelector('#populationFreeMetric .population-symbol').innerHTML=WORKER_SVG;
@@ -504,7 +504,7 @@ function paintMap() {
   }
   const fx={time:effectTime,cell:size,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
-  const [fireX,fireY]=xy(state.camp);if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:1.3,h:1.3});
+  const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
   const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,night:nightMix,layout:state.layout,lamps:streetLamps,fx});
   // 道路承接真实点光与太阳阴影；在热力、格线和云雾下面一次性裁剪绘制。
   if(cityFrame){ctx.save();ctx.beginPath();for(let y=bounds.top;y<bounds.bottom;y++)for(let x=bounds.left;x<bounds.right;x++)if(visibleCell(key(x,y))&&state.layout?.tiles[key(x,y)]==='road')ctx.rect(x,y,1,1);ctx.clip();ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
@@ -555,7 +555,8 @@ function paintMap() {
   for(const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])])if(currentlyVisible(id)){const [x,y]=xy(id),plot=productionId(id,state);prop('tower:'+id,type==='B'?'far':'near',x+.5,y+.5,.82,.88,{roof:city3D?.roofAt(plot,x+.5,y+.5)??0});}
   for(const [id,p] of previewState.outposts)if(currentlyVisible(id)){const [x,y]=xy(id);prop('post:'+id,'watch',x+.5,y+.5,5.2/controlState.params.cellMeters,5.2/controlState.params.cellMeters,{target:fx.sweeps.find(s=>s.id==='post:'+id)?.target});}
   for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)){const [x,y]=xy(id),body=state.wallHealth.get(id);prop('wall:'+id,'wall',x+.5,y+.5,.9,.75,{dead:body?.hp===0,health:body?body.hp/body.max:1});}
-  const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,1.3,1.3,{dead:state.hp<=0});
+  const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,campWidth,campWidth,{dead:state.hp<=0});
+  const campPlot=state.sites.find(p=>p.role==='camp');if(campPlot)prop('camp-plaza','plaza',campPlot.x+(campPlot.width??campPlot.size)/2,campPlot.y+(campPlot.height??campPlot.size)/2,campPlot.width??campPlot.size,campPlot.height??campPlot.size);
   for(const source of displayedEnemySources()){const w=source.width??1,h=source.height??1;prop('source:'+sourceIdentity(source),'source',(source.bx??source.x)+w/2,(source.by??source.y)+h/2,w*.72,h*.72,{dead:source.hp===0});}
   facilityItems.push(...wrecks);
   const facilityFrame=city3D?.renderFacilities(facilityItems,nightMix,fx);
@@ -574,7 +575,7 @@ function paintMap() {
     }
     // 悬停时把街区作为一个操作对象，盖住内部格线，避免误认为逐格恢复。
     if(view.sourceSites.has(id)){ctx.fillStyle=nightMix>.5?'#322c36':'#67504f';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);continue;}
-    if(p.role==='camp'){ctx.fillStyle=nightMix>.5?'#49433a':'#ad9468';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);ctx.strokeStyle='#e8c481';ctx.lineWidth=.10;ctx.strokeRect(x+.12,y+.12,n-.24,m-.24);continue;}
+    if(p.role==='camp'){if(!drawCityFacility('camp-plaza',x,y,n,m)){ctx.fillStyle=nightMix>.5?'#49433a':'#ad9468';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);}ctx.strokeStyle='#e8c481';ctx.lineWidth=.10;ctx.strokeRect(x+.12,y+.12,n-.24,m-.24);continue;}
     if(empty){ctx.strokeStyle=selected?'#fff0ae':'#a8d5ad';ctx.lineWidth=selected?.12:.06;ctx.setLineDash([.2,.12]);ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);ctx.setLineDash([]);continue;}
     // 按物理 footprint 画建筑，屋顶炮位保留建筑底色；经营面积独立计算。
     ctx.save();if(!overlay.controlled&&!overlay.cells.some(currentlyVisible))ctx.globalAlpha=.68;ctx.beginPath();
@@ -784,7 +785,8 @@ function paintMap() {
   if(!state.result&&campCritical(state))ctx.globalAlpha=reducedMotion.matches?1:.6+.4*(.5+.5*Math.cos(performance.now()*Math.PI*2/1400));
   const glow=ctx.createRadialGradient(cx+.5,cy+.5,.1,cx+.5,cy+.5,1.8);
   glow.addColorStop(0,state.hp<=0?'#ffc17c00':!state.result&&campCritical(state)?'#f5847c99':'#ffc17c44');glow.addColorStop(1,'#ffc17c00');ctx.fillStyle=glow;ctx.fillRect(cx-1.3,cy-1.3,3.6,3.6);
-  if(!drawCityFacility('camp',cx-.2,cy-.2,1.4,1.4))drawCampfire(ctx,cx,cy,1,state.hp>0);
+  if(!drawCityFacility('camp',cx,cy))drawCampfire(ctx,cx,cy,1,state.hp>0);
+  else drawFacilityMarker('camp',cx,cy,size,mapDetail,!state.result&&campCritical(state));
   ctx.restore();
   const impact = Math.min(1,impactAge/IMPACT_MS);
   const mistColor=fogColor(nightMix).match(/\d+/g).map(Number);
