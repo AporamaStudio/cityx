@@ -1,4 +1,4 @@
-import {createCity3D} from './city-3d.js?v=12';
+import {createCity3D} from './city-3d.js?v=13';
 import {operatingStreetLamps} from './city-streets.js?v=1';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier} from './combat-visuals.js?v=3';
@@ -492,7 +492,7 @@ function paintMap() {
   ctx.fillStyle=palette.fog;ctx.fillRect(0,0,SIZE,SIZE);
 
   // 只把原画面允许显示完整外观的地块交给3D；运营灯光不新增经营或安全判断。
-  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&!view.sourceSites.has(id)&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.role==='hospital'?'hospital':p.content.type,status:p.content.status,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id))}));
+  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&!view.sourceSites.has(id)&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.role==='hospital'?'hospital':p.content.type,status:p.content.status,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id)),cellMeters:controlState.params.cellMeters}));
   const streetLamps=operatingStreetLamps(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
   const wrecks=[];
   // 燃烧车辆是已知废墟旁的装饰，不阻路；恢复邻楼或在此建设时直接移除。

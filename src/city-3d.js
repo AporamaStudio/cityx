@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {drawRoadTexture} from './city-textures.js?v=16';
 import {groundGlow} from './model-preview-effects.js?v=3';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=4';
@@ -34,7 +35,8 @@ function damageBuilding(object){
   const bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
   object.traverse(node=>{
     if(!node.isMesh)return;
-    const geometry=node.geometry.index?node.geometry.toNonIndexed():node.geometry.clone(),positions=geometry.attributes.position;
+    const previous=node.geometry,geometry=previous.index?previous.toNonIndexed():previous.clone(),positions=geometry.attributes.position;
+    if(node.userData.ownGeometry)previous.dispose();
     node.geometry=geometry;node.userData.ownGeometry=true;
     const point=new THREE.Vector3(),inverse=node.matrixWorld.clone().invert(),kept=[];
     for(let i=0;i<positions.count;i+=3){
@@ -52,8 +54,25 @@ function damageBuilding(object){
     node.material.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\ndiffuseColor.rgb=mix(diffuseColor.rgb,vec3(dot(diffuseColor.rgb,vec3(.2126,.7152,.0722))),.82);');};
     node.material.customProgramCacheKey=()=> 'cityx-game-ruin';
   });
-  const floor=new THREE.Mesh(new THREE.BoxGeometry(size.x*.78,.05,size.z*.74),new THREE.MeshStandardMaterial({color:'#414a43',roughness:1}));
-  floor.position.set(center.x,bounds.min.y+size.y*.12,center.z);floor.userData.ownGeometry=true;object.attach(floor);
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(size.x*.42,.015,size.z*.42),new THREE.MeshStandardMaterial({color:'#414a43',roughness:1}));
+  floor.position.set(center.x+size.x*.25,bounds.min.y+Math.max(size.y*.12,(object.userData.podiumHeight??0)+.012),center.z-size.z*.22);floor.userData.ownGeometry=true;object.attach(floor);
+}
+
+// 同一地块重复模型按材质合并，减少绘制次数；控制、修缮和炮位仍只对应原建筑对象。
+function mergePlot(object){
+  object.updateMatrixWorld(true);const inverse=object.matrixWorld.clone().invert(),groups=new Map(),materials=new Set();
+  object.traverse(node=>{if(!node.isMesh)return;
+    const material=node.material,key=[material.map?.uuid??'',material.color.getHex(),material.roughness,Object.keys(node.geometry.attributes).sort().join(',')].join(':');
+    if(!groups.has(key))groups.set(key,{material,geometries:[]});materials.add(material);
+    const geometry=node.geometry.index?node.geometry.toNonIndexed():node.geometry.clone();geometry.applyMatrix4(inverse.clone().multiply(node.matrixWorld));groups.get(key).geometries.push(geometry);
+    if(node.userData.ownGeometry)node.geometry.dispose();
+  });
+  object.clear();const retained=new Set();
+  for(const {material,geometries} of groups.values()){
+    const geometry=mergeGeometries(geometries);for(const source of geometries)source.dispose();
+    const mesh=new THREE.Mesh(geometry,material);mesh.castShadow=mesh.receiveShadow=true;mesh.userData.ownGeometry=true;object.add(mesh);retained.add(material);
+  }
+  for(const material of materials)if(!retained.has(material))material.dispose();
 }
 
 function connectedWall(template,item){
@@ -92,23 +111,28 @@ export function createCity3D(onReady){
     entry.object.removeFromParent();entry.object.traverse(node=>{if(node.isMesh){node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});
   }
   function build(plot){
-    const {id,x,y,w,h,type,status}=plot;
+    const {id,x,y,w,h,type,status,cellMeters}=plot;
     const pool=type==='housing'?['small','home','wide']:['factory','workshop'];
-    let name='hospital',rotation=0,best=Infinity;
-    if(type!=='hospital')for(const candidate of pool){
-      const size=new THREE.Box3().setFromObject(models.get(candidate)).getSize(new THREE.Vector3());
-      for(const turn of [0,1]){const ratio=turn?size.z/size.x:size.x/size.z,score=Math.abs(Math.log(w/h/ratio))+(id%3===pool.indexOf(candidate)?0:.06);if(score<best){best=score;name=candidate;rotation=turn*Math.PI/2;}}
+    const object=new THREE.Group(),housing=type==='housing',columns=type==='hospital'?1:housing?Math.min(w,4):Math.ceil(w/2),rows=type==='hospital'?1:housing?Math.min(h,3):Math.ceil(h/2),slotW=w/columns,slotH=h/rows;
+    const podium=type==='hospital'?0:(housing?2.5:1.5)/cellMeters;
+    if(podium){const base=new THREE.Mesh(new THREE.BoxGeometry(w-.12,podium,h-.12),new THREE.MeshStandardMaterial({color:housing?'#b3b6a2':'#8d9b91',roughness:.95}));base.position.y=podium*.5;base.castShadow=base.receiveShadow=true;base.userData.ownGeometry=true;object.add(base);object.userData.podiumHeight=podium;}
+    for(let row=0;row<rows;row++)for(let column=0;column<columns;column++){
+      let name=type==='hospital'?(status==='ruin'?'hospitalRuined':'hospital'):'',rotation=0,best=Infinity;
+      if(type!=='hospital')for(const candidate of pool){
+        const size=new THREE.Box3().setFromObject(models.get(candidate)).getSize(new THREE.Vector3());
+        for(const turn of [0,1]){const ratio=turn?size.z/size.x:size.x/size.z,score=Math.abs(Math.log(slotW/slotH/ratio))+((id+column+row)%3===pool.indexOf(candidate)?0:.20);if(score<best){best=score;name=candidate;rotation=turn*Math.PI/2;}}
+      }
+      const model=models.get(name).clone(true);model.rotation.y=rotation;model.updateMatrixWorld(true);
+      model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.material.roughness=.95;node.castShadow=true;node.receiveShadow=true;}});
+      const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+      const scale=type==='hospital'?Math.min((w-.16)/size.x,(h-.16)/size.z):Math.min(slotW*.86/size.x,slotH*.86/size.z,(housing?12:22)/cellMeters/size.y);
+      model.scale.setScalar(scale);model.position.set(-w/2+(column+.5)*slotW-center.x*scale,podium-bounds.min.y*scale,-h/2+(row+.5)*slotH-center.z*scale);object.add(model);
     }
-    if(type==='hospital'&&status==='ruin')name='hospitalRuined';
-    const object=new THREE.Group(),model=models.get(name).clone(true);object.add(model);model.rotation.y=rotation;
-    model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.material.roughness=.95;node.castShadow=true;node.receiveShadow=true;}});
-    object.updateMatrixWorld(true);
-    const bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
-    const scale=Math.min((w-.16)/size.x,(h-.16)/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
     object.position.set(x+w/2,0,y+h/2);buildings.add(object);
+    if(type!=='hospital')mergePlot(object);
     if(status==='ruin'&&type!=='hospital')damageBuilding(object);
     if(status==='building')operatingLights(object);
-    return {object,signature:`${type}:${status}:${w}:${h}`,roof:new THREE.Box3().setFromObject(object).max.y};
+    return {object,signature:`${type}:${status}:${w}:${h}:${cellMeters}`,roof:new THREE.Box3().setFromObject(object).max.y};
   }
   return {
     has(id){return ready&&entries.has(id);},
@@ -124,7 +148,7 @@ export function createCity3D(onReady){
       const active=new Set(plots.map(p=>p.id));
       for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
       for(const plot of plots){
-        const signature=`${plot.type}:${plot.status}:${plot.w}:${plot.h}`;
+        const signature=`${plot.type}:${plot.status}:${plot.w}:${plot.h}:${plot.cellMeters}`;
         if(entries.get(plot.id)?.signature!==signature){if(entries.has(plot.id))release(entries.get(plot.id));entries.set(plot.id,build(plot));}
         entries.get(plot.id).object.traverse(node=>{if(node.userData.cityRoofLights)node.visible=plot.powered&&night>0;if(node.isMesh){if(node.material.userData.cityPower)node.material.userData.cityPower.value=plot.powered?night:0;if(node.parent?.userData.cityRoofLights)node.material.opacity=plot.powered?night*(node.material.map?.28:1):0;}});
       }
