@@ -6,7 +6,7 @@ import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=2';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=8';
 import {createGameAudio} from './audio.js?v=7';
 import { SIZE, DEFAULTS } from './config.js?v=73';
-import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=89';
+import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=89';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -372,7 +372,7 @@ function paintMap() {
   const backdrop=fogColor(nightMix),fogTime=reducedMotion.matches?0:performance.now()/1000;
   cloudSpeed=previewParams().cloudSpeedMultiplier;
   ctx.fillStyle=backdrop;ctx.fillRect(0,0,width,height);
-  const view=mapDisplay(),{controlState,raw:rawControlled,controlled,dirty:draftDirty}=view;
+  const view=mapDisplay(),{controlState,controlled,dirty:draftDirty}=view;
   const mapDetail=zoom*100<controlState.params.mapMidZoomPercent?'far':zoom*100<controlState.params.mapNearZoomPercent?'mid':'near';
   viewport.dataset.detail=mapDetail;
   const hoveredPlot=productionId(hover,state);
@@ -492,8 +492,7 @@ function paintMap() {
     if (!controlled.has(id)) {ctx.fillStyle=state.layout?.tiles[id]==='road'?'#07121522':'#07121577';ctx.fillRect(x,y,1,1);}
     else {
       ctx.fillStyle='#7fc8e810';ctx.fillRect(x,y,1,1);
-      // 墙只用基础地面控制；炮位资格已在状态更新时缓存。
-      if(tool==='wall'&&state.phase==='build'&&rawControlled.has(id)&&!state.walls.has(id)&&!state.towers.has(id)&&!state.outposts.has(id)&&id!==state.camp&&!reservedSources(state).some(a=>key(a.x,a.y)===id))eligibleCells.add(id);
+      // 受控底色只表达归属；建墙不铺中心点，落点资格沿用悬停与点击校验。
     }
     // 小格网仅服务当前工具；取消选择后保留城市地块和控制边界，不显示棋盘。
     if(tool!==null&&mapDetail!=='far'){
@@ -1106,6 +1105,8 @@ document.querySelectorAll('[data-manual-icon]').forEach(icon=>{
   const type=icon.dataset.manualIcon;
   if(type==='camp'){
     const canvas=document.createElement('canvas');canvas.width=canvas.height=24;drawCampfire(canvas.getContext('2d'),3,3,18);icon.append(canvas);
+  }else if(type==='source'){
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=24;drawShield(canvas.getContext('2d'),3,3,18);icon.append(canvas);
   }else if(type==='route'||type==='futureRoute')icon.innerHTML=`<svg viewBox="0 0 24 12"><path d="M1 6h22" fill="none" stroke="currentColor" stroke-width="2"${type==='futureRoute'?' stroke-dasharray="3 2"':''}/></svg>`;
   else icon.innerHTML=manualIcons[type];
 });
@@ -1418,7 +1419,12 @@ $('sourceDefaults').onclick=()=>{
 $('sourceAudit').onclick=()=>{if(sourceConfigurationDirty()||paramsDirty()){showTopNotice('请先应用或取消配置，再校验路线。');return;}$('auditRoutes').click();};
 $('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;constrainCamera();hover=null;updateMapSourceHover();draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;$('fullFire').onchange=draw;
 // 地图图例复用手册内容；两个ⓘ统一悬停预览、点击固定，不改变侧栏布局。
-$('mapLegend').append(...Array.from($('mapLegendGuide').querySelectorAll('.manual-rule'),row=>row.cloneNode(true)));
+$('mapLegend').append(...Array.from($('mapLegendGuide').querySelectorAll('.manual-rule'),row=>{
+  const copy=row.cloneNode(true);
+  // cloneNode不复制canvas像素，篝火/盾牌图例也要同步实际共享图形。
+  row.querySelectorAll('canvas').forEach((canvas,i)=>copy.querySelectorAll('canvas')[i].getContext('2d').drawImage(canvas,0,0));
+  return copy;
+}));
 const legendTips=[['forecastInfo','forecastLegend'],['mapLegendHelp','mapLegend']].map(([button,panel])=>({button:$(button),panel:$(panel),root:$(button).parentElement,open:false,pinned:false}));
 function closeLegendTips(except){
   for(const tip of legendTips){
