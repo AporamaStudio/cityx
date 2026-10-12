@@ -1,0 +1,272 @@
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {createPreviewEffects,groundGlow} from './model-preview-effects.js?v=3';
+
+// 独立选型页：模型、灯光与状态仅用于看效果，不读取或修改原型游戏。
+const root='assets/model-preview/',kenney='https://kenney.nl/assets/';
+const assets=[
+  ['house','双层住宅','building','suburban/building-type-a',4.6,'住房的基础轮廓。屋顶与窗户可承担恢复、亮灯和炮位反馈。'],
+  ['house-small','低层住宅','building','suburban/building-type-h',4.2,'低矮、宽屋顶，适合起步城区；近距离和俯视均应清楚。'],
+  ['house-wide','连排住宅','building','suburban/building-type-u',4.8,'作为较大住房的体量候选；实际占地需按游戏格子适配。'],
+  ['apartment','城市公寓','building','commercial/building-a',3.7,'中等高度建筑，测试斜视时对道路和屋顶炮位的遮挡。'],
+  ['shop','商住楼','building','commercial/building-d',3.9,'作为商业经营外观候选，不意味着新增一种经营机制。'],
+  ['landmark','中型目标建筑','building','commercial/building-j',5.1,'先用于试医院的体量；医疗标识、布局和破损变体尚需适配。'],
+  ['factory','生产厂房','building','industrial/building-a',4.8,'平屋顶与厂房体量适合生产地块，保留清楚的临街边缘。'],
+  ['workshop','工业车间','building','industrial/building-f',4.7,'经营建筑的第二种外观候选，先观察烟囱与屋顶是否过于杂乱。'],
+  ['tree','街道树','nature','suburban/tree-large',.9,'少量点缀恢复后的街区，不能挡住道路和建设提示。'],
+  ['tree-small','小树','nature','suburban/tree-small',.7,'用于院落、公园边缘和高度对比，暂不增加环境模拟。'],
+  ['watchtower','瞭望塔','facility','watchtower',2.1,'自制木架样件，夜间探照灯缓慢扫过地面；扫光只演示气氛。'],
+  ['cannon-near','近防炮','facility','cannon-near',1.25,'短双管、短促连发与轻后坐；点击试射查看，不进行实际战斗。'],
+  ['cannon-long','远防炮','facility','cannon-long',1.65,'长双管、单次较强闪光与后坐；可暂停后点击试射检查。'],
+  ['brick-wall','墙体','facility','brick-wall',2.5,'自制砖墙段，便于后续表现连续墙、破损及拆除。'],
+  ['campfire','篝火','facility','campfire',1.9,'木柴、石圈与缓慢跳动的火焰，夜间暖光轻微闪动。'],
+  ['ruins','废墟样件','building','ruins',4.7,'自制断墙与瓦砾，只验证破损感觉；正式恢复应沿用同一栋建筑轮廓。'],
+  ['enemy-source','敌源样件','facility','enemy-source',1.9,'自制暗色核心与暖红标识，先区分敌我；敌源最终造型尚未确定。'],
+  ['streetlight','路灯','nature','streetlight',1.2,'同一盏灯白天不发光，恢复运营的街区夜晚亮灯。'],
+  ['trash','垃圾堆','nature','trash',1.4,'废弃街区的杂物；恢复后清走，先验证清理带来的变化。'],
+  ['rubble','瓦砾','nature','rubble',2,'附着原建筑的塌损位置，帮助关联废墟与完好状态。'],
+  ['burnt-car','燃烧车辆','nature','burnt-car',2.7,'焦黑车身与少量火焰表现灾损，作为恢复前的局部视觉样件。']
+].map(([id,name,category,file,width,description])=>({id,name,category,file,width,description,local:!file.includes('/')}));
+const $=id=>document.getElementById(id),models=new Map(),district=new THREE.Group(),single=new THREE.Group();
+let selected=assets[0],mode='district',night=false,restored=false,angle='angle',ready=false,singleState='intact',singleVariants=null,effects=null;
+const motionPreference=matchMedia('(prefers-reduced-motion: reduce)');let animated=!motionPreference.matches;
+const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-25,25,20,-20,.1,250);
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate=false;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+$('viewer').prepend(renderer.domElement);
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=false;controls.minZoom=.45;controls.maxZoom=4;
+controls.maxPolarAngle=Math.PI*.48;controls.addEventListener('change',render);
+const sky=new THREE.HemisphereLight('#f4f6e2','#809180',2.4),sun=new THREE.DirectionalLight('#fff1cd',3.2);
+sun.position.set(-16,28,12);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-28,right:28,top:28,bottom:-28,near:1,far:75});sun.shadow.bias=-.00025;sun.shadow.normalBias=.03;
+const fireLight=new THREE.PointLight('#ffb860',22,13,2);fireLight.position.set(4,2.2,0);
+const wreckLight=new THREE.PointLight('#ff9a49',9,6,2);wreckLight.position.set(-8,1.1,-.8);
+scene.add(sky,sun,fireLight,wreckLight,district,single);
+effects=createPreviewEffects({isNight:()=>night,render:time=>{
+  fireLight.intensity=22*(1+.12*Math.sin(time*8.7)+.05*Math.sin(time*13));
+  wreckLight.intensity=9*(1+.16*Math.sin(time*9.1+2));renderer.render(scene,camera);
+}});
+const structures=[],streetlights=[],abandoned=[];
+const palette={stone:'#c5c5b0',grass:'#a7b491',road:'#68736e',brick:'#7f9180'};
+function box(parent,x,y,z,w,h,d,color){
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color,roughness:.95}));
+  mesh.position.set(x,y,z);mesh.receiveShadow=true;parent.add(mesh);return mesh;
+}
+function render(){effects?.update();renderer.shadowMap.needsUpdate=true;renderer.render(scene,camera);}
+function resize(){
+  const {width,height}=$('viewer').getBoundingClientRect();renderer.setSize(width,height,false);
+  const aspect=width/height,frame=mode==='district'?54:selected.id.startsWith('cannon-')?6.2:['campfire','burnt-car','streetlight'].includes(selected.id)?8:11,half=Math.max(frame*.34,frame/aspect/2);
+  camera.left=-half*aspect;camera.right=half*aspect;camera.top=half;camera.bottom=-half;camera.updateProjectionMatrix();render();
+}
+function frame(){
+  const target=new THREE.Vector3(0,mode==='district'?1:1.7,0),offset=angle==='top'?new THREE.Vector3(0,45,.01):new THREE.Vector3(32,34,40);
+  controls.target.copy(target);camera.position.copy(target).add(offset);camera.zoom=1;camera.updateProjectionMatrix();controls.update();resize();
+}
+function cloneModel(asset,width=asset.width,roofLights=true){
+  const group=models.get(asset.id).clone(true),bounds=new THREE.Box3().setFromObject(group),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+  const scale=width/Math.max(size.x,size.z);group.scale.setScalar(scale);
+  group.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
+  const anchor=new THREE.Group();anchor.add(group);anchor.updateMatrixWorld(true);
+  group.traverse(node=>{if(node.isMesh){node.castShadow=true;node.receiveShadow=true;node.material=node.material.clone();if(isBuilding(asset)){node.geometry=node.geometry.index?node.geometry.toNonIndexed():node.geometry.clone();node.userData.previewGeometry=true;windowMaterial(node.material,node.geometry,node.matrixWorld,size.y*scale);}}});
+  if(roofLights&&isBuilding(asset))addRoofLights(anchor);
+  effects.attach(asset.id,anchor);
+  return anchor;
+}
+function isBuilding(asset){return asset.category==='building'&&!asset.local;}
+function addRoofLights(object){
+  // 在真实屋顶表面放少量暖色天窗/檐口灯，俯视仍可辨认运营状态。
+  object.updateWorldMatrix(true,true);
+  const bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+  const group=new THREE.Group();group.userData.previewRoofLights=true;group.visible=false;
+  const ray=new THREE.Raycaster(),down=new THREE.Vector3(0,-1,0),normal=new THREE.Vector3(),inverse=object.matrixWorld.clone().invert();
+  for(const [dx,dz] of [[-.22,-.18],[.22,-.18],[-.22,.18],[.22,.18]]){
+    ray.set(new THREE.Vector3(center.x+size.x*dx,bounds.max.y+1,center.z+size.z*dz),down);
+    const hit=ray.intersectObject(object,true)[0];
+    if(!hit||hit.point.y<bounds.min.y+size.y*.38)continue;
+    normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld).transformDirection(inverse);
+    if(normal.y<.28)continue;
+    const point=object.worldToLocal(hit.point.clone()),lamp=new THREE.Mesh(new THREE.PlaneGeometry(size.x*.11,size.z*.07),new THREE.MeshBasicMaterial({color:'#ffd28a',toneMapped:false}));
+    lamp.userData.previewGeometry=true;lamp.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal);lamp.position.copy(point).addScaledVector(normal,.028);
+    const halo=groundGlow(size.x*.28,size.z*.24,'#ffc174',.28);halo.quaternion.copy(lamp.quaternion);halo.position.copy(point).addScaledVector(normal,.04);
+    group.add(lamp,halo);
+  }
+  object.add(group);
+}
+function windowMaterial(material,geometry,matrix,height){
+  // 从同一张色板识别蓝色玻璃，只增加发光，不制作一套夜间贴图。
+  const positions=geometry.attributes.position,index=geometry.index,mask=new Float32Array(positions.count);
+  const minHeight=height*.035,p=new THREE.Vector3();
+  for(let i=0;i<(index?index.count:positions.count);i+=3){
+    const ids=[0,1,2].map(j=>index?index.getX(i+j):i+j),ys=ids.map(id=>p.fromBufferAttribute(positions,id).applyMatrix4(matrix).y);
+    // 排除水平屋顶与很薄的楼层装饰条，避免蓝色线脚也亮灯。
+    if(Math.max(...ys)-Math.min(...ys)>minHeight)for(const id of ids)mask[id]=1;
+  }
+  geometry.setAttribute('previewWindowMask',new THREE.BufferAttribute(mask,1));
+  material.userData.previewPower={value:0};
+  material.onBeforeCompile=shader=>{
+    shader.uniforms.previewWindowPower=material.userData.previewPower;
+    shader.vertexShader='attribute float previewWindowMask;\nvarying float previewWindowSurface;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\npreviewWindowSurface=previewWindowMask;');
+    shader.fragmentShader='uniform float previewWindowPower;\nvarying float previewWindowSurface;\n'+shader.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+      float previewGlass=step(diffuseColor.r*1.8,diffuseColor.b)*step(diffuseColor.g*1.25,diffuseColor.b)*step(.1,diffuseColor.b)*previewWindowSurface;
+      totalEmissiveRadiance+=vec3(1.0,.54,.18)*previewGlass*previewWindowPower*1.1;`);
+  };
+  material.customProgramCacheKey=()=> 'cityx-preview-windows';
+}
+function setPower(object,powered){
+  object.traverse(node=>{if(node.userData.previewRoofLights)node.visible=night&&powered;if(node.isMesh){
+    const uniform=node.material.userData.previewPower;if(uniform)uniform.value=night&&powered?1:0;
+    if(node.material.name==='#ffe1a3')node.material.emissiveIntensity=night&&powered?1.8:0;
+  }});
+}
+function ruinedModel(asset,width=asset.width){
+  // 原楼局部塌损：保留占地、入口与大部分门窗，避免换成无关联的通用废墟。
+  const obj=cloneModel(asset,width,false);obj.updateMatrixWorld(true);
+  const bounds=new THREE.Box3().setFromObject(obj),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3()),height=bounds.max.y,cut=height*.32;
+  obj.traverse(node=>{if(!node.isMesh)return;
+    const positions=node.geometry.attributes.position,p=new THREE.Vector3(),inverse=node.matrixWorld.clone().invert();
+    const index=node.geometry.index,triangles=index?index.count:positions.count,kept=[];
+    for(let i=0;i<triangles;i+=3){
+      const ids=[0,1,2].map(j=>index?index.getX(i+j):i+j),mid=new THREE.Vector3();
+      for(const id of ids)mid.add(p.fromBufferAttribute(positions,id).applyMatrix4(node.matrixWorld));mid.multiplyScalar(1/3);
+      if(!(mid.x>center.x-size.x*.12&&mid.z<center.z+size.z*.24&&mid.y>height*.36))kept.push(...ids);
+    }
+    node.geometry.setIndex(kept);
+    for(let i=0;i<positions.count;i++){
+      p.fromBufferAttribute(positions,i).applyMatrix4(node.matrixWorld);
+      if(p.x>center.x-size.x*.12&&p.z<center.z+size.z*.24&&p.y>cut){
+        const jagged=Math.abs(Math.sin(p.x*5+p.z*7))*.12;
+        p.y=cut+(p.y-cut)*.08+jagged;
+      }
+      p.applyMatrix4(inverse);positions.setXYZ(i,p.x,p.y,p.z);
+    }
+    positions.needsUpdate=true;node.geometry.computeVertexNormals();node.geometry.computeBoundingBox();node.geometry.computeBoundingSphere();
+    node.material.color.set('#807b6b');node.material.roughness=1;
+    node.material.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`#include <map_fragment>
+      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(dot(diffuseColor.rgb,vec3(.2126,.7152,.0722))),.93);`);};
+    node.material.customProgramCacheKey=()=> 'cityx-preview-ruins';
+  });
+  // 深色内层与断梁让屋顶缺口从正上方也能看清，原楼未塌部分仍保留。
+  const floor=box(obj,center.x,height*.14,center.z,size.x*.86,.05,size.z*.84,'#3c4039');floor.userData.previewGeometry=true;
+  for(const [dx,dz,rotation] of [[.14,-.12,.65],[.22,.08,-.5]]){
+    const beam=box(obj,center.x+size.x*dx,height*.22,center.z+size.z*dz,size.x*.56,.09,.12,'#706959');beam.rotation.y=rotation;beam.userData.previewGeometry=true;
+  }
+  const rubbleAsset=assets.find(a=>a.id==='rubble'),rubble=cloneModel(rubbleAsset,width*.5);rubble.position.set(width*.55,.05,-width*.17);obj.add(rubble);
+  const fallen=cloneModel(rubbleAsset,width*.42);fallen.position.set(size.x*.12,height*.14+.06,-size.z*.08);obj.add(fallen);
+  return obj;
+}
+function place(id,x,z,width,y=.14){
+  const obj=cloneModel(assets.find(a=>a.id===id),width);obj.position.set(x,y,z);district.add(obj);return obj;
+}
+function buildDistrict(){
+  // 一小片城市样景，仅拼已有模型；道路/灯光是预览装饰，不接入玩法。
+  box(district,0,-.42,0,35,.7,27,'#869b83');box(district,0,-.04,0,34,.12,26,palette.grass);
+  for(const x of [-8,0,8])box(district,x,.02,0,1.7,.06,26,palette.road);
+  for(const z of [-4,4])box(district,0,.02,z,34,.06,1.7,palette.road);
+  for(const x of [-8,0,8])for(let z=-12;z<=12;z+=1.5)box(district,x,.055,z,.09,.01,.6,'#c1c8b2');
+  for(const z of [-4,4])for(let x=-16;x<=16;x+=1.5)box(district,x,.055,z,.6,.01,.09,'#c1c8b2');
+  const lots=[['house-small',-12,8],['house',-4,8],['factory',4,8],['house-wide',12,8],['apartment',-12,0],['shop',-4,0],['house',12,0],['house-wide',-12,-8],['apartment',-4,-8],['workshop',4,-8],['landmark',12,-8]];
+  for(const [id,x,z] of lots){
+    box(district,x,.065,z,6.2,.13,5.7,palette.stone);
+    const obj=place(id,x,z);structures.push({obj,x,z,id,front:z>=0});
+    for(const [dx,dz] of [[-2.7,2.2],[2.65,2.3]])place('tree-small',x+dx,z+dz,.7);
+  }
+  place('campfire',4,0,2.2);place('watchtower',-1.7,5.5,1.7);place('watchtower',14,3,1.6);
+  const factory=structures.find(s=>s.id==='factory'),roof=new THREE.Box3().setFromObject(factory.obj).max.y;
+  place('cannon-long',3.6,7.7,1.3,roof+.04);place('cannon-near',11.8,8,1.15,new THREE.Box3().setFromObject(structures.find(s=>s.id==='house-wide'&&s.front).obj).max.y+.03);
+  for(const x of [-6,-3,.1])place('brick-wall',x,3,2.3);
+  place('enemy-source',12,-11,1.5);
+  for(const [x,z] of [[-9,3],[1,3],[9,3],[-9,9],[9,9]]){
+    const obj=place('streetlight',x,z,.95),bounds=new THREE.Box3().setFromObject(obj),light=new THREE.PointLight('#ffd08a',62,8,2);
+    const pool=groundGlow(2.5,7,'#ffca72',.42);pool.position.set(Math.round(x/8)*8,.075,z);
+    light.position.set(x+.3,bounds.max.y-.14,z);district.add(light,pool);streetlights.push({obj,light,pool});
+  }
+  for(const [id,x,z,w] of [['trash',-5,2,1.1],['trash',10,2.5,1],['burnt-car',-8,-.8,2.5],['rubble',11,1.8,1.6]])abandoned.push(place(id,x,z,w));
+  const rim=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[-16,.16,-3],[-9,.16,-3],[-9,.16,-1],[-1,.16,-1],[-1,.16,2],[7,.16,2],[7,.16,-2],[16,.16,-2],[16,.16,11],[-16,.16,11]].map(p=>new THREE.Vector3(...p))),new THREE.LineBasicMaterial({color:'#66b6ae'}));district.add(rim);
+  // 演示恢复时只改变状态，不将控制与运营视为同一个条件。
+  for(const s of structures){
+    s.ruins=ruinedModel(assets.find(a=>a.id===s.id));s.ruins.position.copy(s.obj.position);s.ruins.visible=false;district.add(s.ruins);
+  }
+  updateRestore();
+}
+function updateRestore(){
+  for(const s of structures){
+    const damaged=!restored&&s.front&&['house','shop','apartment'].includes(s.id);s.obj.visible=!damaged;s.ruins.visible=damaged;
+    s.obj.traverse(node=>{if(node.isMesh&&node.material.userData.previewPower){node.material.color.set(restored||s.front?'#ffffff':'#9ba7a0');}});
+    setPower(s.obj,restored&&s.front);
+  }
+  for(const lamp of streetlights){setPower(lamp.obj,restored);lamp.light.visible=lamp.pool.visible=night&&restored;}
+  for(const prop of abandoned)prop.visible=!restored;
+  wreckLight.visible=mode==='district'&&!restored;
+  updateSingleState();
+  $('restore').textContent=restored?'查看恢复前':'查看恢复后';render();
+}
+function updateSingleState(){
+  if(!singleVariants)return;
+  singleVariants.normal.visible=singleState!=='ruined'||!singleVariants.ruined;
+  if(singleVariants.ruined)singleVariants.ruined.visible=singleState==='ruined';
+  setPower(singleVariants.normal,isBuilding(selected)?singleState==='operating':true);
+  for(const button of document.querySelectorAll('[data-state]'))button.classList.toggle('active',button.dataset.state===singleState);
+  if(mode==='single')$('sceneSubtitle').textContent=isBuilding(selected)?({intact:'完好 · 尚未运营',ruined:'原建筑局部塌损 · 占地与门窗保留',operating:'恢复运营 · 窗户与屋顶亮灯'})[singleState]:(selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0');
+}
+function setMode(next){
+  mode=next;district.visible=mode==='district';single.visible=mode==='single';$('district').classList.toggle('active',mode==='district');$('single').classList.toggle('active',mode==='single');$('restore').hidden=mode!=='district';
+  $('sceneTitle').textContent=mode==='district'?'一片恢复中的城区':selected.name;
+  $('sceneSubtitle').textContent=mode==='district'?'住宅 · 经营建筑 · 前线设施':selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0';
+  fireLight.visible=night&&mode==='district';wreckLight.visible=mode==='district'&&!restored;updateSingleState();frame();
+  $('fireShot').hidden=mode!=='district'&&!selected.id.startsWith('cannon-');
+}
+function selectAsset(asset,show=true){
+  selected=asset;
+  if(singleVariants)effects.remove(singleVariants.normal);
+  single.traverse(node=>{if(node.isMesh||node.isLine){node.material.dispose();if(node.userData.previewGeometry)node.geometry.dispose();}});single.clear();
+  const width=Math.min(asset.width,4.8),normal=cloneModel(asset,width),ruined=isBuilding(asset)?ruinedModel(asset,width):null;
+  single.add(normal);if(ruined)single.add(ruined);singleVariants={normal,ruined};
+  $('buildingStates').hidden=!isBuilding(asset);updateSingleState();
+  $('assetTitle').textContent=asset.name;$('assetOrigin').textContent=asset.local?'自制样件':'Kenney · CC0';$('assetDescription').textContent=asset.description;
+  const path=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb';$('download').href=path;
+  $('source').href=asset.local?'assets/model-preview/ATTRIBUTION.md':kenney+({suburban:'city-kit-suburban',commercial:'city-kit-commercial',industrial:'city-kit-industrial'}[asset.file.split('/')[0]]);
+  for(const btn of $('catalog').children)btn.classList.toggle('selected',btn.dataset.id===asset.id);
+  if(show)setMode('single');
+}
+function catalog(filter='all'){
+  $('catalog').replaceChildren();
+  for(const a of assets.filter(a=>filter==='all'||a.category===filter)){
+    const btn=document.createElement('button');btn.type='button';btn.className='asset';btn.dataset.id=a.id;
+    if(!a.local){const img=document.createElement('img');img.src=root+'kenney/'+a.file+'.png';img.alt='';btn.append(img);}
+    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰'})[a.id];btn.append(icon);}
+    const label=document.createElement('span'),name=document.createElement('b'),origin=document.createElement('small');name.textContent=a.name;origin.textContent=a.local?'自制样件':'Kenney';label.append(name,origin);btn.append(label);
+    btn.disabled=!ready;btn.classList.toggle('selected',a.id===selected.id);btn.addEventListener('click',()=>selectAsset(a));$('catalog').append(btn);
+  }
+}
+function setLight(){
+  document.body.classList.toggle('night',night);scene.background=new THREE.Color(night?'#233840':'#e8eddf');
+  sky.color.set(night?'#b9d7ed':'#f4f6e2');sky.groundColor.set(night?'#4c676b':'#809180');sky.intensity=night?1.5:2.4;
+  sun.color.set(night?'#b9cfff':'#fff1cd');sun.intensity=night?.9:3.2;fireLight.visible=night&&mode==='district';
+  $('light').textContent=night?'切换白天':'切换夜晚';updateRestore();render();
+}
+$('district').addEventListener('click',()=>{if(ready)setMode('district');});$('single').addEventListener('click',()=>{if(ready)setMode('single');});
+for(const id of ['angle','top'])$(id).addEventListener('click',()=>{angle=id;for(const other of ['angle','top'])$(other).classList.toggle('active',other===id);frame();});
+$('light').addEventListener('click',()=>{night=!night;setLight();});$('restore').addEventListener('click',()=>{restored=!restored;updateRestore();});$('reset').addEventListener('click',frame);
+$('fireShot').addEventListener('click',()=>effects.fire());
+function syncMotion(){
+  $('motion').textContent=animated?'暂停动效':'开启动效';$('motion').setAttribute('aria-pressed',String(animated));
+  effects.setEnabled(ready&&animated);render();
+}
+$('motion').addEventListener('click',()=>{animated=!animated;syncMotion();});
+motionPreference.addEventListener('change',event=>{animated=!event.matches;syncMotion();});
+for(const button of document.querySelectorAll('[data-state]'))button.addEventListener('click',()=>{singleState=button.dataset.state;updateSingleState();if(ready)setMode('single');});
+for(const button of document.querySelectorAll('[data-filter]'))button.addEventListener('click',()=>{for(const b of document.querySelectorAll('[data-filter]'))b.classList.toggle('active',b===button);catalog(button.dataset.filter);});
+new ResizeObserver(resize).observe($('viewer'));catalog();setLight();frame();
+const loader=new GLTFLoader();let loaded=0;
+try{
+  await Promise.all(assets.map(async asset=>{
+    const url=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb';const gltf=await loader.loadAsync(url);models.set(asset.id,gltf.scene);
+    loaded++;$('loading').textContent=`正在装载模型… ${loaded}/${assets.length}`;
+  }));
+  ready=true;buildDistrict();selectAsset(selected,false);catalog();setMode('district');syncMotion();$('loading').hidden=true;$('loadStatus').textContent=`${loaded} 个模型已就绪`;
+}catch(error){
+  $('loading').textContent='模型装载失败，请刷新后重试。';$('loadStatus').textContent='装载失败';console.error(error);
+}
