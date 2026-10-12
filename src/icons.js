@@ -18,6 +18,17 @@ export const SOURCE_DESTROYED_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><
 // 圆圈斜杠表示出兵被阻止，不与已击杀的叉号混用。
 export const SPAWN_BLOCKED_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></g></svg>';
 
+// 图钉只表示固定查看对象；地图、预告和手册共用同一轮廓。
+const SOURCE_PIN_PATH='M8 3h8v3h-1v6l3 3v2h-5v5h-2v-5H6v-2l3-3V6H8z';
+export const SOURCE_PIN_SVG=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${SOURCE_PIN_PATH}" fill="currentColor"/></svg>`;
+let sourcePinPath;
+export function drawSourcePin(ctx,x,y,size){
+  sourcePinPath??=new Path2D(SOURCE_PIN_PATH);
+  ctx.save();ctx.translate(x,y);ctx.scale(size/24,size/24);
+  ctx.fillStyle='#321817';ctx.beginPath();ctx.arc(12,12,13,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#ffe5bd';ctx.fill(sourcePinPath);ctx.restore();
+}
+
 // 群体代表城市人口，戴帽单人代表可分配工人；资源栏、报价和地图共用。
 export const POPULATION_SVG='<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="currentColor" opacity=".55"><circle cx="6" cy="11" r="4"/><circle cx="26" cy="11" r="4"/><path d="M0 29v-8a6 6 0 0 1 12 0v8zm20 0v-8a6 6 0 0 1 12 0v8z"/></g><g fill="currentColor"><circle cx="16" cy="8" r="5"/><path d="M7 29v-8a9 9 0 0 1 18 0v8z"/></g></svg>';
 export const WORKER_SVG='<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="currentColor"><circle cx="16" cy="12" r="5"/><path d="M5 29v-6a11 11 0 0 1 22 0v6zM9 9a7 7 0 0 1 14 0z"/></g><path d="M8 9h16M16 2v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';

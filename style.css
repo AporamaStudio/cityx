@@ -358,3 +358,6 @@ input[type=number]{background:var(--input);color:var(--text);border-color:var(--
 .toolgrid .tool-name{flex:none}
 .toolgrid .tool-price{position:relative;display:block;flex:none;width:var(--price-width,0px);min-width:0;height:18px;gap:0}
 .tool-price-content{position:absolute;right:0;top:0;display:inline-flex;align-items:center;gap:3px;width:max-content;height:18px;white-space:nowrap;transform:scale(var(--price-scale,1));transform-origin:right center}
+
+/* 固定路线使用共享图钉；行高与原有预告保持一致。 */
+.source-pin-mark{display:none;width:14px;height:14px;margin-left:6px;vertical-align:middle;color:var(--highlight-ink)}.source-pin-mark svg{width:100%;height:100%}#forecastList li.source-pinned .source-pin-mark{display:inline-block}
