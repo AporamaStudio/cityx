@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
 import {createCampaign,key,beginBattle,stepBattle,controlMask,visionField,enemyKey} from '../src/model.js';
-import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView} from '../src/combat-visuals.js';
+import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier} from '../src/combat-visuals.js';
 
 function setup(){
   const layout={width:SIZE,height:SIZE,camp:{x:15,y:25},tiles:Array(SIZE*SIZE).fill('road'),blocks:[{x:13,y:22,width:2,height:3,kind:'building'},{x:16,y:22,width:2,height:2,kind:'building'}]};
@@ -45,4 +45,15 @@ test('炮位声音随镜头缩放衰减，屏外静音且左右声像跟随实�
   assert.ok(shotSoundView(id,{...view,zoom:1}).gain<shotSoundView(id,view).gain);
   assert.ok(shotSoundView(id,{...view,zoom:3}).gain<=1);
   assert.ok(shotSoundView(key(1,4),view).pan<0);assert.ok(shotSoundView(key(8,4),view).pan>0);
+});
+
+test('后方塔不因仍能看见远处边界扫光，扩张到外沿后只扫自身贡献方向',()=>{
+  const state=setup(),rear=state.camp;state.outposts.set(rear,{day:1});
+  let controlled=controlMask(state),sight=visionField(state),frontier=outpostFrontier(rear,state.params.outpostRadius,controlled);
+  assert.equal(frontier.size,0);assert.ok(searchTargets(rear,controlled,sight,18).points.length);
+  assert.equal(searchTargets(rear,controlled,sight,18,frontier).points.length,0);
+  const front=key(23,25);state.outposts.set(front,{day:1});controlled=controlMask(state);sight=visionField(state);frontier=outpostFrontier(front,state.params.outpostRadius,controlled);
+  assert.ok(frontier.size);const sector=searchTargets(front,controlled,sight,18,frontier);assert.ok(sector.points.length);
+  for(let t=0;t<30;t+=.2){const p=searchAim(sector,t,front,controlled,sight);assert.ok(!controlled.has(key(Math.floor(p.x),Math.floor(p.y))));assert.ok(sight.has(key(Math.floor(p.x),Math.floor(p.y))));assert.ok(p.x>23);}
+  assert.equal(outpostFrontier(front,state.params.outpostRadius,new Set(Array.from({length:SIZE*SIZE},(_,i)=>i))).size,0);
 });

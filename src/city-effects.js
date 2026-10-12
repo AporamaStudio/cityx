@@ -11,7 +11,7 @@ export function createCityEffects(scene){
   const group=new THREE.Group();scene.add(group);const lights=new Map(),shots=new Map();
   function lightEntry(item){
     if(lights.has(item.id))return lights.get(item.id);
-    const sweep=!!item.target,wreck=item.asset==='wreck',object=new THREE.Group(),light=sweep?new THREE.SpotLight('#9fcaff',0,24,.10,.7,2):new THREE.PointLight(wreck?'#ff8745':'#ffb860',0,wreck?2.3:4,2),target=new THREE.Object3D();
+    const sweep=item.asset==='watch',wreck=item.asset==='wreck',object=new THREE.Group(),light=sweep?new THREE.SpotLight('#9fcaff',0,24,.10,.7,2):new THREE.PointLight(wreck?'#ff8745':'#ffb860',0,wreck?2.3:4,2),target=new THREE.Object3D();
     light.castShadow=false;scene.add(light,target);
     const pool=groundGlow(sweep?2.2:wreck?1.6:2.4,sweep?3.2:wreck?1.6:2.4,sweep?'#9bc8ff':wreck?'#ff984a':'#ffc174',.3);pool.position.y=.025;pool.userData.ownGeometry=true;object.add(pool);
     const cone=sweep?mesh(new THREE.ConeGeometry(1,1,18,1,true),'#93bdff',.17):null;if(cone){cone.material.side=THREE.DoubleSide;object.add(cone);light.target=target;}
@@ -28,13 +28,19 @@ export function createCityEffects(scene){
     updateLights(items,time,night,viewport){
       const active=new Set(items.map(item=>item.id));for(const [id,entry] of lights)if(!active.has(id)){dispose(entry.object);entry.light.removeFromParent();entry.target.removeFromParent();lights.delete(id);}
       for(const item of items){
-        const e=lightEntry(item),fireScale=item.fireScale??1,range=item.target?24:item.asset==='wreck'?2.3*fireScale:4,near=item.x>=viewport.left-range&&item.x<=viewport.right+range&&item.y>=viewport.top-range&&item.y<=viewport.bottom+range;
-        e.light.position.set(item.x,item.height,item.y);e.light.visible=near&&(item.target?night>0:true);e.object.visible=near&&(item.target?night>0:true);
+        const e=lightEntry(item),fireScale=item.fireScale??1,watch=item.asset==='watch',range=watch?(item.target?24:item.w*4):item.asset==='wreck'?2.3*fireScale:4,near=item.x>=viewport.left-range&&item.x<=viewport.right+range&&item.y>=viewport.top-range&&item.y<=viewport.bottom+range;
+        e.light.position.set(item.x,item.height,item.y);e.light.visible=near&&(watch?night>0:true);e.object.visible=near&&(watch?night>0:true);
+        if(e.cone)e.cone.visible=!!item.target;
         if(item.target){
+          e.light.color.set('#9fcaff');e.light.angle=.10;e.light.distance=24;e.pool.material.color.set('#9bc8ff');e.pool.scale.setScalar(1);
           e.target.position.set(item.target.x,.01,item.target.y);const direction=e.target.position.clone().sub(e.light.position),length=direction.length();direction.normalize();
           e.cone.position.copy(e.light.position).addScaledVector(direction,length*.5);e.cone.quaternion.setFromUnitVectors(new THREE.Vector3(0,-1,0),direction);e.cone.scale.set(length*.10,length,length*.10);e.cone.material.opacity=night*.17;
           e.pool.position.set(item.target.x,.025,item.target.y);e.pool.material.opacity=night*.34;e.pool.rotation.z=-Math.atan2(item.target.y-item.y,item.target.x-item.x);
           e.light.intensity=night*85;
+        }else if(watch){
+          // 后方塔只照脚下，暖灯不闪烁、不增加信息；同一灯具切换，不累积光源。
+          e.target.position.set(item.x,.01,item.y);e.light.color.set('#ffd599');e.light.angle=Math.PI/3;e.light.distance=item.w*4;e.light.intensity=night*1.1*(item.w/.26)**2;
+          e.pool.position.set(item.x,.025,item.y);e.pool.scale.set(item.w*3/2.2,item.h*3/3.2,1);e.pool.material.color.set('#ffd599');e.pool.material.opacity=night*.16;e.pool.rotation.z=0;
         }else{
           const flicker=1+.12*Math.sin(time*8.7+item.x)+.05*Math.sin(time*13+item.y);
           // 距离/光池按实体缩放，平方缩放光强保持局部明暗；不把小车辆当大范围照明。
@@ -61,7 +67,7 @@ export function createCityEffects(scene){
 
 export function facilityMotion(object){
   const flames=[],barrels=[],muzzles=[],heads=[];
-  object.traverse(node=>{if(!node.isMesh)return;if(['#ff9538','#ffd36b'].includes(node.material.name))flames.push({node,scale:node.scale.clone(),position:node.position.clone()});if(['#3f5057','#1e2b32'].includes(node.material.name))barrels.push({node,z:node.position.z});if(node.material.name==='#1e2b32')muzzles.push(node);if(node.material.name==='#354047')heads.push(node);});
+  object.traverse(node=>{if(!node.isMesh)return;if(['#ff9538','#ffd36b'].includes(node.material.name))flames.push({node,scale:node.scale.clone(),position:node.position.clone()});if(['#3f5057','#1e2b32'].includes(node.material.name))barrels.push({node,z:node.position.z});if(node.material.name==='#1e2b32')muzzles.push(node);if(node.material.name==='#354047'){node.geometry=node.geometry.clone();node.geometry.computeBoundingBox();const pivot=node.geometry.boundingBox.getCenter(new THREE.Vector3());node.geometry.translate(-pivot.x,-pivot.y,-pivot.z);node.position.copy(pivot);node.userData.ownGeometry=true;heads.push(node);}});
   return {flames,barrels,muzzles,heads};
 }
 export function animateFacility(entry,item,frame){

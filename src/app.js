@@ -1,5 +1,5 @@
-import {createCity3D} from './city-3d.js?v=7';
-import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView} from './combat-visuals.js?v=2';
+import {createCity3D} from './city-3d.js?v=8';
+import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier} from './combat-visuals.js?v=3';
 import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
 import {createTowerOverlay} from './tower-overlay.js?v=18';
@@ -375,7 +375,7 @@ function mapDisplay(){
       sourceSites:new Set([...state.enemySources.values()].map(s=>s.site)),
       sourceFootprint:new Set([...state.enemySources.values()].flatMap(sourceCells))};
     const vision=visionField(controlState),range=params.outpostRadius+params.outpostS01*(state.phase==='build'?params.daySightMultiplier:params.nightSightMultiplier)*params.eventSightMultiplier+2;
-    mapView.searchVision=vision;mapView.searchSectors=new Map([...state.outposts.keys()].map(id=>[id,searchTargets(id,controlled,vision,range)]));
+    mapView.searchVision=vision;mapView.searchSectors=new Map([...state.outposts.keys()].map(id=>[id,searchTargets(id,controlled,vision,range,outpostFrontier(id,params.outpostRadius,controlled))]));
   }
   return mapView;
 }
@@ -507,7 +507,7 @@ function paintMap() {
     if(cell)wrecks.push({id:'wreck:'+p.id,asset:'wreck',x:cell[0]+.5,y:cell[1]+.5,w:wreckWidth,h:wreckLength,fireScale:wreckLength/.95});
   }
   const fx={time:effectTime,cell:size,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
-  for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);if(target)fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:.86,h:.86,target});}
+  for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp);if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:1.3,h:1.3});
   const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,night:nightMix,layout:state.layout,lamps:streetLamps,fx});
   // 道路承接真实点光与太阳阴影；在热力、格线和云雾下面一次性裁剪绘制。
@@ -550,14 +550,14 @@ function paintMap() {
   if(nightMix>0){
     ctx.save();ctx.globalAlpha=nightMix;
     if(state.hp>0){const [x,y]=xy(state.camp);lamp(x+.5,y+.5,3,'#ffbe6855');}
-    for(const [id,p] of state.outposts){if(!currentlyVisible(id))continue;const [x,y]=xy(id);lamp(x+.5,y+.5,1.7,'#9bddf344');}
+    for(const [id,p] of state.outposts){if(!currentlyVisible(id))continue;const [x,y]=xy(id),front=fx.sweeps.find(s=>s.id==='post:'+id)?.target;lamp(x+.5,y+.5,front?.9:.6,front?'#9bddf325':'#ffd99b20');}
     if(!cityFrame)for(const p of state.sites)if(currentlyVisible(key(p.x,p.y))&&state.production.has(key(p.x,p.y))&&productionActive(state,key(p.x,p.y)))lamp(p.x+(p.width??p.size)/2,p.y+(p.height??p.size)/2,Math.max(p.width??p.size,p.height??p.size),'#f4d68b33');
     ctx.restore();
   }
   const facilityItems=[];
   const prop=(id,asset,x,y,w=.86,h=.86,extra={})=>facilityItems.push({id,asset,x,y,w,h,...extra});
   for(const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])])if(currentlyVisible(id)){const [x,y]=xy(id),plot=productionId(id,state);prop('tower:'+id,type==='B'?'far':'near',x+.5,y+.5,.82,.88,{roof:city3D?.roofAt(plot,x+.5,y+.5)??0});}
-  for(const [id,p] of previewState.outposts)if(currentlyVisible(id)){const [x,y]=xy(id);prop('post:'+id,'watch',x+.5,y+.5,.86,.86,{target:fx.sweeps.find(s=>s.id==='post:'+id)?.target});}
+  for(const [id,p] of previewState.outposts)if(currentlyVisible(id)){const [x,y]=xy(id);prop('post:'+id,'watch',x+.5,y+.5,5.2/controlState.params.cellMeters,5.2/controlState.params.cellMeters,{target:fx.sweeps.find(s=>s.id==='post:'+id)?.target});}
   for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)){const [x,y]=xy(id),body=state.wallHealth.get(id);prop('wall:'+id,'wall',x+.5,y+.5,.9,.75,{dead:body?.hp===0,health:body?body.hp/body.max:1});}
   const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,1.3,1.3,{dead:state.hp<=0});
   for(const source of displayedEnemySources()){const w=source.width??1,h=source.height??1;prop('source:'+sourceIdentity(source),'source',(source.bx??source.x)+w/2,(source.by??source.y)+h/2,w*.72,h*.72,{dead:source.hp===0});}
@@ -779,7 +779,7 @@ function paintMap() {
     if(!drawCityFacility('post:'+id,x,y)){
     ctx.fillStyle=nightMix>.5?'#203746ea':'#e6e5d6ee';ctx.beginPath();ctx.roundRect(x+.02,y+.02,.96,.96,.12);ctx.fill();
     drawFacility('watch',x,y,1);
-    }
+    }else drawFacilityMarker('watch',x,y,size,mapDetail,hover===id||tool==='outpost');
     ctx.restore();
   }
   const [cx,cy] = xy(state.camp);

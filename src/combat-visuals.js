@@ -1,5 +1,5 @@
 import {SIZE} from './config.js?v=74';
-import {coverage,sourceAttackPlan,sourceCells,xy,key,inside} from './model.js?v=90';
+import {coverage,sourceAttackPlan,sourceCells,xy,key,inside,inStationRange} from './model.js?v=90';
 
 // 只准备显示方向；范围累计伤害和清源优先级仍由原结算负责。
 export function attackVisualPlan(state,enemies,visible){
@@ -33,11 +33,25 @@ export function shotSoundView(id,{panX,panY,cell,width,height,zoom}){
   return {gain:Math.min(1,(zoom/2)**1.3)*(1-distance*.35),pan:Math.max(-.8,Math.min(.8,dx*.8))};
 }
 
-export function searchTargets(id,controlled,sight,range){
+// 塔自己的基础范围接到真实控制外沿才算前线；远处仍有可见边界不能让后方塔持续扫光。
+export function outpostFrontier(id,radius,controlled){
+  const [cx,cy]=xy(id),frontier=new Set();
+  for(let y=Math.max(0,cy-radius);y<=Math.min(SIZE-1,cy+radius);y++)for(let x=Math.max(0,cx-radius);x<=Math.min(SIZE-1,cx+radius);x++){
+    const cell=key(x,y);if(!controlled.has(cell)||!inStationRange(cell,id,radius))continue;
+    if([[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>inside(x+dx,y+dy)&&!controlled.has(key(x+dx,y+dy))))frontier.add(cell);
+  }
+  return frontier;
+}
+export function searchTargets(id,controlled,sight,range,frontier=null){
   const [x,y]=xy(id),points=[];
+  if(frontier&&!frontier.size)return {points:[],loop:false};
   const allowed=(x,y)=>inside(Math.floor(x),Math.floor(y))&&!controlled.has(key(Math.floor(x),Math.floor(y)))&&sight.has(key(Math.floor(x),Math.floor(y)));
   for(let i=0;i<48;i++){
     const angle=i*Math.PI/24;let point=null;
+    // 每条外扫射线须经过该塔实际贡献的外沿，不能横跨后方城区去寻找更远的边界。
+    let ownsEdge=!frontier;
+    for(let d=.25;frontier&&!ownsEdge&&d<=range;d+=.25){const tx=Math.floor(x+.5+Math.cos(angle)*d),ty=Math.floor(y+.5+Math.sin(angle)*d);ownsEdge=inside(tx,ty)&&frontier.has(key(tx,ty));}
+    if(!ownsEdge){points.push(null);continue;}
     for(let distance=2;distance<=range;distance+=.5){
       const tx=x+.5+Math.cos(angle)*distance,ty=y+.5+Math.sin(angle)*distance;
       if([[0,0],[-1,0],[1,0],[0,-1],[0,1]].every(([dx,dy])=>allowed(tx+dx,ty+dy))){point={x:tx,y:ty};break;}
