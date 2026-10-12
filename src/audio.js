@@ -171,9 +171,12 @@ export function createGameAudio(options={}) {
       const on=name==='switchOn';rustle(effects,at,.027,.16,on?5200:3800,900);
       tone(effects,on?72:65,at,.06,.13,'triangle',.002,on?240:150);
       rustle(effects,at+.032,.023,.06,1800,500);
-    }else if(name==='deny'){
-      // 未能入夜是一声低沉扣合，与成功开关区分，原因仍由顶栏解释。
-      tone(effects,45,at,.10,.2,'sine',.002,55);rustle(effects,at,.045,.09,950,280);
+    }else if(name==='cannotOperate'){
+      // 不能操作：明亮的金属卡止声，短促且比成功开关更有存在感；原因仍由顶栏解释。
+      rustle(effects,at,.035,.23,6500,1800,.002);
+      tone(effects,84,at,.085,.30,'triangle',.002,740);
+      tone(effects,77,at,.095,.16,'triangle',.002,520);
+      rustle(effects,at+.045,.022,.08,3800,1000,.002);
     }else if(name==='coin'){
       tone(effects,88,at,.12,.16);tone(effects,95,at+.065,.16,.12);tone(effects,100,at+.12,.19,.06);
     }else if(name==='kill'){
@@ -181,8 +184,18 @@ export function createGameAudio(options={}) {
     }else if(name==='build'||name==='repair'){
       rustle(effects,at,.075,.1,1100);tone(effects,43,at,.16,.18,'sine',.005,65);
       [62,69,74].forEach((note,i)=>tone(effects,note,at+.055+i*.045,.16,.07,'triangle'));
-    }else if(name==='clear'){
-      rustle(effects,at,.18,.09,900);tone(effects,50,at,.12,.1,'triangle',.01,90);
+    }else if(name==='demolish'){
+      // 拆除是可控作业：中频液压声缓慢用力、持续刮擦，尾部少量碎石；避开受击的低音猛撞和塌落。
+      const motor=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
+      motor.buffer=noise;motor.loop=true;filter.type='bandpass';filter.Q.value=.8;
+      filter.frequency.setValueAtTime(520,at);filter.frequency.linearRampToValueAtTime(1300,at+.18);filter.frequency.linearRampToValueAtTime(850,at+.6);
+      gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.20,at+.10);gain.gain.linearRampToValueAtTime(.16,at+.40);gain.gain.exponentialRampToValueAtTime(.0001,at+.68);
+      motor.connect(filter);filter.connect(gain);gain.connect(effects);
+      motor.onended=()=>{motor.disconnect();filter.disconnect();gain.disconnect();};motor.start(at);motor.stop(at+.70);
+      tone(effects,57,at+.025,.53,.075,'triangle',.10,175);
+      rustle(effects,at+.20,.32,.18,3800,1700,.055);
+      [.38,.50,.62].forEach((offset,i)=>rustle(effects,at+offset,.10,.09-i*.018,2700-i*300,1200,.025));
+      [.74,.81].forEach((offset,i)=>rustle(effects,at+offset,.065,.045-i*.012,2400,1000,.004));
     }else if(name==='hurt'){
       // 篝火受击：重低音下坠、干脆碎裂与连续塌落；仍经过玩家音量和总限幅。
       tone(effects,43,at,.55,.52,'sine',.003,28);

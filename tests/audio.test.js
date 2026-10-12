@@ -5,7 +5,7 @@ import {AUDIO_DEFAULTS,readAudioSettings,createGameAudio} from '../src/audio.js'
 // 仅模拟音频时钟与节点入口，验证开关/生命周期；实际波形另在浏览器检查。
 function setup(saved=null) {
   const calls=[],timers=new Set(),param=()=>({value:0,setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){},cancelScheduledValues(){},setTargetAtTime(value){this.value=value;}});
-  const node=kind=>({kind,gain:param(),frequency:param(),threshold:param(),ratio:param(),connect(){},disconnect(){},start(at){this.call={kind,at};calls.push(this.call);},stop(at){this.call.end=at;}});
+  const node=kind=>({kind,gain:param(),frequency:param(),Q:param(),threshold:param(),ratio:param(),connect(){},disconnect(){},start(at){this.call={kind,at};calls.push(this.call);},stop(at){this.call.end=at;}});
   const ctx={state:'suspended',currentTime:0,sampleRate:8000,destination:node('destination'),
     createGain:()=>node('gain'),createOscillator:()=>node('tone'),createBufferSource:()=>node('noise'),createBiquadFilter:()=>node('filter'),createConvolver:()=>node('reverb'),createDynamicsCompressor:()=>node('limiter'),
     createBuffer:(channels,length)=>({getChannelData:()=>new Float32Array(length)}),
@@ -104,14 +104,27 @@ test('蓄力等待首次解锁时松手，不会迟到播放；关闭音效停�
   await s.sound.beginDayEnd(1000);assert.equal(s.calls.length,4);s.sound.endDayEnd();
 });
 
-test('开关与入夜拒绝声音保持短促，遵守静音且能在首次点击后解锁播放',async()=>{
-  const s=setup();s.sound.configure({music:false});const ready=s.sound.unlock();s.sound.play('deny');await ready;await Promise.resolve();
+test('开关与不能操作声音保持短促，遵守静音且能在首次点击后解锁播放',async()=>{
+  const s=setup();s.sound.configure({music:false});const ready=s.sound.unlock();s.sound.play('cannotOperate');await ready;await Promise.resolve();
   assert.ok(s.calls.length>0);
-  for(const name of ['switchOn','switchOff','deny']){
+  for(const name of ['switchOn','switchOff','cannotOperate']){
     s.ctx.currentTime+=1;s.calls.length=0;s.sound.play(name);
     assert.ok(s.calls.length>0);assert.ok(s.calls.every(call=>call.end-call.at<.15));
   }
-  s.sound.configure({effects:false});s.calls.length=0;s.sound.play('switchOn');s.sound.play('switchOff');s.sound.play('deny');assert.equal(s.calls.length,0);
+  s.sound.configure({effects:false});s.calls.length=0;s.sound.play('switchOn');s.sound.play('switchOff');s.sound.play('cannotOperate');assert.equal(s.calls.length,0);
+});
+
+test('拆除声短时间不叠播，音乐关闭仍可播放，关闭音效及后台不补播',async()=>{
+  const s=setup();s.sound.configure({music:false});await s.sound.unlock();
+  s.sound.play('demolish');const demolition=[...s.calls];
+  assert.ok(demolition.some(c=>c.kind==='tone'));assert.ok(demolition.some(c=>c.kind==='noise'));
+  assert.ok(Math.max(...demolition.map(c=>c.end-c.at))<1);
+  s.sound.play('demolish');assert.equal(s.calls.length,demolition.length);
+  s.ctx.currentTime=2;s.sound.configure({effects:false});s.sound.play('demolish');assert.equal(s.calls.length,demolition.length);
+  s.sound.configure({effects:true});s.sound.setHidden(true);s.sound.play('demolish');s.sound.play('cannotOperate');
+  assert.equal(s.calls.length,demolition.length);
+  s.sound.setHidden(false);await Promise.resolve();assert.equal(s.calls.length,demolition.length);
+  s.sound.play('demolish');assert.ok(s.calls.length>demolition.length);
 });
 
 test('空闲夜末收起配乐时钟，恢复战斗或白天时只恢复一个时钟',async()=>{

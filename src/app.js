@@ -5,7 +5,7 @@ import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=2';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=8';
-import {createGameAudio} from './audio.js?v=7';
+import {createGameAudio} from './audio.js?v=9';
 import { SIZE, DEFAULTS } from './config.js?v=74';
 import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=90';
 import {generateCityMap} from './city-map.js?v=8';
@@ -50,7 +50,7 @@ function updateAudioControls(){
 }
 for(const [id,name] of [['musicEnabled','music'],['effectsEnabled','effects']])$(id).onchange=()=>{
   sound.configure({[name]:$(id).checked});sound.unlock();updateAudioControls();
-  if(name==='effects'&&$(id).checked)sound.play('coin');
+  if(name==='effects'&&$(id).checked)sound.play('switchOn');
 };
 for(const [id,name] of [['musicVolume','musicVolume'],['effectsVolume','effectsVolume']])$(id).oninput=()=>{
   sound.configure({[name]:Number($(id).value)/100});updateAudioControls();
@@ -1278,7 +1278,7 @@ function readParams() {
 function refreshParams(){
   const error=validateParams(readParams(),state);
   $('paramStatus').textContent=paramsDirty()?'正在预览未应用参数，建设与开战前请应用。':'当前参数已应用。';
-  if(error)showTopNotice(error);
+  if(error)showTopNotice(error,false);
   update();
 }
 function clearPlayback() {
@@ -1512,8 +1512,7 @@ canvas.addEventListener('pointerup',e=>{
   if(!actionError){
     $('firstNightNotice').hidden=true;
     const delta=funds(state)-beforeFunds,site=['production','housing'].includes(tool)||(tool==='erase'&&['production','housing','outpost','ruin'].includes(erasedType))?productionSite(id,state):null;
-    sound.play(tool==='erase'?'clear':tool==='repair'?'repair':'build');
-    if(delta>0)sound.play('coin',.12);
+    sound.play(tool==='erase'?'demolish':tool==='repair'?'repair':'build');
     const names={wall:'墙已建造',build:'近防炮就位',long:'远防炮就位',outpost:'控制区扩张',housing:`入住 +${population(state).total-beforePeople} 人`,production:'生产已完成',repair:id===state.camp?`HP +${state.hp-beforeHP}`:'墙已修满',erase:'已拆除'};
     placementFx={id:site?key(site.x,site.y):id,size:site?.width||site?.size||1,height:site?.height||site?.size||1,start:performance.now(),color:delta<0?'#ffe1a0':'#aef2ce',text:`${names[tool]}${delta?` ${delta>0?'+':''}${delta} 金币`:''}`};
     pulse($('budget'),delta<0?'#ffe1a0':'#bff5ce');
@@ -1531,7 +1530,9 @@ paramsEditor(state.params);resetSourceEditors();resize(true);refreshParams();
 
 // 短促高亮确认发生变化，不震屏，不遮挡操作；尊重减少动态效果设置。
 // 失败提示每次重播字体强调，不用背景闪烁；共用顶栏提醒位置。
-function showTopNotice(text){
+function showTopNotice(text,audible=true){
+  // 点击被阻止时统一反馈；输入校验可只显示文字，悬停预览不调用此入口。
+  if(audible)sound.play('cannotOperate');
   dismissTopNotice();notify('');
   const notice=$('firstNightNotice');notice.textContent=text;notice.hidden=false;
   topNoticeTimer=setTimeout(dismissTopNotice,2500);
@@ -1585,6 +1586,7 @@ function advance() {
   motion=null;impactAge=0;timer=0;sight=visionField(state);
   const kills=state.events.filter(event=>event.type==='kill');
   if(kills.some(event=>currentlyVisible(event.id))||state.events.some(e=>e.type==='sourceLost'))sound.play('kill');
+  // 金币音暂时只服务夜间实际击杀奖励，拆返与经营收入不播放。
   if(kills.some(event=>event.value>0))sound.play('coin',.1);
   if(state.events.some(event=>event.type==='leak')){sound.play('hurt');flashCampHit();}
   for (const event of state.events) {
@@ -1608,7 +1610,6 @@ function presentNightEnd(){
   if(state.economySettled){
     if(state.result?.type==='victory')sound.play('victory');
     else if(state.result?.type==='experiment')sound.play('dawn');
-    if(state.nightEconomy>0)sound.play('coin',.38);
     // 经营单独说明来源，不与最后一次击杀的括号金额相加，也不重复发钱。
     if(state.nightEconomy>0)pulse($('budget'),'#ffe1a0');
     dawnAt=campaignComplete(state)?0:performance.now()+DAWN_MS;
@@ -1633,7 +1634,7 @@ function finishDawn(){
   // 回到钱包与报告，避免浏览器滚动锚定把新插入的收入卡藏在上方。
   document.querySelector('.build-sidebar').scrollTop=0;
 }
-function rejectNightStart(message){sound.play('deny');showTopNotice(message);return false;}
+function rejectNightStart(message){showTopNotice(message);return false;}
 function nightStartAllowed(){
   if(state.phase!=='build'||nightOutro||campaignComplete(state))return false;
   if(!firstNightReady(state)){
