@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {drawRoadTexture} from './city-textures.js?v=16';
 import {groundGlow} from './model-preview-effects.js?v=3';
+import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=1';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
-const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',source:'generated/enemy-source',street:'generated/streetlight'};
+const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',source:'generated/enemy-source',street:'generated/streetlight',wreck:'generated/burnt-car'};
 const resource=file=>new URL('../assets/model-preview/'+file+'.glb',import.meta.url).href;
 
 function operatingLights(object){
@@ -71,6 +72,7 @@ export function createCity3D(onReady){
   const buildings=new THREE.Group(),facilities=new THREE.Group();scene.add(buildings,facilities);
   const streets=new THREE.Group();scene.add(streets);let terrain=null,roadLayout=null,streetKey='',lastShadow='';
   const localLights=[];
+  const effects=createCityEffects(scene),effectCanvas=document.createElement('canvas');
   const cityCanvas=document.createElement('canvas'),facilityCanvas=document.createElement('canvas');
   const models=new Map(),entries=new Map(),props=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',lastProps='',pixels='';
   function capture(canvas){if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(renderer.domElement,0,0);return canvas;}
@@ -100,12 +102,13 @@ export function createCity3D(onReady){
   return {
     has(id){return ready&&entries.has(id);},
     hasFacility(id){return ready&&props.has(id);},
+    effectsFrame(){return ready?effectCanvas:null;},
     roofAt(id,x,y){
       const entry=entries.get(id);if(!entry)return 0;
       entry.object.updateMatrixWorld(true);const ray=new THREE.Raycaster(new THREE.Vector3(x,entry.roof+1,y),new THREE.Vector3(0,-1,0));
       return ray.intersectObject(entry.object,true)[0]?.point.y??entry.roof;
     },
-    render(plots,{width,height,panX,panY,cell,night,layout,lamps=[]}){
+    render(plots,{width,height,panX,panY,cell,night,layout,lamps=[],fx}){
       if(!ready)return null;
       const active=new Set(plots.map(p=>p.id));
       for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
@@ -136,20 +139,22 @@ export function createCity3D(onReady){
       while(localLights.length<nearby.length){const light=new THREE.PointLight('#ffd08a',0,4,2);scene.add(light);localLights.push(light);}
       localLights.forEach((light,i)=>{light.visible=i<nearby.length&&night>0;light.intensity=i<nearby.length?night*18:0;if(i<nearby.length)light.position.set(nearby[i].x,1.35,nearby[i].y);});
       streets.traverse(node=>{if(node.isMesh){if(node.material.map)node.material.opacity=night*.32;else if(node.material.name==='#ffe1a3'){node.material.emissive.set('#ffb75c');node.material.emissiveIntensity=night*1.8;}}});
-      // 云纹/悬停刷新复用城市画面；仅镜头、地块状态或昼夜光照变化时重画WebGL。
+      const lightItems=[...fx.sweeps,...fx.fires].map(item=>{const size=new THREE.Box3().setFromObject(models.get(item.asset)).getSize(new THREE.Vector3());return {...item,height:size.y*Math.min(item.w/size.x,item.h/size.z)*(item.asset==='watch'?.84:.65)};});
+      effects.updateLights(lightItems,fx.time,night,{left:-panX/cell,right:(width-panX)/cell,top:-panY/cell,bottom:(height-panY)/cell});
+      // 静态云纹/悬停刷新复用城市画面；扫光与火光读取同一动效时间重画承光层。
       const shapes=plots.map(p=>`${p.id}:${entries.get(p.id).signature}`).join('|');
-      const signature=shapes+plots.map(p=>p.powered?'1':'0').join('')+streetKey+`/${width}:${height}:${panX}:${panY}:${cell}:${night}`;
+      const signature=shapes+plots.map(p=>p.powered?'1':'0').join('')+streetKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightItems.length?fx.time:0}`;
       if(signature!==lastFrame){
         const dimensions=`${width}:${height}`;if(pixels!==dimensions){renderer.setSize(width,height,false);pixels=dimensions;}
         camera.left=-panX/cell;camera.right=(width-panX)/cell;camera.top=panY/cell;camera.bottom=-(height-panY)/cell;camera.updateProjectionMatrix();
         sky.color.set('#f4f6e2').lerp(new THREE.Color('#b9d7ed'),night);sky.groundColor.set('#809180').lerp(new THREE.Color('#4c676b'),night);sky.intensity=2.4-night*.9;
         sun.color.set('#fff1cd').lerp(new THREE.Color('#b9cfff'),night);sun.intensity=3.2-night*2.3;
         const shadowKey=shapes+streetKey;if(shadowKey!==lastShadow){renderer.shadowMap.needsUpdate=true;lastShadow=shadowKey;}
-        buildings.visible=true;facilities.visible=false;streets.visible=true;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);lastFrame=signature;
+        buildings.visible=true;facilities.visible=false;streets.visible=true;effects.group.visible=false;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);lastFrame=signature;
       }
       return cityCanvas;
     },
-    renderFacilities(items,night){
+    renderFacilities(items,night,fx){
       if(!ready)return null;
       const active=new Set(items.map(p=>p.id));for(const [id,entry] of props)if(!active.has(id)){release(entry);props.delete(id);}
       for(const item of items){
@@ -160,13 +165,17 @@ export function createCity3D(onReady){
           const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
           const scale=Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
           if(item.asset==='wall'){model.scale.z=item.h/size.z;model.position.z=-center.z*model.scale.z;}
-          facilities.add(object);props.set(item.id,{object,signature:shape});
+          facilities.add(object);props.set(item.id,{object,signature:shape,motion:facilityMotion(object)});
         }
         const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);object.scale.y=item.dead?.3:1;
         object.traverse(node=>{if(node.isMesh){node.material.opacity=item.alpha??1;node.material.transparent=node.material.opacity<1;node.material.color.copy(node.material.userData.baseColor).lerp(new THREE.Color('#84867a'),item.dead?.85:(1-(item.health??1))*.5);if(['#ff9538','#ffd36b'].includes(node.material.name))node.visible=!item.dead;}});
+        animateFacility(props.get(item.id),item,fx);
       }
-      const signature=JSON.stringify(items)+`/${lastFrame}:${night}`;
-      if(signature!==lastProps){buildings.visible=false;facilities.visible=true;streets.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);lastProps=signature;}
+      const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+`/${lastFrame}:${night}:${fx.time}`;
+      if(signature!==lastProps){
+        buildings.visible=false;facilities.visible=true;streets.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
+        effects.updateShots(fx.shots,props,fx.time);facilities.visible=false;effects.group.visible=true;renderer.render(scene,camera);capture(effectCanvas);lastProps=signature;
+      }
       return facilityCanvas;
     },
   };
