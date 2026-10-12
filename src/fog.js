@@ -1,5 +1,5 @@
 // 信息层由探索/视野决定；云纹只改变外观，流动与缩放不能揭示新情报。
-import {VISIBILITY_PX} from './visibility.js?v=4';
+import {VISIBILITY_PX} from './visibility.js?v=5';
 const CLOUD_SPAN=48,TEXTURE_PX=512,MASK_PX=VISIBILITY_PX;
 let textures=null,field=null;
 const smooth=t=>t*t*(3-2*t);

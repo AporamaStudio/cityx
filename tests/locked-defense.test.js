@@ -8,6 +8,17 @@ const layout=()=>({width:SIZE,height:SIZE,camp:{x:15,y:25},tiles:Array(SIZE*SIZE
 const make=(hp=40,count=1,first=1,interval=3)=>createCampaign({...DEFAULTS,budget:1000},Array.from({length:5},()=>[{x:15,y:20,hp,count,first,interval,target:-2}]),layout());
 const step=(s,n)=>{for(let i=0;i<n;i++)stepBattle(s);};
 
+test('地图密度倍率须有序且为整数，调节不会改变火力和锁定路线',()=>{
+  const s=make();assert.equal(buildTower(s,key(13,22),'B'),'');
+  const fire=fireField(s),routes=forecastAttacks(s,1).map(attack=>attack.path);
+  for(const [mid,near] of [[99,300],[160,1001],[160,160],[300,160],[160.5,300]]){
+    assert.match(validateParams({...s.params,mapMidZoomPercent:mid,mapNearZoomPercent:near},s),/中景\/近景/);
+  }
+  const params={...s.params,mapMidZoomPercent:200,mapNearZoomPercent:400};
+  assert.equal(validateParams(params,s),'');s.params=params;
+  assert.deepEqual(fireField(s),fire);assert.deepEqual(forecastAttacks(s,1).map(attack=>attack.path),routes);
+});
+
 // 使用真实的特殊地块占地，外侧与角落都不能被中央图标缩小成一格目标。
 const campMap=()=>({...layout(),blocks:[{x:14,y:24,width:3,height:3,kind:'open',role:'camp'}]});
 const campState=(x,y,hp=5)=>createCampaign(DEFAULTS,[[{x,y,hp,count:1,first:1,interval:3}]],campMap());

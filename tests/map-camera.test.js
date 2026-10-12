@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {cameraScale,limitZoom,limitPan,CAMERA_BORDER} from '../src/map-camera.js';
 
 test('全图尺度在桌面和窄屏容纳地图及外围，较短方向居中',()=>{
-  for(const [w,h,bottom] of [[698,584,80],[375,470,116],[1200,400,80]]){
+  for(const [w,h,bottom] of [[698,584,0],[375,470,0],[1200,400,0],[375,470,116]]){
     const cell=cameraScale(w,h,60,bottom),pan=limitPan(-9999,9999,w,h,60,cell,bottom);
     assert.ok((60+CAMERA_BORDER*2)*cell<=w-48+.001);
     assert.ok((60+CAMERA_BORDER*2)*cell<=h-bottom-48+.001);
@@ -18,7 +18,7 @@ test('缩放不能小于全图或把单格放大超过48像素',()=>{
   }
 });
 test('放大拖动到四角仍保留城市，最外格可以完整出现在操作区',()=>{
-  const w=698,h=584,cell=48,bottom=80;
+  const w=698,h=584,cell=48,bottom=0;
   const left=limitPan(9999,9999,w,h,60,cell),right=limitPan(-9999,-9999,w,h,60,cell);
   assert.ok(left.x>=0&&left.y>=0);
   assert.ok(left.x+cell<w&&left.y+cell<h-bottom);

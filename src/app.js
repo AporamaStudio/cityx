@@ -1,12 +1,12 @@
-import {createVisibility} from './visibility.js?v=4';
-import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=16';
-import {createTowerOverlay} from './tower-overlay.js?v=16';
-import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings} from './city-textures.js?v=14';
-import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=1';
+import {createVisibility} from './visibility.js?v=5';
+import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=17';
+import {createTowerOverlay} from './tower-overlay.js?v=17';
+import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings} from './city-textures.js?v=15';
+import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=2';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=8';
 import {createGameAudio} from './audio.js?v=7';
-import { SIZE, DEFAULTS } from './config.js?v=72';
-import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=88';
+import { SIZE, DEFAULTS } from './config.js?v=73';
+import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, reservedSources, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=89';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -64,7 +64,7 @@ const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport')
 let state = createCampaign(DEFAULTS,undefined,cityLayout), tool = 'wall', hover = null, dragging = null;
 let sourceDrafts=[],editingNight=1,editorSourcePreview=null;
 const blockedActionReasons=new Map();
-let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0, cameraBottom=80;
+let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0, cameraBottom=0;
 let fire = fireField(state), paused = false, timer = 0, last = 0;
 let messages = [], preparation = null;
 const canBuildWeapon = () => !nightOutro&&['build','battle'].includes(state.phase);
@@ -293,7 +293,8 @@ function resize(fit = false) {
   const oldW = width, oldH = height,oldCell=base*zoom,oldBottom=cameraBottom;
   width = viewport.clientWidth; height = viewport.clientHeight;
   canvas.width = Math.round(width * devicePixelRatio); canvas.height = Math.round(height * devicePixelRatio);
-  cameraBottom=Math.max(80,viewport.querySelector('.map-tools').offsetHeight+24);
+  // 底栏已在画布外，镜头可完整使用viewport，不再预留一块隐藏的操作区。
+  cameraBottom=0;
   base = cameraScale(width,height,SIZE,cameraBottom);
   if (fit || !oldW) { const view=initialView(state);zoom=limitZoom(SIZE/30,base);panX=width/2-(view.x+15)*base*zoom;panY=(height-cameraBottom)/2-(view.y+15)*base*zoom-6; }
   else {
@@ -372,6 +373,8 @@ function paintMap() {
   cloudSpeed=previewParams().cloudSpeedMultiplier;
   ctx.fillStyle=backdrop;ctx.fillRect(0,0,width,height);
   const view=mapDisplay(),{controlState,raw:rawControlled,controlled,dirty:draftDirty}=view;
+  const mapDetail=zoom*100<controlState.params.mapMidZoomPercent?'far':zoom*100<controlState.params.mapNearZoomPercent?'mid':'near';
+  viewport.dataset.detail=mapDetail;
   const hoveredPlot=productionId(hover,state);
   // 多留一格，边框、迷雾羽化和镜头边缘不会因裁剪突然消失。
   const bounds={left:Math.max(0,Math.floor(-panX/size)-1),top:Math.max(0,Math.floor(-panY/size)-1),right:Math.min(SIZE,Math.ceil((width-panX)/size)+1),bottom:Math.min(SIZE,Math.ceil((height-panY)/size)+1)};
@@ -493,7 +496,7 @@ function paintMap() {
       if(tool==='wall'&&state.phase==='build'&&rawControlled.has(id)&&!state.walls.has(id)&&!state.towers.has(id)&&!state.outposts.has(id)&&id!==state.camp&&!reservedSources(state).some(a=>key(a.x,a.y)===id))eligibleCells.add(id);
     }
     // 小格网仅服务当前工具；取消选择后保留城市地块和控制边界，不显示棋盘。
-    if(tool!==null){
+    if(tool!==null&&mapDetail!=='far'){
       ctx.save();if(state.layout?.tiles[id]==='road')ctx.globalAlpha=.18;
       ctx.strokeStyle = palette.grid; ctx.lineWidth = .025; ctx.strokeRect(x, y, 1, 1);ctx.restore();
     }
@@ -671,7 +674,7 @@ function paintMap() {
   ctx.beginPath();
   for(const id of eligibleCells){const [x,y]=xy(id);if(inView(x,y))ctx.rect(x+(weaponSelected?.04:.45),y+(weaponSelected?.04:.45),weaponSelected?.92:.1,weaponSelected?.92:.1);}
   ctx.fillStyle=weaponSelected?'#75ebbe38':'#a9d4cb99';ctx.fill();
-  if(weaponSelected){
+  if(weaponSelected&&mapDetail!=='far'){
     ctx.beginPath();for(const id of eligibleCells){const [x,y]=xy(id);if(inView(x,y))ctx.rect(x+.08,y+.08,.84,.84);}
     ctx.strokeStyle='#95f1cf';ctx.lineWidth=.07;ctx.stroke();
   }
@@ -814,7 +817,13 @@ function paintMap() {
     for(const [x,y,nx,ny] of controlBoundary(postRemoval.disconnected)){ctx.moveTo(x,y);ctx.lineTo(nx,ny);}ctx.stroke();ctx.restore();
   }
   ctx.restore();
-  // 街区报价有字号上限，并随地块缩小以保持边缘留白。
+  // 信息随倍率分层；报价用屏幕字号，空间不足不再把多行缩成难读的小字。
+  const labelEnemies=[];
+  const movingT=motion?Math.min(1,motion.elapsed/moveDuration()):0,movingEase=movingT*movingT*(3-2*movingT);
+  for(const enemy of motion?.actors??state.enemies){
+    const [ex,ey]=xy(enemy.id),[tx,ty]=xy(enemy.to??enemy.id),x=ex+(tx-ex)*movingEase,y=ey+(ty-ey)*movingEase;
+    if(!mapFogEnabled()||view.visibility.enemyAlpha(x+.5,y+.5)>0)labelEnemies.push({x:panX+x*size-3,y:panY+y*size-3,w:size+6,h:size+6});
+  }
   for(const p of state.sites){
     if(!inView(p.x,p.y,p.width??p.size,p.height??p.size))continue;
     const id=key(p.x,p.y),built=state.production.has(id),active=built&&productionActive(state,id);
@@ -830,7 +839,7 @@ function paintMap() {
     // 第一天尚未开放经营；正常报价随地块缩放，不再因镜头缩小突然消失。
     if(p.role!=='hospital'&&!weaponSelected&&state.day===1&&hoveredPlot!==id)continue;
     if((motion?.actors||state.enemies).some(e=>cells.includes(e.id)||cells.includes(e.to)))continue;
-    const x=panX+(p.x+(p.width??p.size)/2)*size;
+    let x=panX+(p.x+(p.width??p.size)/2)*size;
     let y=panY+(p.y+(p.height??p.size)/2)*size;
     // 窄街区的容量标签放在未架炮的行，避免把已有炮的图标遮住。
     if(weaponSelected&&(p.width??p.size)<=2){
@@ -851,24 +860,46 @@ function paintMap() {
     // 空地跟随所选用途报价，已有用途只在对应工具下显示。
     if(weaponSelected?(content.status==='empty'||!['production','housing'].includes(content.type)):content.status!=='empty'&&content.type!==tool)continue;
     const home=tool==='housing',complete=home?state.housing.has(id):built;
+    const focused=hoveredPlot===id,details=focused||complete&&mapDetail==='near';
+    if(weaponSelected&&!focused&&mapDetail!=='near')continue;
+    // 远景先表达可操作区；经营属性不改变控制或建造资格。
+    if(!weaponSelected&&(overlay.controlled||productionControlled(state,id))){
+      ctx.save();ctx.strokeStyle=focused?'#ffe0a1':'#d8d29588';ctx.lineWidth=focused?2:1;
+      ctx.strokeRect(panX+p.x*size+1,panY+p.y*size+1,(p.width??p.size)*size-2,(p.height??p.size)*size-2);ctx.restore();
+    }
+    if(!focused&&(mapDetail==='far'||complete&&mapDetail!=='near'))continue;
     const quote=weaponSelected?null:home?housingQuote(state,id):productionQuote(state,id);
     const rows=[];
-    if(!weaponSelected&&!complete)rows.push({text:`−${quote.cost}`,icon:'coin',suffix:'',color:funds(state)>=quote.cost?'#f5df9c':'#f3a49c'});
+    if(!weaponSelected&&!complete&&focused)rows.push({text:`−${quote.cost}`,icon:'coin',suffix:'',color:funds(state)>=quote.cost?'#f5df9c':'#f3a49c'});
     if(weaponSelected){
       const capacity=overlay.capacity;
       rows.push({text:`${capacity.used}/${capacity.max}`,icon:'military',suffix:'',color:capacity.used>=capacity.max?'#f3a49c':'#c4f4df'});
     }else if(!home){
-      // 建成后仅显示占用人数与收入图标；未建成仍保留费用和产出报价。
-      rows.push({text:`${productionLabor(state,id)}`,icon:'people',suffix:'',color:'#f4d3a2'});
+      // 地图先比较产出；悬停补齐费用与持续用工，按钮和资源栏继续预览实际成本。
+      if(details)rows.push({text:`${productionLabor(state,id)}`,icon:'people',suffix:'',color:'#f4d3a2'});
       rows.push({text:`+${complete&&!active?0:quote.income}`,icon:'coin',suffix:'',color:'#bff5ce'});
     }else rows.push({text:`+${quote.residents}`,icon:'residents',suffix:'',color:'#f4d3a2'});
-    ctx.save();ctx.font='600 10px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
-    const iconSize=11,rowHeight=14;
-    const widths=rows.map(row=>ctx.measureText(row.text).width+iconSize+3+ctx.measureText(row.suffix).width);
-    const width=Math.max(...widths)+8,height=rows.length*rowHeight+4;
-    // 将整个标签（底板、图标和文字）等比收进街区，四周至少留 0.15 格。
-    const fit=Math.min(1,Math.max(0,(p.width??p.size)-.3)*size/width,Math.max(0,(p.height??p.size)-.3)*size/height);
-    ctx.translate(x,y);ctx.scale(fit,fit);ctx.translate(-x,-y);
+    ctx.save();ctx.globalAlpha=!weaponSelected&&!complete&&!focused&&funds(state)<quote.cost ? .6 : 1;
+    ctx.font='600 10px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
+    const iconSize=10,rowHeight=14;
+    const widths=rows.map(row=>ctx.measureText(row.text).width+iconSize+2+ctx.measureText(row.suffix).width);
+    const width=Math.max(...widths)+4,height=rows.length*rowHeight+4;
+    // 单行可借用两侧少量街道留白；多行仍须完整落在地块内。
+    const fits=width<=((p.width??p.size)+(rows.length===1?.75:0))*size&&height<=(p.height??p.size)*size;
+    if(!focused&&!fits){
+      // 小地块先保留对应收益图标，指到该栋再展开完整报价，数字保持10px可读。
+      if(!complete&&!weaponSelected){const image=resourceIcons[home?'residents':'coin'];if(image.complete&&image.naturalWidth)ctx.drawImage(image,x-5.5,y-5.5,11,11);}
+      ctx.restore();continue;
+    }
+    // 当前地块放不下时，在其边上展示一张卡；避开当前可见敌人的HP。
+    const placements=fits?[[x,y]]:[[x,panY+p.y*size-height/2-5],[x,panY+(p.y+(p.height??p.size))*size+height/2+5],[panX+(p.x+(p.width??p.size))*size+width/2+5,y],[panX+p.x*size-width/2-5,y]];
+    let placed=false;
+    for(const [px,py] of placements){
+      const lx=Math.max(width/2+2,Math.min(px,viewport.clientWidth-width/2-2)),ly=Math.max(height/2+2,Math.min(py,viewport.clientHeight-height/2-2));
+      if(labelEnemies.some(e=>lx+width/2>e.x&&lx-width/2<e.x+e.w&&ly+height/2>e.y&&ly-height/2<e.y+e.h))continue;
+      x=lx;y=ly;placed=true;break;
+    }
+    if(!placed){ctx.restore();continue;}
     ctx.fillStyle='#142024f2';ctx.fillRect(x-width/2,y-height/2,width,height);
     rows.forEach((row,i)=>{
       const left=x-widths[i]/2,cy=y+(i-(rows.length-1)/2)*rowHeight;
@@ -901,6 +932,10 @@ function paintMap() {
   const scaleText=scaleMeters>=1000?`${scaleMeters/1000} km`:`${scaleMeters} m`;
   $('scaleLabel').textContent=scaleText;$('scaleBar').style.width=`${scaleMeters/controlState.params.cellMeters*size}px`;
   $('mapScale').setAttribute('aria-label',`地图比例尺 ${scaleText}`);
+  if($('mapDetailIcon').dataset.detail!==mapDetail){
+    $('mapDetailIcon').dataset.detail=mapDetail;
+    $('mapDetailIcon').setAttribute('aria-label',`地图信息密度：${{far:'远景',mid:'中景',near:'近景'}[mapDetail]}`);
+  }
   // 悬停只辨认地块尺寸与类型；费用、用工、火力及控制状态沿用各自直接预览。
   // 无效悬停不重复解释，点击拒绝仍由顶栏短暂提示。
   if(hover!==null){
@@ -1210,6 +1245,7 @@ function paramsEditor(params) {
   }
   fields('全局',params,'',[['budget','资金',0,10000],['stepMs','移动节拍（毫秒）',50,5000],['wallCost','墙价',1,1000],['demolitionRefundPercent','旧投入拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙造价%',1,100],['controlRadius','控制半径',1,30],['campHP','篝火耐久',1,10000],['campWarningPercent','火光危急阈值%',0,100],['campRepairCost','火光修复单价/HP',1,1000],['nightTicks','每晚拍数',1,500],['nightCleanupSpeed','夜末清源速度倍率',1,4],['nightIdleTransitionMs','空闲夜末过渡时长（毫秒）',0,3000]]);
   fields('地图',params,'',[['cellMeters','每格距离（米）',1,1000]]);
+  fields('地图信息密度',params,'',[['mapMidZoomPercent','进入中景（%）',100,1000],['mapNearZoomPercent','进入近景（%）',100,1000]]);
   fields('火力显示',params,'',[['fireNumbersMinCellPx','数字最小格宽（像素，0始终显示）',0,48]]);
   fields('日夜操作',params,'',[['dayEndHoldMs','结束白天长按时长（毫秒）',300,3000],['incomeReportMs','收入暂显时长（毫秒，0关闭）',0,15000],['resourceHoverMs','资源详情悬停时长（毫秒）',0,2000],['resourceHoverTolerancePx','资源悬停位移容差（像素）',0,20]]);
   fields('视野',params,'',[['campS01','火光 S01 距离（格）',0,30],['outpostS01','瞭望塔 S01 距离（格）',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealPadding','敌源局部 S1 外扩（格）',0,10]]);
@@ -1381,6 +1417,42 @@ $('sourceDefaults').onclick=()=>{
 };
 $('sourceAudit').onclick=()=>{if(sourceConfigurationDirty()||paramsDirty()){showTopNotice('请先应用或取消配置，再校验路线。');return;}$('auditRoutes').click();};
 $('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;constrainCamera();hover=null;updateMapSourceHover();draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;$('fullFire').onchange=draw;
+// 地图图例复用手册内容；两个ⓘ统一悬停预览、点击固定，不改变侧栏布局。
+$('mapLegend').append(...Array.from($('mapLegendGuide').querySelectorAll('.manual-rule'),row=>row.cloneNode(true)));
+const legendTips=[['forecastInfo','forecastLegend'],['mapLegendHelp','mapLegend']].map(([button,panel])=>({button:$(button),panel:$(panel),root:$(button).parentElement,open:false,pinned:false}));
+function closeLegendTips(except){
+  for(const tip of legendTips){
+    if(tip===except)continue;
+    tip.open=false;tip.pinned=false;tip.panel.hidden=true;tip.root.classList.remove('legend-open');
+    tip.button.setAttribute('aria-expanded','false');tip.button.setAttribute('aria-pressed','false');
+  }
+}
+function openLegendTip(tip){
+  closeLegendTips(tip);tip.open=true;tip.panel.hidden=false;tip.root.classList.add('legend-open');
+  tip.button.setAttribute('aria-expanded','true');
+  // 浮层限制在屏内；底栏向上展开，窄屏和滚动侧栏都不裁掉图例。
+  const anchor=tip.button.getBoundingClientRect(),box=tip.panel.getBoundingClientRect();
+  tip.panel.style.left=`${Math.max(6,Math.min(anchor.right-box.width,document.documentElement.clientWidth-box.width-6))}px`;
+  tip.panel.style.top=`${Math.max(6,Math.min(anchor.top-box.height-6,window.innerHeight-box.height-6))}px`;
+}
+for(const tip of legendTips){
+  tip.root.addEventListener('pointerenter',event=>{if(event.pointerType==='mouse')openLegendTip(tip);});
+  const leave=event=>{if(!tip.pinned&&!tip.root.contains(event.relatedTarget))closeLegendTips();};
+  tip.root.addEventListener('pointerleave',leave);tip.panel.addEventListener('pointerleave',leave);
+  tip.button.addEventListener('focus',()=>{if(tip.button.matches(':focus-visible'))openLegendTip(tip);});
+  tip.button.addEventListener('click',()=>{
+    if(tip.pinned){closeLegendTips();return;}
+    openLegendTip(tip);tip.pinned=true;tip.button.setAttribute('aria-pressed','true');
+  });
+}
+// 外部点击只收起图例，不吞掉这次地图/建设操作；Escape同样解除固定。
+document.addEventListener('pointerdown',event=>{if(!legendTips.some(tip=>tip.root.contains(event.target)))closeLegendTips();},{capture:true});
+document.addEventListener('focusin',event=>{if(legendTips.some(tip=>tip.open&&!tip.pinned&&!tip.root.contains(event.target)))closeLegendTips();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape')closeLegendTips();});
+window.addEventListener('resize',()=>closeLegendTips());
+window.addEventListener('blur',()=>closeLegendTips());
+document.addEventListener('scroll',event=>{if(!legendTips.some(tip=>tip.panel.contains(event.target)))closeLegendTips();},{capture:true});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)closeLegendTips();});
 // 右键退出当前工具，保留悬停查看与地图移动，不再执行建设或拆除。
 canvas.addEventListener('contextmenu',e=>{e.preventDefault();tool=null;selectedSource=null;pinnedSource=null;dragging=null;notify('');update();});
 canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();changeZoom(e.deltaY<0?1.12:1/1.12,e.clientX-r.left,e.clientY-r.top);},{passive:false});

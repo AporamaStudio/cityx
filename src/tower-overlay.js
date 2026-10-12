@@ -1,5 +1,5 @@
-import {SIZE} from './config.js?v=72';
-import {key,productionCells,buildingCells,plotContent,streetEdgeAccess,placementError} from './model.js?v=88';
+import {SIZE} from './config.js?v=73';
+import {key,productionCells,buildingCells,plotContent,streetEdgeAccess,placementError} from './model.js?v=89';
 
 // 一次状态更新生成一份辅助显示；镜头与悬停变化复用它，不重新跑整图建设校验。
 export function createTowerOverlay(state,controlled,movingCells=new Set()){
