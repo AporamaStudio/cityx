@@ -83,7 +83,7 @@ test('最后一格经营面积改成炮位也保留物理建筑，拆炮后仍�
   assert.equal(clearPlot(s,origin),'');assert.ok(cells.every(id=>terrainTraversable(s,id)));
 });
 test('已控制建筑整体可见，不把可见或归属当成地面传播；调参仍校验实际依赖',()=>{
-  const s=make();s.params.campSight=0;s.params.nightSightMultiplier=0;
+  const s=make();s.params.campS01=0;s.params.nightSightMultiplier=0;
   for(const phase of ['build','battle']){const seen=visionField(s,phase);assert.ok(buildingCells(s,origin).every(id=>seen.has(id)));assert.equal(seen.has(street),false);}
   assert.equal(buildTower(s,far,'A'),'');assert.equal(validateParams(s.params,s),'');
   assert.match(validateParams({...s.params,controlRadius:1},s),/控制范围/);

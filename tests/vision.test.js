@@ -8,15 +8,16 @@ test('云层流速只接受有限的0–3倍率，静止及小数合法',()=>{
  for(const cloudSpeedMultiplier of [0,.5,1,3])assert.equal(validateParams({...s.params,cloudSpeedMultiplier},s,false),'');
  for(const cloudSpeedMultiplier of [-1,3.1,NaN,Infinity])assert.match(validateParams({...s.params,cloudSpeedMultiplier},s,false),/云层流速/);
 });
-test('薄雾与浓雾宽度默认4/6格，仅接受1–20格整数且不改逻辑视野',()=>{
+test('S12/S23默认各3格，仅接受1–20格整数且不改S01逻辑视野',()=>{
  const s=createState(),before=visionField(s);
- assert.equal(s.params.fogThinCells,4);assert.equal(s.params.fogDenseCells,6);
- for(const name of ['fogThinCells','fogDenseCells']){
+ assert.equal(s.params.campS01,6);assert.equal(s.params.outpostS01,9);
+ assert.equal(s.params.fogS12,3);assert.equal(s.params.fogS23,3);
+ for(const name of ['fogS12','fogS23']){
   for(const value of [1,4,6,20]){
    const params={...s.params,[name]:value};assert.equal(validateParams(params,s,false),'');
    assert.deepEqual(visionField({...s,params}),before);
   }
-  for(const value of [0,-1,1.5,21,NaN,Infinity])assert.match(validateParams({...s.params,[name]:value},s,false),/过渡格数/);
+  for(const value of [0,-1,1.5,21,NaN,Infinity])assert.match(validateParams({...s.params,[name]:value},s,false),/雾带距离/);
  }
 });
 function state(){return createState([{x:40,y:10,hp:6,count:1,first:1,interval:12}],undefined,undefined,{...DEFAULTS,controlRadius:3});}
@@ -50,7 +51,7 @@ test('敌源从完整占地边缘揭示，可调外扩且昼夜一致；前哨�
    assert.ok(!seen.has(key(40+padding+1,10)));assert.ok(!seen.has(key(40,10-padding-1)));
   }
  }
- s.outposts.set(key(30,40),{});const before=visionField(s);s.params.outpostSight=10;assert.ok(visionField(s).size>before.size);
+ s.outposts.set(key(30,40),{});const before=visionField(s);s.params.outpostS01=10;assert.ok(visionField(s).size>before.size);
  assert.match(validateParams({...s.params,nightSightMultiplier:-1},s,false),/视野倍率/);
  for(const sourceRevealPadding of [-1,1.5,11])assert.match(validateParams({...s.params,sourceRevealPadding},s,false),/敌源边缘揭示格数/);
 });

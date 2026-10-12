@@ -1,5 +1,5 @@
 // 轻量程序贴图：日/夜各生成一套并缓存，纹理只表达材质，不参与通行或受击规则。
-import {fogColor} from './fog.js?v=9';
+import {fogColor} from './fog.js?v=14';
 const cache=new Map(),PX=32;
 const palettes={
   day:{road:'#343e47',edge:'#a3aaa4',lane:'#b3aa87',yard:'#697b70',ruin:'#877f6b',roof:'#b0a084',crack:'#454b46',factory:'#739697',factoryRoof:'#a4c2b9',home:'#af775c',homeWall:'#dfc6a0',window:'#425d64',grass:'#738b67'},

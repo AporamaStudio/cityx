@@ -4,11 +4,11 @@ export const DEFAULTS = {
   // 每格的现实边长，仅用于地图比例尺；战斗和建设仍按格计算。
   cellMeters: 20,
   // 敌源按完整占地边缘外扩揭雾，0只显示占地；与视野面板同步。
-  campSight: 6, outpostSight: 9, daySightMultiplier: 1, nightSightMultiplier: 0.6, eventSightMultiplier: 1, sourceRevealPadding: 2,
+  campS01: 6, outpostS01: 9, daySightMultiplier: 1, nightSightMultiplier: 0.6, eventSightMultiplier: 1, sourceRevealPadding: 2,
   // 云纹流速只影响外观，0静止；保持两层云的方向与速度比例。
   cloudSpeedMultiplier: 1,
-  // 从真实控制边界向外：先静态薄雾 X 格，再渐入流动浓云 N 格。
-  fogThinCells: 4, fogDenseCells: 6,
+  // S01由火光/瞭望塔的有效视野决定；视野外S12/S23分别渐入中雾/浓雾。
+  fogS12: 3, fogS23: 3,
   initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 8,
   // 空地新建为基准；修缮只改变投入，不改变建成后的收入或人口。
   productionCostPerCell: 4, productionIncomePerCell: 0.5, renovationCostPercent: 50, killReward: 2,

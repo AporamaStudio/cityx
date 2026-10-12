@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=69';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=70';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -500,10 +500,10 @@ export function validateParams(params, state, checkLayout = true) {
   if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
   if(!integer(params.campWarningPercent,0,100))return '火光危急阈值须为 0–100% 整数，0 关闭持续警示。';
   if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';
-  if(!integer(params.campSight,0,30)||!integer(params.outpostSight,0,30)||!integer(params.sourceRevealPadding,0,10))return '外围视野须为 0–30 整数，敌源边缘揭示格数须为 0–10 整数。';
+  if(!integer(params.campS01,0,30)||!integer(params.outpostS01,0,30)||!integer(params.sourceRevealPadding,0,10))return 'S01 视野距离须为 0–30 格整数，敌源边缘揭示格数须为 0–10 整数。';
   if(!['daySightMultiplier','nightSightMultiplier','eventSightMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=3))return '视野倍率须为 0–3，可使用小数。';
   if(!Number.isFinite(params.cloudSpeedMultiplier)||params.cloudSpeedMultiplier<0||params.cloudSpeedMultiplier>3)return '云层流速倍率须为 0–3，0 静止。';
-  if(!integer(params.fogThinCells,1,20)||!integer(params.fogDenseCells,1,20))return '薄雾/浓雾过渡格数须为 1–20 整数。';
+  if(!integer(params.fogS12,1,20)||!integer(params.fogS23,1,20))return 'S12/S23 雾带距离须为 1–20 格整数。';
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
   if(!integer(params.outpostWorkers,0,100))return '每座瞭望塔用工须为0–100人整数。';
   if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产、瞭望塔或增加住房。';
@@ -949,8 +949,8 @@ export function visionField(state,phase=state.phase){
       if(inStationRange(id,center,radius)||(extent>0&&Math.hypot(dx,dy)<=extent+2))seen.add(id);
     }
   };
-  if(state.hp>0)station(state.camp,p.controlRadius,p.campSight);
-  for(const id of state.outposts.keys())station(id,p.outpostRadius,p.outpostSight);
+  if(state.hp>0)station(state.camp,p.controlRadius,p.campS01);
+  for(const id of state.outposts.keys())station(id,p.outpostRadius,p.outpostS01);
   for(const [id,type] of state.towers)
     for(const cell of coverage(id,p.weapons[type].range,p.weapons[type].shape))seen.add(cell);
   // 揭示从整个源头占地向四周外扩，含角落；道路出兵口不是揭雾中心。
