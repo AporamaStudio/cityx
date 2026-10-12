@@ -1,10 +1,11 @@
-import {createCity3D} from './city-3d.js?v=10';
+import {createCity3D} from './city-3d.js?v=12';
 import {operatingStreetLamps} from './city-streets.js?v=1';
+import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier} from './combat-visuals.js?v=3';
 import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
 import {createTowerOverlay} from './tower-overlay.js?v=18';
-import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings} from './city-textures.js?v=16';
+import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=16';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=2';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=8';
@@ -522,7 +523,7 @@ function paintMap() {
     }
     if(view.towers.cellSites[id]&&!state.blocked.has(id)){ctx.fillStyle=nightMix>.5?'#2c4841':'#77967b';ctx.fillRect(x,y,1,1);}
     if ($('heat').checked && power && currentlyVisible(id)) { ctx.fillStyle = `rgba(99,211,166,${Math.min(.6,.17 + power * .045)})`; ctx.fillRect(x, y, 1, 1); }
-    if (state.walls.has(id)&&!state.blocked.has(id)) {
+    if (!cityFrame&&state.walls.has(id)&&!state.blocked.has(id)) {
       ctx.fillStyle=nightMix>.5?'#39424a':'#b9bba8';ctx.fillRect(x+.04,y+.04,.92,.92);
       drawFacility('wall',x+.05,y+.05,.9);
     }
@@ -554,7 +555,7 @@ function paintMap() {
   const prop=(id,asset,x,y,w=.86,h=.86,extra={})=>facilityItems.push({id,asset,x,y,w,h,...extra});
   for(const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])])if(currentlyVisible(id)){const [x,y]=xy(id),plot=productionId(id,state);prop('tower:'+id,type==='B'?'far':'near',x+.5,y+.5,.82,.88,{roof:city3D?.roofAt(plot,x+.5,y+.5)??0});}
   for(const [id,p] of previewState.outposts)if(currentlyVisible(id)){const [x,y]=xy(id);prop('post:'+id,'watch',x+.5,y+.5,5.2/controlState.params.cellMeters,5.2/controlState.params.cellMeters,{target:fx.sweeps.find(s=>s.id==='post:'+id)?.target});}
-  for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)){const [x,y]=xy(id),body=state.wallHealth.get(id);prop('wall:'+id,'wall',x+.5,y+.5,.9,.75,{dead:body?.hp===0,health:body?body.hp/body.max:1});}
+  for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)){const [x,y]=xy(id),body=state.wallHealth.get(id);prop('wall:'+id,'wall',x+.5,y+.5,1,1,{dead:body?.hp===0,health:body?body.hp/body.max:1,connections:wallConnections(id,state.walls,SIZE,SIZE,roadMarkings(state.layout).get(id)?.axis),cellMeters:controlState.params.cellMeters});}
   const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,campWidth,campWidth,{dead:state.hp<=0});
   const campPlot=state.sites.find(p=>p.role==='camp');if(campPlot)prop('camp-plaza','plaza',campPlot.x+(campPlot.width??campPlot.size)/2,campPlot.y+(campPlot.height??campPlot.size)/2,campPlot.width??campPlot.size,campPlot.height??campPlot.size);
   for(const source of displayedEnemySources()){const w=source.width??1,h=source.height??1;prop('source:'+sourceIdentity(source),'source',(source.bx??source.x)+w/2,(source.by??source.y)+h/2,w*.72,h*.72,{dead:source.hp===0});}
@@ -603,7 +604,7 @@ function paintMap() {
     for(const cell of occupied){const [cx,cy]=xy(cell);if(!occupied.has(key(cx-1,cy))){ctx.moveTo(cx,cy);ctx.lineTo(cx,cy+1);}if(!occupied.has(key(cx+1,cy))){ctx.moveTo(cx+1,cy);ctx.lineTo(cx+1,cy+1);}if(!occupied.has(key(cx,cy-1))){ctx.moveTo(cx,cy);ctx.lineTo(cx+1,cy);}if(!occupied.has(key(cx,cy+1))){ctx.moveTo(cx,cy+1);ctx.lineTo(cx+1,cy+1);}}ctx.stroke();
     // 街区标签在屏幕空间绘制，缩小棋盘时仍保持可读。
   }
-  for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)){const [x,y]=xy(id);if(facilityFrame){ctx.fillStyle=palette.groundB;ctx.fillRect(x+.04,y+.04,.92,.92);drawCityFacility('wall:'+id,x,y);}}
+  for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)){const [x,y]=xy(id);if(facilityFrame)drawCityFacility('wall:'+id,x,y);}
   for(const wreck of wrecks)drawCityFacility(wreck.id,wreck.x-.5,wreck.y-.5);
   const effectFrame=city3D?.effectsFrame();if(effectFrame){ctx.save();clipSight();ctx.drawImage(effectFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
   if(mapFogEnabled())drawFog(ctx,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom);
@@ -737,7 +738,14 @@ function paintMap() {
   }
   for(const [id,wallBody] of state.wallHealth){
     if(!currentlyVisible(id))continue;const [x,y]=xy(id);if(!inView(x,y))continue;
-    if(wallBody?.hp===0){ctx.fillStyle='#956b57';ctx.fillRect(x+.1,y+.6,.8,.24);ctx.strokeStyle='#dfaa81';ctx.lineWidth=.06;ctx.beginPath();ctx.moveTo(x+.2,y+.2);ctx.lineTo(x+.8,y+.8);ctx.stroke();}
+    if(wallBody?.hp>0&&facilityFrame){
+      // 米制墙厚在俯视很细，用战术衬边保证辨识；方向与真实墙段一致，不扩张阻挡格。
+      const mask=wallConnections(id,state.walls,SIZE,SIZE,roadMarkings(state.layout).get(id)?.axis);ctx.beginPath();
+      for(const [bit,dx,dy] of [[1,0,-1],[2,1,0],[4,0,1],[8,-1,0]])if(mask&bit){ctx.moveTo(x+.5,y+.5);ctx.lineTo(x+.5+dx*.5,y+.5+dy*.5);}
+      ctx.strokeStyle='#1c2b32';ctx.lineWidth=3/size;ctx.stroke();ctx.strokeStyle=nightMix>.5?'#dfd5b5':'#9e8d64';ctx.lineWidth=1.4/size;ctx.stroke();
+      if(hover===id)drawFacilityMarker('wall',x,y,size,mapDetail,true);
+    }
+    if(wallBody?.hp===0){const gap=Math.min(.65,10/size);ctx.beginPath();ctx.moveTo(x+.5-gap*.5,y+.5-gap*.5);ctx.lineTo(x+.5+gap*.5,y+.5+gap*.5);ctx.strokeStyle='#302b29';ctx.lineWidth=3/size;ctx.stroke();ctx.strokeStyle='#dfaa81';ctx.lineWidth=1.4/size;ctx.stroke();}
     if(wallBody&&wallBody.hp>0&&wallBody.hp<wallBody.max){ctx.fillStyle='#533a32';ctx.fillRect(x+.1,y+.85,.8,.1);ctx.fillStyle='#ecc58f';ctx.fillRect(x+.1,y+.85,.8*wallBody.hp/wallBody.max,.1);}
   }
   // 连续实线区别道路/格网，衬边保证昼夜对比；线宽用屏幕像素，不随远景消失。

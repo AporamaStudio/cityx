@@ -56,6 +56,17 @@ function damageBuilding(object){
   floor.position.set(center.x,bounds.min.y+size.y*.12,center.z);floor.userData.ownGeometry=true;object.attach(floor);
 }
 
+function connectedWall(template,item){
+  const object=new THREE.Group(),bounds=new THREE.Box3().setFromObject(template),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3()),thickness=.6/item.cellMeters,height=2.5/item.cellMeters;
+  for(const [bit,dx,dz] of [[1,0,-1],[2,1,0],[4,0,1],[8,-1,0]])if(item.connections&bit){
+    const segment=new THREE.Group(),model=template.clone(true);model.scale.set((item.dead?.3:.5)/size.x,height/size.y,thickness/size.z);model.position.set(-center.x*model.scale.x,-bounds.min.y*model.scale.y,-center.z*model.scale.z);
+    segment.add(model);segment.position.set(dx*(item.dead?.35:.25),0,dz*(item.dead?.35:.25));segment.rotation.y=-Math.atan2(dz,dx);object.add(segment);
+  }
+  if(!item.dead){const joint=new THREE.Mesh(new THREE.BoxGeometry(thickness,height,thickness),new THREE.MeshStandardMaterial({color:'#a79f89',roughness:1}));joint.position.y=height*.5;joint.userData.ownGeometry=true;object.add(joint);}
+  else for(let i=0;i<6;i++){const rubble=new THREE.Mesh(new THREE.BoxGeometry(.7/item.cellMeters,.45/item.cellMeters,.5/item.cellMeters),new THREE.MeshStandardMaterial({color:'#9d9380',roughness:1}));rubble.position.set((i%3-1)*1.1/item.cellMeters,.2/item.cellMeters,(Math.floor(i/3)-.5)*1.2/item.cellMeters);rubble.rotation.y=i*.63;rubble.userData.ownGeometry=true;object.add(rubble);}
+  return object;
+}
+
 export function createCity3D(onReady){
   let renderer;
   try{renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,preserveDrawingBuffer:true});}
@@ -161,15 +172,14 @@ export function createCity3D(onReady){
       if(!ready)return null;
       const active=new Set(items.map(p=>p.id));for(const [id,entry] of props)if(!active.has(id)){release(entry);props.delete(id);}
       for(const item of items){
-        const shape=`${item.asset}:${item.w}:${item.h}`;
+        const shape=`${item.asset}:${item.w}:${item.h}:${item.connections??''}:${item.cellMeters??''}:${item.dead??false}`;
         if(props.get(item.id)?.signature!==shape){
           if(props.has(item.id))release(props.get(item.id));
-          const object=new THREE.Group(),model=models.get(item.asset).clone(true);object.add(model);model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.material.userData.baseColor=node.material.color.clone();}});object.updateMatrixWorld(true);
+          const object=new THREE.Group(),model=item.asset==='wall'?connectedWall(models.get('wall'),item):models.get(item.asset).clone(true);object.add(model);model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.material.userData.baseColor=node.material.color.clone();}});object.updateMatrixWorld(true);
           // 灰色炮体与灰屋顶分离；材质名保留，后坐、炮口和弹迹仍读取原节点。
           if(['near','far'].includes(item.asset))model.traverse(node=>{if(node.isMesh){const color=node.material.name==='#6c7775'?'#354b4b':['#3f5057','#1e2b32'].includes(node.material.name)?'#98aaa1':item.asset==='far'?'#c3c5d0':'#a8b7a0';node.material.color.set(color);node.material.userData.baseColor=node.material.color.clone();node.material.emissive.set(color);node.material.emissiveIntensity=.10;}});
           const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
-          const scale=Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
-          if(item.asset==='wall'){model.scale.z=item.h/size.z;model.position.z=-center.z*model.scale.z;}
+          if(item.asset!=='wall'){const scale=Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);}
           facilities.add(object);props.set(item.id,{object,signature:shape,motion:facilityMotion(object)});
         }
         const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);object.scale.y=item.dead?.3:1;
