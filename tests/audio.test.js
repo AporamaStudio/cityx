@@ -4,16 +4,16 @@ import {AUDIO_DEFAULTS,readAudioSettings,createGameAudio} from '../src/audio.js'
 
 // 仅模拟音频时钟与节点入口，验证开关/生命周期；实际波形另在浏览器检查。
 function setup(saved=null) {
-  const calls=[],timers=new Set(),param=()=>({value:0,setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){},cancelScheduledValues(){},setTargetAtTime(value){this.value=value;}});
-  const node=kind=>({kind,gain:param(),frequency:param(),Q:param(),threshold:param(),ratio:param(),connect(){},disconnect(){},start(at){this.call={kind,at};calls.push(this.call);},stop(at){this.call.end=at;}});
+  const calls=[],nodes=[],timers=new Set(),param=()=>({value:0,steps:[],setValueAtTime(value,at){this.value=value;this.steps.push({value,at});},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){},cancelScheduledValues(){},setTargetAtTime(value){this.value=value;}});
+  const node=kind=>{const result={kind,gain:param(),pan:param(),frequency:param(),Q:param(),threshold:param(),ratio:param(),connections:[],connect(target){this.connections.push(target);},disconnect(){},start(at){this.call={kind,at};calls.push(this.call);},stop(at){this.call.end=at;}};nodes.push(result);return result;};
   const ctx={state:'suspended',currentTime:0,sampleRate:8000,destination:node('destination'),
-    createGain:()=>node('gain'),createOscillator:()=>node('tone'),createBufferSource:()=>node('noise'),createBiquadFilter:()=>node('filter'),createConvolver:()=>node('reverb'),createDynamicsCompressor:()=>node('limiter'),
+    createGain:()=>node('gain'),createStereoPanner:()=>node('panner'),createOscillator:()=>node('tone'),createBufferSource:()=>node('noise'),createBiquadFilter:()=>node('filter'),createConvolver:()=>node('reverb'),createDynamicsCompressor:()=>node('limiter'),
     createBuffer:(channels,length)=>({getChannelData:()=>new Float32Array(length)}),
     resume:async()=>{ctx.state='running';},suspend:async()=>{ctx.state='suspended';}};
   let created=0,stored=saved;
   const storage={getItem:()=>stored,setItem:(key,value)=>{stored=value;}};
   const sound=createGameAudio({storage,createContext:()=>{created++;return ctx;},repeat:fn=>{timers.add(fn);return fn;},cancelRepeat:fn=>timers.delete(fn)});
-  return {sound,ctx,calls,timers,storage,get created(){return created;}};
+  return {sound,ctx,calls,nodes,timers,storage,get created(){return created;}};
 }
 
 test('声音偏好校验、音量限制与存储异常不影响游戏',()=>{
@@ -23,6 +23,28 @@ test('声音偏好校验、音量限制与存储异常不影响游戏',()=>{
   assert.deepEqual(prefs,{music:false,effects:true,musicVolume:1,effectsVolume:0});
   const sound=createGameAudio({storage:{getItem(){throw Error();},setItem(){throw Error();}}});
   assert.doesNotThrow(()=>sound.configure({music:false}));assert.equal(sound.settings.music,false);
+});
+
+test('两种炮声有不同轮廓，同拍多炮不被提示音去重且保留独立空间音量',async()=>{
+  const s=setup();s.sound.configure({music:false});await s.sound.unlock();
+  s.sound.fireShots([{id:1,type:'A',gain:1,pan:-.6},{id:2,type:'B',gain:.4,pan:.6}]);
+  assert.equal(s.calls.length,7);assert.deepEqual(s.nodes.filter(n=>n.kind==='panner').map(n=>n.pan.value),[-.6,.6]);
+  const buses=s.nodes.filter(n=>n.kind==='gain'&&n.connections.some(n=>n.kind==='panner'));
+  assert.ok(buses[0].gain.value>buses[1].gain.value);
+  const tones=s.nodes.filter(n=>n.kind==='tone');assert.ok(tones[0].frequency.steps[0].value>tones.at(-1).frequency.steps[0].value);
+  s.sound.fireShots([{id:3,type:'A',gain:1,pan:0}]);assert.equal(s.calls.length,11);
+  s.sound.updateShotView(id=>id===1?{gain:.1,pan:.2}:null);assert.ok(buses[0].gain.value<.1);assert.equal(buses[1].gain.value,0);
+});
+
+test('炮声遵守静音/后台并取消暂停前的排程，暂停单步仍可发声',async()=>{
+  const s=setup();s.sound.configure({music:false});await s.sound.unlock();s.sound.setScene('battle');
+  const fire=()=>s.sound.fireShots([{id:1,type:'A',gain:1,pan:0}]);fire();s.ctx.currentTime=.01;s.sound.setScene('battle',true);
+  assert.ok(s.calls.every(c=>c.end<=.036));
+  s.sound.updateShotView(()=>({gain:1,pan:0}));assert.ok(s.nodes.filter(n=>n.kind==='gain'&&n.connections.some(n=>n.kind==='panner')).every(n=>n.gain.value===0));
+  s.calls.length=0;fire();s.sound.setScene('battle',true);assert.equal(s.calls.length,4);assert.ok(s.calls.some(c=>c.end>.1));
+  s.sound.configure({effects:false});s.calls.length=0;fire();assert.equal(s.calls.length,0);
+  s.sound.configure({effects:true});s.sound.setHidden(true);fire();assert.equal(s.calls.length,0);
+  s.sound.setHidden(false);await Promise.resolve();fire();assert.equal(s.calls.length,4);
 });
 
 test('第一次交互才创建音频，重复解锁不会叠加音乐时钟',async()=>{

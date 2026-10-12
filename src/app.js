@@ -1,5 +1,5 @@
-import {createCity3D} from './city-3d.js?v=4';
-import {attackVisualPlan,resolvedShots,searchTargets,searchAim} from './combat-visuals.js?v=1';
+import {createCity3D} from './city-3d.js?v=5';
+import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView} from './combat-visuals.js?v=2';
 import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
 import {createTowerOverlay} from './tower-overlay.js?v=18';
@@ -7,7 +7,7 @@ import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=2';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=8';
-import {createGameAudio} from './audio.js?v=9';
+import {createGameAudio} from './audio.js?v=10';
 import { SIZE, DEFAULTS } from './config.js?v=74';
 import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=90';
 import {generateCityMap} from './city-map.js?v=8';
@@ -375,6 +375,7 @@ function paintMap() {
   ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   ctx.clearRect(0, 0, width, height);
   const size = base * zoom;
+  sound.updateShotView(id=>currentlyVisible(id)?shotSoundView(id,{panX,panY,cell:size,width,height,zoom}):null);
   const palette=Object.fromEntries(Object.keys(terrainColors).map(name=>[name,terrainColor(name)]));
   // 地图外与远处雾使用同一底色，宽屏留白也不出现另一块纯色平面。
   const backdrop=fogColor(nightMix),fogTime=reducedMotion.matches?0:performance.now()/1000;
@@ -495,7 +496,7 @@ function paintMap() {
     const cell=candidates.find(([x,y])=>inside(x,y)&&state.layout?.tiles[key(x,y)]==='road'&&currentlyVisible(key(x,y))&&!state.walls.has(key(x,y))&&!state.outposts.has(key(x,y))&&!streetLamps.some(l=>Math.hypot(l.x-x-.5,l.y-y-.5)<2)&&!wrecks.some(l=>Math.hypot(l.x-x-.5,l.y-y-.5)<3));
     if(cell)wrecks.push({id:'wreck:'+p.id,asset:'wreck',x:cell[0]+.5,y:cell[1]+.5,w:.7,h:.95});
   }
-  const fx={time:effectTime,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
+  const fx={time:effectTime,cell:size,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);if(target)fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:.86,h:.86,target});}
   const [fireX,fireY]=xy(state.camp);if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:1.3,h:1.3});
   const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,night:nightMix,layout:state.layout,lamps:streetLamps,fx});
@@ -1642,6 +1643,8 @@ function advance() {
   stepBattle(state,motion?.actions,state.params.nightIdleTransitionMs>0&&!reducedMotion.matches);
   combatShots=resolvedShots(plan,state.events).map(shot=>({...shot,at:effectTime}));
   motion=null;impactAge=0;timer=0;sight=visionField(state);
+  const shotSounds=combatShots.filter(shot=>currentlyVisible(shot.id)&&currentlyVisible(key(Math.floor(shot.x),Math.floor(shot.y)))).flatMap(shot=>{const view=shotSoundView(shot.id,{panX,panY,cell:base*zoom,width,height,zoom});return view?[{id:shot.id,type:shot.type,...view}]:[];});
+  sound.fireShots(shotSounds,effectiveSpeed());
   const kills=state.events.filter(event=>event.type==='kill');
   if(kills.some(event=>currentlyVisible(event.id))||state.events.some(e=>e.type==='sourceLost'))sound.play('kill');
   // 金币音暂时只服务夜间实际击杀奖励，拆返与经营收入不播放。

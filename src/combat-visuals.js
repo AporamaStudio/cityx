@@ -25,6 +25,14 @@ export function resolvedShots(plan,events){
   return plan.filter(shot=>events.some(e=>e.value>0&&(shot.sourceId?e.type==='sourceHit'&&e.sourceId===shot.sourceId:e.type==='hit'&&e.id===shot.target&&e.target===shot.enemyTarget)));
 }
 
+// 以当前镜头作为听音位置：屏外炮位静音，拉远镜头减弱，左右方位用轻量声像表示。
+export function shotSoundView(id,{panX,panY,cell,width,height,zoom}){
+  const [x,y]=xy(id),sx=panX+(x+.5)*cell,sy=panY+(y+.5)*cell;
+  if(sx<0||sy<0||sx>=width||sy>=height)return null;
+  const dx=(sx-width/2)/(width/2),dy=(sy-height/2)/(height/2),distance=Math.min(1,Math.hypot(dx,dy)/Math.SQRT2);
+  return {gain:Math.min(1,(zoom/2)**1.3)*(1-distance*.35),pan:Math.max(-.8,Math.min(.8,dx*.8))};
+}
+
 export function searchTargets(id,controlled,sight,range){
   const [x,y]=xy(id),points=[];
   const allowed=(x,y)=>inside(Math.floor(x),Math.floor(y))&&!controlled.has(key(Math.floor(x),Math.floor(y)))&&sight.has(key(Math.floor(x),Math.floor(y)));

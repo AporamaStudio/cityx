@@ -23,6 +23,7 @@ export function createGameAudio(options={}) {
   let mode='day',hidden=false,paused=false,idle=false,unlocked=false,unavailable=false,waking=null;
   const lastEffect=new Map();
   let dayEnd=null;
+  const combatVoices=new Set();
 
   // 音量平滑变化，开关与昼夜过渡不产生突兀的截断声。
   function level(node,value,seconds=.08) {
@@ -44,6 +45,7 @@ export function createGameAudio(options={}) {
     gain.gain.exponentialRampToValueAtTime(.0001,at+duration);
     osc.connect(gain);gain.connect(bus);
     osc.onended=()=>{osc.disconnect();gain.disconnect();};osc.start(at);osc.stop(at+duration+.02);
+    return osc;
   }
   function rustle(bus,at,duration,volume,cutoff,endCutoff=null,attack=.005) {
     const source=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
@@ -53,6 +55,7 @@ export function createGameAudio(options={}) {
     gain.gain.exponentialRampToValueAtTime(.0001,at+duration);
     source.connect(filter);filter.connect(gain);gain.connect(bus);
     source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect();};source.start(at);source.stop(at+duration+.02);
+    return source;
   }
   function init() {
     ctx=createContext();master=ctx.createGain();music=ctx.createGain();effects=ctx.createGain();day=ctx.createGain();night=ctx.createGain();
@@ -115,18 +118,51 @@ export function createGameAudio(options={}) {
     for(const name of ['musicVolume','effectsVolume'])if(Number.isFinite(patch[name]))settings[name]=Math.max(0,Math.min(1,patch[name]));
     try{storage?.setItem(STORAGE_KEY,JSON.stringify(settings));}catch{}
     if(dayEnd&&(!settings.effects||settings.effectsVolume===0))endDayEnd();
+    if(!settings.effects||settings.effectsVolume===0)stopCombat();
     syncLevels();startClock();
   }
   function setScene(phase,isPaused=false,isIdle=false) {
     const next=phase==='build'?'day':['won','lost'].includes(phase)?'silent':'night';
+    if(next!=='night'||isPaused&&!paused||isIdle)stopCombat();
     if(next!==mode){endDayEnd();mode=next;beat=0;nextBeat=(ctx?.currentTime??0)+.06;}
     paused=isPaused;idle=isIdle&&next==='night';syncLevels();startClock();
   }
   function setHidden(value) {
     if(value)endDayEnd();
+    if(value)stopCombat();
     hidden=value;syncLevels();
     if(hidden){stopClock();if(ctx?.state==='running')ctx.suspend().catch(()=>{});}
     else if(unlocked){ctx.resume().then(()=>{syncLevels();startClock();}).catch(()=>{});}
+  }
+  function stopCombat(){
+    for(const voice of combatVoices){voice.cancelled=true;level(voice.bus,0,.012);for(const node of voice.nodes)try{node.stop(ctx.currentTime+.025);}catch{}}
+  }
+  function fireShots(shots,speed=1){
+    // 战斗声不补播积压，也不套用普通提示音的同类合并；每座可听炮位各发一次。
+    if(!ctx||!unlocked||ctx.state!=='running'||hidden||!settings.effects||settings.effectsVolume===0)return;
+    const audible=shots.filter(shot=>Number.isFinite(shot.gain)&&shot.gain>0);if(!audible.length)return;
+    const at=ctx.currentTime+.008,mix=1/Math.sqrt(audible.length);
+    for(const shot of audible){
+      const bus=ctx.createGain(),panner=ctx.createStereoPanner?.(),voice={id:shot.id,mix,bus,panner,nodes:new Set()};bus.gain.setValueAtTime(Math.min(1,shot.gain)*mix,at);
+      if(panner){panner.pan.setValueAtTime(Math.max(-.8,Math.min(.8,shot.pan??0)),at);bus.connect(panner);panner.connect(effects);}else bus.connect(effects);
+      combatVoices.add(voice);
+      const keep=node=>{voice.nodes.add(node);const cleanup=node.onended;node.onended=()=>{cleanup?.();voice.nodes.delete(node);if(!voice.nodes.size){bus.disconnect();panner?.disconnect();combatVoices.delete(voice);}};};
+      if(shot.type==='B'){
+        // 远炮：低沉单发炮膛冲击与较长的空气尾声，区别近炮的干脆双响。
+        keep(tone(bus,38,at,.25,.46,'sine',.003,27));
+        keep(rustle(bus,at,.075,.25,1600,280,.003));
+        keep(rustle(bus,at+.025,.26,.11,750,160,.018));
+      }else{
+        for(const offset of [0,.16/Math.max(1,speed)]){
+          keep(rustle(bus,at+offset,.045,.28,4700,900,.002));
+          keep(tone(bus,58,at+offset,.065,.25,'triangle',.002,110));
+        }
+      }
+    }
+  }
+  function updateShotView(project){
+    if(!ctx)return;
+    for(const voice of combatVoices)if(!voice.cancelled&&voice.id!==undefined){const view=project(voice.id);level(voice.bus,(view?.gain??0)*voice.mix,.012);voice.panner?.pan.setTargetAtTime(view?.pan??0,ctx.currentTime,.025);}
   }
   // 单次长按有独立声音总线，取消时淡出并停止所有已排程声源，避免迟到入夜声。
   function endDayEnd(){
@@ -222,5 +258,5 @@ export function createGameAudio(options={}) {
       [50,45,38].forEach((note,i)=>tone(effects,note,at+i*.16,.65,.11,'triangle',.025));
     }
   }
-  return {get settings(){return {...settings};},unlock,configure,setScene,setHidden,play,beginDayEnd,endDayEnd};
+  return {get settings(){return {...settings};},unlock,configure,setScene,setHidden,play,fireShots,updateShotView,beginDayEnd,endDayEnd};
 }

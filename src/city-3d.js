@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {drawRoadTexture} from './city-textures.js?v=16';
 import {groundGlow} from './model-preview-effects.js?v=3';
-import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=1';
+import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=2';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',source:'generated/enemy-source',street:'generated/streetlight',wreck:'generated/burnt-car'};
@@ -174,7 +174,7 @@ export function createCity3D(onReady){
       const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+`/${lastFrame}:${night}:${fx.time}`;
       if(signature!==lastProps){
         buildings.visible=false;facilities.visible=true;streets.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
-        effects.updateShots(fx.shots,props,fx.time);facilities.visible=false;effects.group.visible=true;renderer.render(scene,camera);capture(effectCanvas);lastProps=signature;
+        effects.updateShots(fx.shots,props,fx.time,fx.cell);facilities.visible=false;effects.group.visible=true;renderer.render(scene,camera);capture(effectCanvas);lastProps=signature;
       }
       return facilityCanvas;
     },

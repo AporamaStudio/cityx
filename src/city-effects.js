@@ -19,7 +19,7 @@ export function createCityEffects(scene){
   }
   function shotEntry(id,long){
     if(shots.has(id))return shots.get(id);
-    const object=new THREE.Group(),flash=mesh(new THREE.SphereGeometry(long?.19:.14,6,4),'#fff1ab'),smoke=mesh(new THREE.SphereGeometry(.11,7,5),'#a6b0aa',.18),bullet=mesh(new THREE.SphereGeometry(long?.07:.045,6,4),long?'#ffe3a0':'#ffd082');
+    const object=new THREE.Group(),flash=mesh(new THREE.SphereGeometry(long?.19:.14,6,4),'#fff1ab'),smoke=mesh(new THREE.SphereGeometry(.11,7,5),'#a6b0aa',.18),bullet=mesh(new THREE.SphereGeometry(long?.16:.10,6,4),long?'#ffe3a0':'#ffd082');
     const tracer=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]),new THREE.LineBasicMaterial({color:long?'#f8dca5':'#ffd38b',transparent:true,opacity:.7,depthTest:false}));tracer.userData.ownGeometry=true;tracer.frustumCulled=false;
     object.add(flash,smoke,bullet,tracer);group.add(object);const entry={object,flash,smoke,bullet,tracer};shots.set(id,entry);return entry;
   }
@@ -41,7 +41,7 @@ export function createCityEffects(scene){
         }
       }
     },
-    updateShots(items,props,time){
+    updateShots(items,props,time,cell){
       const active=new Set(items.map(item=>item.id));for(const [id,entry] of shots)if(!active.has(id)){dispose(entry.object);shots.delete(id);}
       for(const item of items){
         const body=props.get('tower:'+item.id),age=time-item.at;if(!body||age<0||age>.5){if(shots.has(item.id))shots.get(item.id).object.visible=false;continue;}
@@ -50,7 +50,7 @@ export function createCityEffects(scene){
         const start=bounds.getCenter(new THREE.Vector3()),end=new THREE.Vector3(item.x,.35,item.y),t=Math.min(1,age/.24);
         e.object.visible=true;e.flash.position.copy(start);e.flash.visible=age<.085||(item.type!=='B'&&age>.16&&age<.22);
         for(const node of [e.flash,e.bullet]){node.material.transparent=true;node.material.opacity=item.alpha;}
-        e.bullet.visible=age<.24;e.bullet.position.lerpVectors(start,end,t);if(item.type==='B')e.bullet.position.y+=Math.sin(t*Math.PI)*.5;
+        e.bullet.visible=age<.24;e.bullet.scale.setScalar(Math.max(1,3/(cell*(item.type==='B'?.16:.10)*2)));e.bullet.position.lerpVectors(start,end,t);if(item.type==='B')e.bullet.position.y+=Math.sin(t*Math.PI)*.5;
         e.tracer.visible=age<.25;e.tracer.material.opacity=.7*(1-age/.25)*item.alpha;const positions=e.tracer.geometry.attributes.position;positions.setXYZ(0,start.x,start.y,start.z);positions.setXYZ(1,e.bullet.position.x,e.bullet.position.y,e.bullet.position.z);positions.needsUpdate=true;
         e.smoke.visible=age>.06&&age<.45;e.smoke.position.copy(start).add(new THREE.Vector3(0,age*.5,0));e.smoke.scale.setScalar(1+age*3);e.smoke.material.opacity=Math.max(0,.18*(1-age/.45))*item.alpha;
       }

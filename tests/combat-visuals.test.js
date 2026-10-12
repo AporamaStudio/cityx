@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
 import {createCampaign,key,beginBattle,stepBattle,controlMask,visionField,enemyKey} from '../src/model.js';
-import {attackVisualPlan,resolvedShots,searchTargets,searchAim} from '../src/combat-visuals.js';
+import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView} from '../src/combat-visuals.js';
 
 function setup(){
   const layout={width:SIZE,height:SIZE,camp:{x:15,y:25},tiles:Array(SIZE*SIZE).fill('road'),blocks:[{x:13,y:22,width:2,height:3,kind:'building'},{x:16,y:22,width:2,height:2,kind:'building'}]};
@@ -37,4 +37,12 @@ test('探照灯扫点始终在真实控制区外与现有视野内，取点不�
   assert.ok(sector.points.length);for(let t=0;t<40;t+=.17){const p=searchAim(sector,t,id,controlled,sight),cell=key(Math.floor(p.x),Math.floor(p.y));assert.ok(!controlled.has(cell));assert.ok(sight.has(cell));}
   assert.deepEqual(state,before);
   assert.equal(searchAim(searchTargets(id,new Set(Array.from({length:SIZE*SIZE},(_,i)=>i)),sight,18),0,id,controlled,sight),null);
+});
+test('炮位声音随镜头缩放衰减，屏外静音且左右声像跟随实际位置',()=>{
+  const view={width:100,height:100,panX:0,panY:0,cell:10,zoom:2},id=key(4,4);
+  assert.equal(shotSoundView(key(10,4),view),null);assert.equal(shotSoundView(key(4,10),view),null);
+  assert.equal(shotSoundView(id,{...view,panX:-60}),null);
+  assert.ok(shotSoundView(id,{...view,zoom:1}).gain<shotSoundView(id,view).gain);
+  assert.ok(shotSoundView(id,{...view,zoom:3}).gain<=1);
+  assert.ok(shotSoundView(key(1,4),view).pan<0);assert.ok(shotSoundView(key(8,4),view).pan>0);
 });
