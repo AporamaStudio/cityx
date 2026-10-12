@@ -1,4 +1,4 @@
-import {createCity3D} from './city-3d.js?v=1';
+import {createCity3D} from './city-3d.js?v=2';
 import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
 import {createTowerOverlay} from './tower-overlay.js?v=18';
@@ -519,6 +519,20 @@ function paintMap() {
   // 仅把原画面允许显示完整外观的地块交给3D；未知城区继续用低细节轮廓。
   const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&!view.sourceSites.has(id)&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.role==='hospital'?'hospital':p.content.type,status:p.content.status}));
   const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,night:nightMix});
+  const facilityItems=[];
+  const prop=(id,asset,x,y,w=.86,h=.86,extra={})=>facilityItems.push({id,asset,x,y,w,h,...extra});
+  for(const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])])if(currentlyVisible(id)){const [x,y]=xy(id),plot=productionId(id,state);prop('tower:'+id,type==='B'?'far':'near',x+.5,y+.5,.82,.88,{roof:city3D?.roofAt(plot,x+.5,y+.5)??0});}
+  for(const [id,p] of previewState.outposts)if(currentlyVisible(id)){const [x,y]=xy(id);prop('post:'+id,'watch',x+.5,y+.5);}
+  for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)){const [x,y]=xy(id),body=state.wallHealth.get(id);prop('wall:'+id,'wall',x+.5,y+.5,.9,.75,{dead:body?.hp===0,health:body?body.hp/body.max:1});}
+  const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,1.3,1.3,{dead:state.hp<=0});
+  for(const source of displayedEnemySources()){const w=source.width??1,h=source.height??1;prop('source:'+sourceIdentity(source),'source',(source.bx??source.x)+w/2,(source.by??source.y)+h/2,w*.72,h*.72,{dead:source.hp===0});}
+  const facilityFrame=city3D?.renderFacilities(facilityItems,nightMix);
+  // 3D对象分层显示：先按原权限筛选，再在原绘制位置裁剪，不挡住路线和HP。
+  const drawCityFacility=(id,x,y,w=1,h=1)=>{
+    if(!facilityFrame||!city3D.hasFacility(id))return false;
+    ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();ctx.drawImage(facilityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();return true;
+  };
+
   for(const p of state.sites){
     if(!inView(p.x,p.y,p.width??p.size,p.height??p.size))continue;
     const {x,y}=p,n=p.width??p.size,m=p.height??p.size,id=key(x,y),built=state.production.has(id),active=built&&productionActive(state,id),selected=hoveredPlot===id&&(['production','housing'].includes(tool)||(tool==='erase'&&['production','housing','ruin'].includes(demolitionQuote(state,hover).type)));
@@ -556,6 +570,7 @@ function paintMap() {
     for(const cell of occupied){const [cx,cy]=xy(cell);if(!occupied.has(key(cx-1,cy))){ctx.moveTo(cx,cy);ctx.lineTo(cx,cy+1);}if(!occupied.has(key(cx+1,cy))){ctx.moveTo(cx+1,cy);ctx.lineTo(cx+1,cy+1);}if(!occupied.has(key(cx,cy-1))){ctx.moveTo(cx,cy);ctx.lineTo(cx+1,cy);}if(!occupied.has(key(cx,cy+1))){ctx.moveTo(cx,cy+1);ctx.lineTo(cx+1,cy+1);}}ctx.stroke();
     // 街区标签在屏幕空间绘制，缩小棋盘时仍保持可读。
   }
+  for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)){const [x,y]=xy(id);if(facilityFrame){ctx.fillStyle=palette.groundB;ctx.fillRect(x+.04,y+.04,.92,.92);drawCityFacility('wall:'+id,x,y);}}
   if(mapFogEnabled())drawFog(ctx,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom);
   // 内侧明显、外侧轻薄，单独一段边界也能辨认方向；缓存色带放在战术信息下方。
   drawControlBorderBands(ctx,view.controlBorder,nightMix);
@@ -702,8 +717,10 @@ function paintMap() {
   for (const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])]) {
     const [x,y] = xy(id);if(!inView(x,y)||!currentlyVisible(id))continue;
     ctx.save();if(ghost&&id===hover)ctx.globalAlpha=.5;
+    if(!drawCityFacility('tower:'+id,x,y)){
     ctx.fillStyle=nightMix>.5?'#253e3a':'#c5cec0';ctx.fillRect(x+.04,y+.04,.92,.92);ctx.strokeStyle=nightMix>.5?'#92c8b8':'#52695e';ctx.lineWidth=.06;ctx.strokeRect(x+.04,y+.04,.92,.92);
     drawFacility(type==='B'?'far':'near',x+.04,y+.04,.92);
+    }
     // 已有炮位与可建空位使用不同颜色；预览炮不计入已用容量。
     if(weaponSelected&&state.towers.has(id)){ctx.strokeStyle='#ffdb83';ctx.lineWidth=.10;ctx.strokeRect(x+.03,y+.03,.94,.94);}
     ctx.restore();
@@ -721,8 +738,10 @@ function paintMap() {
   }
   for(const [id,p] of previewState.outposts){
     if(!currentlyVisible(id))continue;const [x,y]=xy(id);ctx.save();if(postGhost&&id===hover)ctx.globalAlpha=.5;
+    if(!drawCityFacility('post:'+id,x,y)){
     ctx.fillStyle=nightMix>.5?'#203746ea':'#e6e5d6ee';ctx.beginPath();ctx.roundRect(x+.02,y+.02,.96,.96,.12);ctx.fill();
     drawFacility('watch',x,y,1);
+    }
     ctx.restore();
   }
   const [cx,cy] = xy(state.camp);
@@ -731,7 +750,7 @@ function paintMap() {
   if(!state.result&&campCritical(state))ctx.globalAlpha=reducedMotion.matches?1:.6+.4*(.5+.5*Math.cos(performance.now()*Math.PI*2/1400));
   const glow=ctx.createRadialGradient(cx+.5,cy+.5,.1,cx+.5,cy+.5,1.8);
   glow.addColorStop(0,state.hp<=0?'#ffc17c00':!state.result&&campCritical(state)?'#f5847c99':'#ffc17c44');glow.addColorStop(1,'#ffc17c00');ctx.fillStyle=glow;ctx.fillRect(cx-1.3,cy-1.3,3.6,3.6);
-  drawCampfire(ctx,cx,cy,1,state.hp>0);
+  if(!drawCityFacility('camp',cx-.2,cy-.2,1.4,1.4))drawCampfire(ctx,cx,cy,1,state.hp>0);
   ctx.restore();
   const impact = Math.min(1,impactAge/IMPACT_MS);
   const mistColor=fogColor(nightMix).match(/\d+/g).map(Number);
@@ -793,6 +812,7 @@ function paintMap() {
     if(danger){ctx.shadowColor='#ff3c31';ctx.shadowBlur=reducedMotion.matches?9:8+8*pulse;}
     ctx.beginPath();ctx.moveTo(x+.20,y+.04);ctx.lineTo(x+w-.20,y+.04);ctx.lineTo(x+w-.04,y+.20);ctx.lineTo(x+w-.04,y+h-.20);ctx.lineTo(x+w-.20,y+h-.04);ctx.lineTo(x+.20,y+h-.04);ctx.lineTo(x+.04,y+h-.20);ctx.lineTo(x+.04,y+.20);ctx.closePath();ctx.fill();ctx.stroke();
     ctx.shadowBlur=0;ctx.setLineDash([]);
+    drawCityFacility('source:'+sourceIdentity(source),x,y,w,h);
     label(alive?source.index+1:'×',x+w/2,y+h/2,alive?'#edd4ca':'#b9d8c1',Math.max(.4,8/size));
     ctx.restore();
     if(highlighted)drawSourceLocator(source,size);
