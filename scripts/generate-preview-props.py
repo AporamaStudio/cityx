@@ -251,9 +251,39 @@ def entrances():
     m.save('courtyard-entry',{'units':'meters','visualOnly':True,'openingMeters':4})
 
 
+def street_furniture():
+    # 文明街景采用真实小尺寸；不是新的经营、通行或交通对象。
+    m=Model()
+    for x in (-.85,.85):
+        for z in (-.23,.23):m.box((x,.24,z),(.11,.48,.12),'#526056')
+        m.box((x,.83,.3),(.1,.65,.08),'#526056')
+    for z in (-.22,0,.22):m.box((0,.5,z),(2.2,.12,.18),'#987b59')
+    for y in (.74,.98,1.12):m.box((0,y,.3),(2.2,.10,.10),'#987b59')
+    m.save('street-bench',{'units':'meters','visualOnly':True})
+    m=Model();m.cylinder((0,.36,0),.8,.72,'#b1b49b',sides=8)
+    m.cylinder((0,.72,0),.69,.05,'#5c6350',sides=8)
+    for x,z,height in [(-.28,-.18,.76),(.30,-.14,.63),(0,.30,.70)]:
+        m.cylinder((x,.72+height/2,z),.40,height,'#7b9968',top=.12,sides=6)
+    m.save('street-planter',{'units':'meters','visualOnly':True})
+    # 沿用燃烧车的车身、车窗和车轮布局，改回完好色彩/保险杠，不自动生成交通。
+    m=Model();m.box((0,.35,0),(1.15,.35,2.55),'#758d96')
+    m.box((0,.74,.23),(.94,.5,1.24),'#466d80');m.box((0,1.02,.25),(.96,.08,1.28),'#8da4a9')
+    m.box((0,.75,-.41),(.78,.3,.055),'#4f7082');m.box((0,.72,.87),(.73,.27,.055),'#4f7082')
+    for x in (-.58,.58):
+        for z in (-.78,.78):m.box((x,.23,z),(.22,.44,.43),'#242e2a')
+    m.box((0,.32,-1.3),(1.1,.12,.12),'#b1b7ae');m.box((0,.32,1.255),(1.1,.12,.04),'#b1b7ae')
+    for x in (-.4,.4):
+        m.box((x,.46,-1.278),(.21,.12,.025),'#ffe1a3');m.box((x,.47,1.258),(.19,.12,.025),'#a9564e')
+    scale=2.4/1.38
+    for positions,_ in m.parts.values():positions[:]=[p*scale for p in positions]
+    m.save('civil-car',{'units':'meters','visualOnly':True,'pairedWith':'burnt-car','partnerScaleToMeters':scale})
+
+
 if __name__ == '__main__':
     if '--entrances' in sys.argv:
         entrances();print('已生成4个配套墙门/文明入口样件')
+    elif '--street-furniture' in sys.argv:
+        street_furniture();print('已生成3个米制长椅/花池/完好车辆样件')
     else:
-        tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad();entrances()
-        print('已生成18个独立GLB样件，含配套墙门与文明入口')
+        tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad();entrances();street_furniture()
+        print('已生成21个独立GLB样件，含配套门与文明街景')

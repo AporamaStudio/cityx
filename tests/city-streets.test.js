@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {operatingStreetLamps,ruinStreetProps} from '../src/city-streets.js';
+import {operatingStreetLamps,ruinStreetProps,operatingStreetProps} from '../src/city-streets.js';
 
 test('运营路灯靠路缘且灯臂朝道路，隐藏、未控、被占道路不生成灯',()=>{
   const layout={width:10,height:10,tiles:Array(100).fill('road')},plot={id:22,x:2,y:2,w:2,h:2,powered:true},controlled=new Set(Array.from({length:100},(_,i)=>i)),occupied=new Set();
@@ -9,10 +9,10 @@ test('运营路灯靠路缘且灯臂朝道路，隐藏、未控、被占道路�
   for(const lamp of lamps){
     const x=Math.floor(lamp.x),y=Math.floor(lamp.y);assert.ok(x<2||x>=4||y<2||y>=4);
     const dx=Math.cos(lamp.angle),dy=-Math.sin(lamp.angle);
-    if(x<2){assert.ok(dx<-.99);assert.ok(Math.abs(lamp.x-x-.9)<1e-8);}
-    else if(x>=4){assert.ok(dx>.99);assert.ok(Math.abs(lamp.x-x-.1)<1e-8);}
-    else if(y<2){assert.ok(dy<-.99);assert.ok(Math.abs(lamp.y-y-.9)<1e-8);}
-    else{assert.ok(dy>.99);assert.ok(Math.abs(lamp.y-y-.1)<1e-8);}
+    if(x<2){assert.ok(dx<-.99);assert.ok(Math.abs(lamp.x-x-(1-1.8/20*.6))<1e-8);}
+    else if(x>=4){assert.ok(dx>.99);assert.ok(Math.abs(lamp.x-x-1.8/20*.6)<1e-8);}
+    else if(y<2){assert.ok(dy<-.99);assert.ok(Math.abs(lamp.y-y-(1-1.8/20*.6))<1e-8);}
+    else{assert.ok(dy>.99);assert.ok(Math.abs(lamp.y-y-1.8/20*.6)<1e-8);}
   }
   assert.deepEqual(operatingStreetLamps([{...plot,powered:false}],input),[]);
   assert.deepEqual(operatingStreetLamps([plot],{...input,visible:()=>false}),[]);
@@ -29,4 +29,13 @@ test('废墟街景随恢复消失，隐藏道路或设施占用不生成，尺�
   assert.deepEqual(ruinStreetProps([plot],{...options,visible:()=>false}),[]);
   assert.deepEqual(ruinStreetProps([plot],{...options,occupied:new Set(Array.from({length:100},(_,i)=>i))}),[]);
   assert.equal(ruinStreetProps([plot],{...options,cellMeters:40})[0].w,a[0].w/2);
+});
+
+test('文明街景沿运营灯位放置，保持米制尺寸和受控可见道路权限',()=>{
+  const layout={width:10,height:10,tiles:Array(100).fill('road')},controlled=new Set(Array.from({length:100},(_,i)=>i)),options={layout,controlled,visible:()=>true,occupied:new Set(),cellMeters:20};
+  const lamps=operatingStreetLamps([{id:22,x:2,y:2,w:2,h:2,powered:true},{id:55,x:5,y:5,w:2,h:2,powered:true}],options),props=operatingStreetProps(lamps,options);
+  assert.equal(props.length,2);assert.equal(props.filter(p=>p.asset==='bench').length,1);assert.equal(props.filter(p=>p.asset==='planter').length,1);
+  assert.equal(props.find(p=>p.asset==='bench').w,2.2/20);assert.equal(props.find(p=>p.asset==='planter').w,1.6/20);
+  assert.deepEqual(operatingStreetProps(lamps,{...options,visible:()=>false}),[]);assert.deepEqual(operatingStreetProps(lamps,{...options,controlled:new Set()}),[]);assert.deepEqual(operatingStreetProps(lamps,{...options,occupied:controlled}),[]);
+  assert.deepEqual(operatingStreetProps([] ,options),[]);
 });

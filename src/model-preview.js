@@ -35,6 +35,9 @@ const assets=[
   ['streetlight','路灯','nature','streetlight',1.2,'同一盏灯白天不发光，恢复运营的街区夜晚亮灯。'],
   ['trash','垃圾堆','nature','trash',1.4,'废弃街区的杂物；恢复后清走，先验证清理带来的变化。'],
   ['rubble','瓦砾','nature','rubble',2,'附着原建筑的塌损位置，帮助关联废墟与完好状态。'],
+  ['street-bench','路缘长椅','nature','street-bench',3.3,'约2.2m长/0.7m深/1.17m高，运营街区少量布置；仅装饰，不增加交互。'],
+  ['street-planter','文明花池','nature','street-planter',2.2,'约1.6m见方/1.5m高的小花池，和垃圾/瓦砾形成恢复前后对比。'],
+  ['civil-car','完好车辆','nature','civil-car',2.7,'约4.6m长/2.4m宽/1.85m高，与燃烧车共用车身和车轮布局；生成/移除与交通规则暂不接入。'],
   ['burnt-car','燃烧车辆','nature','burnt-car',2.7,'焦黑车身与少量火焰表现灾损，作为恢复前的局部视觉样件。']
 ].map(([id,name,category,file,width,description])=>({id,name,category,file,width,description,local:!file.includes('/'),paired:category==='building'&&file.includes('/'),landmark:['hospital','bank'].includes(id)}));
 const $=id=>document.getElementById(id),models=new Map(),district=new THREE.Group(),single=new THREE.Group();
@@ -58,7 +61,7 @@ effects=createPreviewEffects({isNight:()=>night,render:time=>{
   fireLight.intensity=22*(1+.12*Math.sin(time*8.7)+.05*Math.sin(time*13));
   wreckLight.intensity=9*(1+.16*Math.sin(time*9.1+2));renderer.render(scene,camera);
 }});
-const structures=[],streetlights=[],abandoned=[];
+const structures=[],streetlights=[],abandoned=[],civilDecor=[];
 const palette={stone:'#c5c5b0',grass:'#a7b491',road:'#68736e',brick:'#7f9180'};
 function box(parent,x,y,z,w,h,d,color){
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color,roughness:.95}));
@@ -186,6 +189,7 @@ function buildDistrict(){
     light.position.set(x+.3,bounds.max.y-.14,z);district.add(light,pool);streetlights.push({obj,light,pool});
   }
   for(const [id,x,z,w] of [['trash',-5,2,1.1],['trash',10,2.5,1],['burnt-car',-8,-.8,2.5],['rubble',11,1.8,1.6]])abandoned.push(place(id,x,z,w));
+  for(const [id,x,z,w] of [['street-bench',-9.0,6,1.2],['street-planter',1,1.8,.7],['civil-car',-8,-.8,2.5]])civilDecor.push(place(id,x,z,w));
   const rim=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[-16,.16,-3],[-9,.16,-3],[-9,.16,-1],[-1,.16,-1],[-1,.16,2],[7,.16,2],[7,.16,-2],[16,.16,-2],[16,.16,11],[-16,.16,11]].map(p=>new THREE.Vector3(...p))),new THREE.LineBasicMaterial({color:'#66b6ae'}));district.add(rim);
   // 演示恢复时只改变状态，不将控制与运营视为同一个条件。
   for(const s of structures){
@@ -200,7 +204,7 @@ function updateRestore(){
     setPower(s.obj,restored&&s.front);
   }
   for(const lamp of streetlights){setPower(lamp.obj,restored);lamp.light.visible=lamp.pool.visible=night&&restored;}
-  for(const prop of abandoned)prop.visible=!restored;
+  for(const prop of abandoned)prop.visible=!restored;for(const prop of civilDecor){prop.visible=restored;setPower(prop,true);}
   wreckLight.visible=mode==='district'&&!restored;
   updateSingleState();
   $('restore').textContent=restored?'查看恢复前':'查看恢复后';render();
@@ -239,7 +243,7 @@ function catalog(filter='all'){
   for(const a of assets.filter(a=>filter==='all'||a.category===filter)){
     const btn=document.createElement('button');btn.type='button';btn.className='asset';btn.dataset.id=a.id;
     if(!a.local){const img=document.createElement('img');img.src=root+'kenney/'+a.file+'.png';img.alt='';btn.append(img);}
-    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','wall-gate':'▥','wall-gate-open':'Ⅱ','wall-gate-ruined':'⋈','courtyard-entry':'∩','camp-plaza':'▤','enemy-squad':'♟','enemy-source-ruined':'◇','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰'})[a.id];btn.append(icon);}
+    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','wall-gate':'▥','wall-gate-open':'Ⅱ','wall-gate-ruined':'⋈','courtyard-entry':'∩','camp-plaza':'▤','enemy-squad':'♟','enemy-source-ruined':'◇','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰','street-bench':'▰','street-planter':'♧','civil-car':'▱'})[a.id];btn.append(icon);}
     const label=document.createElement('span'),name=document.createElement('b'),origin=document.createElement('small');name.textContent=a.name;origin.textContent=a.local?'自制样件':'Kenney';label.append(name,origin);btn.append(label);
     btn.disabled=!ready;btn.classList.toggle('selected',a.id===selected.id);btn.addEventListener('click',()=>selectAsset(a));$('catalog').append(btn);
   }
