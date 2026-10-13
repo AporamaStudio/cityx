@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {createWreckDressing,updateWreckDressing,styleWreckBody} from './city-wrecks.js?v=1';
 import {createRoadModel} from './city-road-model.js?v=1';
 import {createPreviewEffects,groundGlow} from './model-preview-effects.js?v=3';
 
@@ -42,6 +43,7 @@ const assets=[
   ['burnt-car','燃烧车辆','nature','burnt-car',2.7,'焦黑车身与少量火焰表现灾损，作为恢复前的局部视觉样件。']
 ].map(([id,name,category,file,width,description])=>({id,name,category,file,width,description,local:!file.includes('/'),paired:category==='building'&&file.includes('/'),landmark:['hospital','bank'].includes(id)}));
 const $=id=>document.getElementById(id),models=new Map(),district=new THREE.Group(),single=new THREE.Group(),roads=new THREE.Group();
+const wreckDressing=new Map();
 let selected=assets[0],mode='district',night=false,restored=false,angle='angle',ready=false,singleState='intact',singleVariants=null,effects=null;
 const motionPreference=matchMedia('(prefers-reduced-motion: reduce)');let animated=!motionPreference.matches;
 const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-25,25,20,-20,.1,250);
@@ -60,7 +62,7 @@ const wreckLight=new THREE.PointLight('#ff9a49',9,6,2);wreckLight.position.set(-
 scene.add(sky,sun,fireLight,wreckLight,district,single,roads);
 effects=createPreviewEffects({isNight:()=>night,render:time=>{
   fireLight.intensity=22*(1+.12*Math.sin(time*8.7)+.05*Math.sin(time*13));
-  wreckLight.intensity=9*(1+.16*Math.sin(time*9.1+2));renderer.render(scene,camera);
+  wreckLight.intensity=9*(1+.16*Math.sin(time*9.1+2));for(const entry of wreckDressing.values())updateWreckDressing(entry,time,night,!animated);renderer.render(scene,camera);
 }});
 const structures=[],streetlights=[],abandoned=[],civilDecor=[],roadLights=[],roadRuins=[],roadCivil=[];
 const palette={stone:'#c5c5b0',grass:'#a7b491',road:'#68736e',brick:'#7f9180'};
@@ -99,6 +101,7 @@ function cloneModel(asset,width=asset.width,roofLights=true,ruined=false){
     group.add(lighting);
   }
   if(roofLights&&isBuilding(asset)&&!asset.landmark)addRoofLights(anchor);
+  if(asset.id==='burnt-car'){styleWreckBody(anchor);wreckDressing.set(anchor,createWreckDressing(anchor,size.x*scale,size.z*scale));}
   effects.attach(asset.id,anchor);
   return anchor;
 }
@@ -247,7 +250,7 @@ function setMode(next){
 }
 function selectAsset(asset,show=true){
   selected=asset;
-  if(singleVariants)effects.remove(singleVariants.normal);
+  if(singleVariants){effects.remove(singleVariants.normal);wreckDressing.delete(singleVariants.normal);}
   single.traverse(node=>{if(node.isMesh||node.isLine){node.material.dispose();if(node.userData.previewGeometry)node.geometry.dispose();}});single.clear();
   const width=asset.landmark?asset.width:Math.min(asset.width,4.8),normal=cloneModel(asset,width),ruined=isBuilding(asset)?ruinedModel(asset,width):null;
   single.add(normal);if(ruined)single.add(ruined);singleVariants={normal,ruined};

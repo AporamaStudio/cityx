@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {createWreckDressing,updateWreckDressing,styleWreckBody} from './city-wrecks.js?v=1';
 import {createRoadModel} from './city-road-model.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=3';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=5';
@@ -210,17 +211,18 @@ export function createCity3D(onReady){
         const shape=`${item.asset}:${item.w}:${item.h}:${item.connections??''}:${item.cellMeters??''}:${item.dead??false}`;
         if(props.get(item.id)?.signature!==shape){
           if(props.has(item.id))release(props.get(item.id));
-          const object=new THREE.Group(),model=item.asset==='wall'?connectedWall(models.get('wall'),item):models.get(item.asset).clone(true);object.add(model);model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.material.userData.baseColor=node.material.color.clone();}});object.updateMatrixWorld(true);
+          const object=new THREE.Group(),model=item.asset==='wall'?connectedWall(models.get('wall'),item):models.get(item.asset).clone(true);object.add(model);model.traverse(node=>{if(node.isMesh)node.material=node.material.clone();});if(item.asset==='wreck')styleWreckBody(model);model.traverse(node=>{if(node.isMesh)node.material.userData.baseColor=node.material.color.clone();});object.updateMatrixWorld(true);
           // 灰色炮体与灰屋顶分离；材质名保留，后坐、炮口和弹迹仍读取原节点。
           if(['near','far'].includes(item.asset))model.traverse(node=>{if(node.isMesh){const color=node.material.name==='#6c7775'?'#354b4b':['#3f5057','#1e2b32'].includes(node.material.name)?'#98aaa1':item.asset==='far'?'#c3c5d0':'#a8b7a0';node.material.color.set(color);node.material.userData.baseColor=node.material.color.clone();node.material.emissive.set(color);node.material.emissiveIntensity=.10;}});
           const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
           if(item.asset!=='wall'){const scale=Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);}
-          (item.asset==='enemy'?enemies:facilities).add(object);props.set(item.id,{object,signature:shape,height:new THREE.Box3().setFromObject(object).max.y,motion:facilityMotion(object)});
+          (item.asset==='enemy'?enemies:facilities).add(object);props.set(item.id,{object,signature:shape,height:new THREE.Box3().setFromObject(object).max.y,motion:facilityMotion(object),wreck:item.asset==='wreck'?createWreckDressing(object,item.w,item.h):null});
         }
-        const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);if(item.asset==='enemy'){object.scale.setScalar(item.visualScale??1);if(item.angle!==undefined)object.rotation.y=item.angle;}else object.scale.y=item.dead&&item.asset!=='sourceRuined'?.3:1;
-        object.traverse(node=>{if(node.isMesh){node.material.opacity=item.alpha??1;node.material.transparent=node.material.opacity<1;node.material.color.copy(node.material.userData.baseColor).lerp(new THREE.Color('#84867a'),item.dead?.85:(1-(item.health??1))*.5);if(['#ff9538','#ffd36b'].includes(node.material.name))node.visible=!item.dead;}});
+        const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);if(item.asset==='wreck')object.rotation.y=item.angle??0;if(item.asset==='enemy'){object.scale.setScalar(item.visualScale??1);if(item.angle!==undefined)object.rotation.y=item.angle;}else object.scale.y=item.dead&&item.asset!=='sourceRuined'?.3:1;
+        object.traverse(node=>{if(node.isMesh){node.material.opacity=item.alpha??1;node.material.transparent=node.material.opacity<1;if(!node.material.userData.baseColor)node.material.userData.baseColor=node.material.color.clone();node.material.color.copy(node.material.userData.baseColor).lerp(new THREE.Color('#84867a'),item.dead?.85:(1-(item.health??1))*.5);if(['#ff9538','#ffd36b'].includes(node.material.name))node.visible=!item.dead;}});
         if(item.asset==='enemy')object.traverse(node=>{if(node.isMesh){node.material.color.lerp(new THREE.Color(item.fogColor),(1-item.fogAlpha)*.75);node.material.emissive.copy(node.material.color);node.material.emissiveIntensity=.08;}});
         animateFacility(props.get(item.id),item,fx);
+        if(props.get(item.id).wreck)updateWreckDressing(props.get(item.id).wreck,fx.time,night,fx.reducedMotion);
       }
       const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+JSON.stringify(fx.transitions)+`/${lastFrame}:${night}:${fx.time}`;
       if(signature!==lastProps){

@@ -1,3 +1,5 @@
+import {roadMarkings,roadProfile} from './city-roads.js?v=1';
+
 // 街景只读取现有运营、归属和视野；灯杆靠建筑一侧的路缘，灯臂朝向道路。
 export function operatingStreetLamps(plots,{layout,controlled,visible,occupied,cellMeters}){
   const lamps=[],width=layout.width,height=layout.height;
@@ -29,6 +31,16 @@ export function ruinStreetProps(plots,{layout,visible,occupied,cellMeters}){
     props.push({id:'debris:'+p.id,asset,x:x+(dx?dx<0?.82:.18:.5),y:y+(dy?dy<0?.82:.18:.5),w,h});
   }
   return props;
+}
+
+// 车沿临楼的外侧车道/停车带停靠，不放到新增的中央分隔带；倾斜姿态稳定。
+export function wreckRoadPose(layout,x,y,plot,cellMeters=20){
+  const mark=roadMarkings(layout).get(y*layout.width+x);
+  if(!mark?.axis)return {x:x+.5,y:y+.5,angle:0};
+  const p=roadProfile(mark.width*cellMeters),vertical=mark.axis==='v';
+  const side=Math.sign((vertical?plot.x+plot.w/2:plot.y+plot.h/2)-(vertical?x+.5:y+.5))||1;
+  const edge=p.median/2+p.lanes*p.lane+(p.parking?p.parking/2:-p.lane*.5),cross=Math.max(.16,Math.min(.84,mark.center+side*edge/cellMeters));
+  return {x:x+(vertical?cross:.5),y:y+(vertical?.5:cross),angle:(vertical?0:Math.PI/2)+(plot.id%2?.12:-.12)};
 }
 
 // 每栋运营建筑最多一处路缘文明装饰；小尺寸、同一权限，不增加可交互对象。

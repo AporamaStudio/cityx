@@ -1,6 +1,6 @@
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView} from './city-view.js?v=2';
-import {createCity3D} from './city-3d.js?v=29';
-import {operatingStreetLamps,ruinStreetProps,operatingStreetProps} from './city-streets.js?v=3';
+import {createCity3D} from './city-3d.js?v=30';
+import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,wreckRoadPose} from './city-streets.js?v=4';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=4';
 import {createVisibility} from './visibility.js?v=6';
@@ -536,9 +536,9 @@ function paintMap() {
   // 车辆按约4.6m长换算为地图格，不按道路格放大；火光随实体尺度一起收缩。
   const wreckWidth=2.4/controlState.params.cellMeters,wreckLength=4.6/controlState.params.cellMeters;
   for(const p of cityPlots)if(p.status==='ruin'&&p.type!=='hospital'&&p.id%3===0){
-    const candidates=[[p.x-1,p.y],[p.x+p.w,p.y],[p.x,p.y-1],[p.x,p.y+p.h]];
+    const candidates=[[p.x-1,p.y+Math.floor(p.h/2)],[p.x+p.w,p.y+Math.floor(p.h/2)],[p.x+Math.floor(p.w/2),p.y-1],[p.x+Math.floor(p.w/2),p.y+p.h]];
     const cell=candidates.find(([x,y])=>inside(x,y)&&state.layout?.tiles[key(x,y)]==='road'&&currentlyVisible(key(x,y))&&!state.walls.has(key(x,y))&&!state.outposts.has(key(x,y))&&!streetLamps.some(l=>Math.hypot(l.x-x-.5,l.y-y-.5)<2)&&!wrecks.some(l=>Math.hypot(l.x-x-.5,l.y-y-.5)<3));
-    if(cell)wrecks.push({id:'wreck:'+p.id,asset:'wreck',x:cell[0]+.5,y:cell[1]+.5,w:wreckWidth,h:wreckLength,fireScale:wreckLength/.95});
+    if(cell)wrecks.push({id:'wreck:'+p.id,asset:'wreck',...wreckRoadPose(state.layout,cell[0],cell[1],p,controlState.params.cellMeters),w:wreckWidth,h:wreckLength,fireScale:wreckLength/.95});
   }
   cityTransitions=cityTransitions.filter(event=>effectTime-event.at<.8&&currentlyVisible(event.cell));
   const streetDressing=operatingStreetProps(streetLamps,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys(),...wrecks.map(p=>key(Math.floor(p.x),Math.floor(p.y)))]),cellMeters:controlState.params.cellMeters});
