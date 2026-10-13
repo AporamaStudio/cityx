@@ -6,7 +6,7 @@ import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody}
 import {createRoadModel} from './city-road-model.js?v=1';
 import {PLANT_MODELS} from './city-vegetation.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=3';
-import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=5';
+import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=6';
 import {createCityObservation} from './city-observation.js?v=4';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。

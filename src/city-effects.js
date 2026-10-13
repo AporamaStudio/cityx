@@ -71,7 +71,8 @@ export function createCityEffects(scene){
         const start=bounds.getCenter(new THREE.Vector3()),end=new THREE.Vector3(item.x,.35,item.y),t=Math.min(1,age/.24);
         e.object.visible=true;e.flash.position.copy(start);e.flash.visible=age<.085||(item.type!=='B'&&age>.16&&age<.22);
         for(const node of [e.flash,e.bullet]){node.material.transparent=true;node.material.opacity=item.alpha;}
-        e.bullet.visible=age<.24;e.bullet.scale.setScalar(Math.max(1,3/(cell*(item.type==='B'?.16:.10)*2)));e.bullet.position.lerpVectors(start,end,t);if(item.type==='B')e.bullet.position.y+=Math.sin(t*Math.PI)*.5;
+        // 两种炮均从炮口直达目标；屋顶与地面高差形成斜线，不额外抬高弹道。
+        e.bullet.visible=age<.24;e.bullet.scale.setScalar(Math.max(1,3/(cell*(item.type==='B'?.16:.10)*2)));e.bullet.position.lerpVectors(start,end,t);
         e.tracer.visible=age<.25;e.tracer.material.opacity=.7*(1-age/.25)*item.alpha;const positions=e.tracer.geometry.attributes.position;positions.setXYZ(0,start.x,start.y,start.z);positions.setXYZ(1,e.bullet.position.x,e.bullet.position.y,e.bullet.position.z);positions.needsUpdate=true;
         e.smoke.visible=age>.06&&age<.45;e.smoke.position.copy(start).add(new THREE.Vector3(0,age*.5,0));e.smoke.scale.setScalar(1+age*3);e.smoke.material.opacity=Math.max(0,.18*(1-age/.45))*item.alpha;
       }
