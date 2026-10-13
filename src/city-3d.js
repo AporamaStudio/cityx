@@ -6,7 +6,7 @@ import {groundGlow} from './model-preview-effects.js?v=3';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=4';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
-const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',enemy:'generated/enemy-squad',source:'generated/enemy-source',street:'generated/streetlight',wreck:'generated/burnt-car'};
+const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',enemy:'generated/enemy-squad',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car'};
 const resource=file=>new URL('../assets/model-preview/'+file+'.glb?v=3',import.meta.url).href;
 
 function operatingLights(object){
@@ -137,6 +137,7 @@ export function createCity3D(onReady){
   return {
     has(id){return ready&&entries.has(id);},
     hasFacility(id){return ready&&props.has(id);},
+    baseAt(id){return entries.get(id)?.object.userData.podiumHeight??0;},
     effectsFrame(){return ready?effectCanvas:null;},
     enemiesFrame(){return ready?enemyCanvas:null;},
     roofAt(id,x,y){
@@ -207,7 +208,7 @@ export function createCity3D(onReady){
           if(item.asset!=='wall'){const scale=Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);}
           (item.asset==='enemy'?enemies:facilities).add(object);props.set(item.id,{object,signature:shape,motion:facilityMotion(object)});
         }
-        const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);if(item.asset==='enemy'){object.scale.setScalar(item.visualScale??1);if(item.angle!==undefined)object.rotation.y=item.angle;}else object.scale.y=item.dead?.3:1;
+        const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);if(item.asset==='enemy'){object.scale.setScalar(item.visualScale??1);if(item.angle!==undefined)object.rotation.y=item.angle;}else object.scale.y=item.dead&&item.asset!=='sourceRuined'?.3:1;
         object.traverse(node=>{if(node.isMesh){node.material.opacity=item.alpha??1;node.material.transparent=node.material.opacity<1;node.material.color.copy(node.material.userData.baseColor).lerp(new THREE.Color('#84867a'),item.dead?.85:(1-(item.health??1))*.5);if(['#ff9538','#ffd36b'].includes(node.material.name))node.visible=!item.dead;}});
         if(item.asset==='enemy')object.traverse(node=>{if(node.isMesh){node.material.color.lerp(new THREE.Color(item.fogColor),(1-item.fogAlpha)*.75);node.material.emissive.copy(node.material.color);node.material.emissiveIntensity=.08;}});
         animateFacility(props.get(item.id),item,fx);

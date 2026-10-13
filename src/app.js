@@ -1,4 +1,4 @@
-import {createCity3D} from './city-3d.js?v=17';
+import {createCity3D} from './city-3d.js?v=19';
 import {operatingStreetLamps} from './city-streets.js?v=1';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=4';
@@ -494,7 +494,7 @@ function paintMap() {
   // 只把原画面允许显示完整外观的地块交给3D；运营灯光不新增经营或安全判断。
   const impact=Math.min(1,impactAge/IMPACT_MS),enemyFrames=enemyDisplayFrames(state,motion?{...motion,duration:moveDuration()}:null,incoming,impact,reducedMotion.matches);
   for(const frame of enemyFrames){frame.fogAlpha=mapFogEnabled()?view.visibility.enemyAlpha(frame.rawX+.5,frame.rawY+.5):1;frame.alpha*=frame.fogAlpha;if(frame.enemy.hp===0&&!currentlyVisible(frame.enemy.id))frame.alpha=0;}
-  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&!view.sourceSites.has(id)&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.role==='hospital'?'hospital':p.content.type,status:p.content.status,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id)),cellMeters:controlState.params.cellMeters}));
+  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.role==='hospital'?'hospital':p.content.type,status:p.content.status,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id)),cellMeters:controlState.params.cellMeters}));
   const streetLamps=operatingStreetLamps(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
   const wrecks=[];
   // 燃烧车辆是已知废墟旁的装饰，不阻路；恢复邻楼或在此建设时直接移除。
@@ -560,7 +560,7 @@ function paintMap() {
   for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)){const [x,y]=xy(id),body=state.wallHealth.get(id);prop('wall:'+id,'wall',x+.5,y+.5,1,1,{dead:body?.hp===0,health:body?body.hp/body.max:1,connections:wallConnections(id,state.walls,SIZE,SIZE,roadMarkings(state.layout).get(id)?.axis),cellMeters:controlState.params.cellMeters});}
   const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,campWidth,campWidth,{dead:state.hp<=0});
   const campPlot=state.sites.find(p=>p.role==='camp');if(campPlot)prop('camp-plaza','plaza',campPlot.x+(campPlot.width??campPlot.size)/2,campPlot.y+(campPlot.height??campPlot.size)/2,campPlot.width??campPlot.size,campPlot.height??campPlot.size);
-  for(const source of displayedEnemySources()){const w=source.width??1,h=source.height??1;prop('source:'+sourceIdentity(source),'source',(source.bx??source.x)+w/2,(source.by??source.y)+h/2,w*.72,h*.72,{dead:source.hp===0});}
+  for(const source of displayedEnemySources()){const w=source.width??1,h=source.height??1;prop('source:'+sourceIdentity(source),source.hp===0?'sourceRuined':'source',(source.bx??source.x)+w/2,(source.by??source.y)+h/2,w*.72,h*.72,{dead:source.hp===0,roof:city3D?.baseAt(source.site)??0});}
   facilityItems.push(...wrecks);
   for(const frame of enemyFrames)if(frame.alpha>0)prop(frame.id,'enemy',frame.x+.5,frame.y+.5,2.85/controlState.params.cellMeters,1.9/controlState.params.cellMeters,{alpha:frame.alpha,visualScale:frame.scale,angle:frame.angle,fogAlpha:frame.fogAlpha,fogColor:fogColor(nightMix)});
   const facilityFrame=city3D?.renderFacilities(facilityItems,nightMix,fx);
@@ -578,7 +578,7 @@ function paintMap() {
       if(overlay.footprint.length)drawCitySilhouette(ctx,p,nightMix);continue;
     }
     // 悬停时把街区作为一个操作对象，盖住内部格线，避免误认为逐格恢复。
-    if(view.sourceSites.has(id)){ctx.fillStyle=nightMix>.5?'#322c36':'#67504f';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);continue;}
+    if(view.sourceSites.has(id)){if(cityFrame&&city3D.has(id)){ctx.save();ctx.beginPath();ctx.rect(x,y,n,m);ctx.clip();ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}else{ctx.fillStyle=nightMix>.5?'#322c36':'#67504f';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);}continue;}
     if(p.role==='camp'){if(!drawCityFacility('camp-plaza',x,y,n,m)){ctx.fillStyle=nightMix>.5?'#49433a':'#ad9468';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);}ctx.strokeStyle='#e8c481';ctx.lineWidth=.10;ctx.strokeRect(x+.12,y+.12,n-.24,m-.24);continue;}
     if(empty){ctx.strokeStyle=selected?'#fff0ae':'#a8d5ad';ctx.lineWidth=selected?.12:.06;ctx.setLineDash([.2,.12]);ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);ctx.setLineDash([]);continue;}
     // 按物理 footprint 画建筑，屋顶炮位保留建筑底色；经营面积独立计算。
@@ -859,7 +859,7 @@ function paintMap() {
     if(danger){ctx.shadowColor='#ff3c31';ctx.shadowBlur=reducedMotion.matches?9:8+8*pulse;}
     ctx.beginPath();ctx.moveTo(x+.20,y+.04);ctx.lineTo(x+w-.20,y+.04);ctx.lineTo(x+w-.04,y+.20);ctx.lineTo(x+w-.04,y+h-.20);ctx.lineTo(x+w-.20,y+h-.04);ctx.lineTo(x+.20,y+h-.04);ctx.lineTo(x+.04,y+h-.20);ctx.lineTo(x+.04,y+.20);ctx.closePath();ctx.fill();ctx.stroke();
     ctx.shadowBlur=0;ctx.setLineDash([]);
-    drawCityFacility('source:'+sourceIdentity(source),x,y,w,h);
+    ctx.save();ctx.globalAlpha=highlighted||sourceCells(source).some(currentlyVisible)?1:.45;drawCityFacility('source:'+sourceIdentity(source),x,y,w,h);ctx.restore();
     label(alive?source.index+1:'×',x+w/2,y+h/2,alive?'#edd4ca':'#b9d8c1',Math.max(.4,8/size));
     ctx.restore();
     if(highlighted)drawSourceLocator(source,size);

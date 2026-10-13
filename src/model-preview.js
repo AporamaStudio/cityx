@@ -27,6 +27,7 @@ const assets=[
   ['enemy-squad','普通敌群','facility','enemy-squad',2.85,'约2m高的人形组成统一小队符号，不代表新增单位；主图HP、合流和迷雾权限沿用原规则。'],
   ['ruins','废墟样件','building','ruins',4.7,'自制断墙与瓦砾，只验证破损感觉；正式恢复应沿用同一栋建筑轮廓。'],
   ['enemy-source','敌源样件','facility','enemy-source',1.9,'自制暗色核心与暖红标识，先区分敌我；敌源最终造型尚未确定。'],
+  ['enemy-source-ruined','敌源残骸','facility','enemy-source-ruined',1.9,'沿用同一底座与破损核心，主图读取已肃清状态；不改变源头出兵、揭雾或通行规则。'],
   ['streetlight','路灯','nature','streetlight',1.2,'同一盏灯白天不发光，恢复运营的街区夜晚亮灯。'],
   ['trash','垃圾堆','nature','trash',1.4,'废弃街区的杂物；恢复后清走，先验证清理带来的变化。'],
   ['rubble','瓦砾','nature','rubble',2,'附着原建筑的塌损位置，帮助关联废墟与完好状态。'],

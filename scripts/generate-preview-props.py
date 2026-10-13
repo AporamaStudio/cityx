@@ -140,6 +140,13 @@ def props():
     m.cylinder((0,.7,0),.58,1.15,'#3c464b',top=.38,sides=5)
     m.cylinder((0,1.25,0),.22,.65,'#bd5549',top=.12,sides=5)
     m.box((0,.7,-.48),(.25,.45,.06),'#d36b58');m.save('enemy-source')
+    # 沿用同一底座/核心轮廓，肃清后低断墙和散落构件不会看成仍然活跃的源头。
+    m=Model();m.box((0,.1,0),(1.8,.2,1.6),'#555b58')
+    m.box((-.35,.44,-.1),(.20,.68,.7),'#3c464b');m.box((.25,.27,-.3),(.65,.30,.2),'#3c464b')
+    m.beam((.1,.38,-.15),(.48,.18,.35),.15,'#686f68')
+    m.box((.32,.27,.4),(.25,.10,.08),'#8b5a51')
+    for i in range(10):m.box(((i*.37)%1.35-.65,.16+(i%2)*.08,(i*.53)%1.1-.55),(.18+(i%3)*.035,.12,.17),'#8b8e7e' if i%2 else '#687068')
+    m.save('enemy-source-ruined')
 
 
 def street_props():
@@ -210,4 +217,4 @@ def enemy_squad():
 
 if __name__ == '__main__':
     tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad()
-    print('已生成13个独立GLB样件，含环境、营地广场与普通敌群')
+    print('已生成14个独立GLB样件，含环境、营地广场、普通敌群与敌源残骸')
