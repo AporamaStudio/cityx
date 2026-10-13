@@ -27,7 +27,9 @@ function operatingLights(object){
   const bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3()),group=new THREE.Group();
   const ray=new THREE.Raycaster(),normal=new THREE.Vector3();
   for(const [dx,dz] of [[-.22,-.18],[.22,-.18],[-.22,.18],[.22,.18]]){
-    ray.set(new THREE.Vector3(center.x+size.x*dx,bounds.max.y+1,center.z+size.z*dz),new THREE.Vector3(0,-1,0));const hit=ray.intersectObject(object,true)[0];if(!hit||hit.point.y<bounds.min.y+size.y*.38)continue;
+    ray.set(new THREE.Vector3(center.x+size.x*dx,bounds.max.y+1,center.z+size.z*dz),new THREE.Vector3(0,-1,0));const hit=ray.intersectObject(object,true)[0];
+    // 烟囱/高塔不应抬高有效屋面的门槛；只排除底座铺装，低屋顶也可亮起暖灯。
+    if(!hit||hit.point.y<=(object.userData.podiumHeight??bounds.min.y)+size.y*.03)continue;
     normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);if(normal.y<.28)continue;
     const point=object.worldToLocal(hit.point.clone()),lamp=new THREE.Mesh(new THREE.PlaneGeometry(size.x*.11,size.z*.07),new THREE.MeshBasicMaterial({color:'#ffd28a',transparent:true,toneMapped:false}));
     lamp.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal);lamp.position.copy(point).addScaledVector(normal,.025);lamp.userData.ownGeometry=true;
