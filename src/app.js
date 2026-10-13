@@ -1101,11 +1101,22 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   const sightClip=new Path2D();if(mapFogEnabled())for(const id of sight){const [x,y]=xy(id),corners=[[x,y],[x+1,y],[x+1,y+1],[x,y+1]].map(([x,y])=>point(x,y,.04));sightClip.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>sightClip.lineTo(p.x,p.y));sightClip.closePath();}
   for(const route of [...routes,...potentials]){
     const index=route.sources?.[0]??route.index??0,source=route.potential?displayedEnemySources().find(s=>s.id===route.sourceId):routeSources[index],focused=route.potential||focus.has(source&&sourceIdentity(source));if(!$('routes').checked&&!focused)continue;
-    ctx.save();if(mapFogEnabled())ctx.clip(sightClip);ctx.strokeStyle=enemyRouteColor(source?.index??(sourceNumber(source)>=0?sourceNumber(source):index));ctx.lineWidth=focused?3:1.8;ctx.setLineDash(route.potential||route.future?[14,10]:[]);let walked=0;
+    const color=enemyRouteColor(source?.index??(sourceNumber(source)>=0?sourceNumber(source):index)),lineWidth=focused?4:2.8,spacing=focused?42:56;
+    ctx.save();if(mapFogEnabled())ctx.clip(sightClip);ctx.lineCap='round';ctx.lineJoin='round';let walked=0,nextArrow=spacing*.5;
+    // 深色衬边托住敌方色线；箭头按屏幕距离排布，斜视/远景仍可辨方向。
     for(let i=1;i<route.path.length;i++){
-      const [x,y]=xy(route.path[i-1]),[nx,ny]=xy(route.path[i]),alpha=mapFogEnabled()?view.visibility.enemyAlpha((x+nx)/2+.5,(y+ny)/2+.5):1;if(alpha<=0)continue;
-      const a=point(x+.5,y+.5,.04),b=point(nx+.5,ny+.5,.04),length=Math.hypot(b.x-a.x,b.y-a.y);ctx.globalAlpha=alpha;ctx.lineDashOffset=-walked;walked+=length;ctx.beginPath();segment(a,b);ctx.stroke();
-      if(i%4===0&&length>=10){const angle=Math.atan2(b.y-a.y,b.x-a.x),tip={x:(a.x+b.x)/2,y:(a.y+b.y)/2};ctx.save();ctx.setLineDash([]);ctx.beginPath();ctx.moveTo(tip.x-5*Math.cos(angle-.5),tip.y-5*Math.sin(angle-.5));ctx.lineTo(tip.x,tip.y);ctx.lineTo(tip.x-5*Math.cos(angle+.5),tip.y-5*Math.sin(angle+.5));ctx.stroke();ctx.restore();}
+      const [x,y]=xy(route.path[i-1]),[nx,ny]=xy(route.path[i]),a=point(x+.5,y+.5,.04),b=point(nx+.5,ny+.5,.04),length=Math.hypot(b.x-a.x,b.y-a.y);
+      const alpha=mapFogEnabled()?view.visibility.enemyAlpha((x+nx)/2+.5,(y+ny)/2+.5):1,start=walked;walked+=length;
+      ctx.globalAlpha=alpha*(focus.size && !focused ? .48 : 1);ctx.setLineDash(route.potential||route.future?[14,10]:[]);ctx.lineDashOffset=-start;
+      if(alpha>0)for(const [stroke,width] of [['#211c25',lineWidth+3],[color,lineWidth]]){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.beginPath();segment(a,b);ctx.stroke();}
+      while(nextArrow<=walked&&length>0){
+        const t=(nextArrow-start)/length;nextArrow+=spacing;if(t<0)continue;
+        const arrowAlpha=mapFogEnabled()?view.visibility.enemyAlpha(x+.5+(nx-x)*t,y+.5+(ny-y)*t):1;if(arrowAlpha<=0)continue;
+        const angle=Math.atan2(b.y-a.y,b.x-a.x),tip={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},size=focused?9:7;
+        ctx.save();ctx.globalAlpha=arrowAlpha*(focus.size && !focused ? .48 : 1);ctx.setLineDash([]);ctx.translate(tip.x,tip.y);ctx.rotate(angle);
+        ctx.beginPath();ctx.moveTo(size*.5,0);ctx.lineTo(-size*.6,-size*.5);ctx.lineTo(-size*.3,0);ctx.lineTo(-size*.6,size*.5);ctx.closePath();
+        ctx.strokeStyle='#211c25';ctx.lineWidth=2.5;ctx.stroke();ctx.fillStyle=color;ctx.fill();ctx.restore();
+      }
     }ctx.restore();
   }
   const border=new Path2D();for(const [x,y,nx,ny] of view.boundary){const a=point(x,y,.02),b=point(nx,ny,.02);border.moveTo(a.x,a.y);border.lineTo(b.x,b.y);}
