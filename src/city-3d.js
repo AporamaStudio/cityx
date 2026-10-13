@@ -4,6 +4,7 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {drawRoadTexture} from './city-textures.js?v=17';
 import {groundGlow} from './model-preview-effects.js?v=3';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=5';
+import {createCityObservation} from './city-observation.js?v=1';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',enemy:'generated/enemy-squad',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble'};
@@ -105,6 +106,7 @@ export function createCity3D(onReady){
   const effects=createCityEffects(scene),effectCanvas=document.createElement('canvas');
   const cityCanvas=document.createElement('canvas'),facilityCanvas=document.createElement('canvas'),enemyCanvas=document.createElement('canvas');
   const models=new Map(),entries=new Map(),props=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',lastProps='',pixels='';
+  const observation=createCityObservation(scene,renderer);
   function capture(canvas){if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(renderer.domElement,0,0);return canvas;}
   Promise.all(Object.entries(files).map(async ([name,file])=>{models.set(name,(await loader.loadAsync(resource(file))).scene);})).then(()=>{ready=true;onReady();}).catch(error=>console.error('城市模型装载失败，保留原地图。',error));
   function release(entry){
@@ -135,8 +137,12 @@ export function createCity3D(onReady){
     return {object,signature:`${type}:${status}:${w}:${h}:${cellMeters}`,roof:new THREE.Box3().setFromObject(object).max.y};
   }
   return {
+    isReady(){return ready;},
+    observationPick(x,y,width,height){return ready?observation.pick(x,y,width,height):null;},
+    observationFrame(options){if(!ready)return null;if(terrain)terrain.visible=false;return observation.render({...options,objects:[buildings,facilities,streets],enemies,effects:effects.group});},
     has(id){return ready&&entries.has(id);},
     hasFacility(id){return ready&&props.has(id);},
+    facilityTopAt(id){const entry=props.get(id);return entry?entry.object.position.y+entry.height*entry.object.scale.y:0;},
     baseAt(id){return entries.get(id)?.object.userData.podiumHeight??0;},
     effectsFrame(){return ready?effectCanvas:null;},
     enemiesFrame(){return ready?enemyCanvas:null;},
@@ -145,7 +151,7 @@ export function createCity3D(onReady){
       entry.object.updateMatrixWorld(true);const ray=new THREE.Raycaster(new THREE.Vector3(x,entry.roof+1,y),new THREE.Vector3(0,-1,0));
       return ray.intersectObject(entry.object,true)[0]?.point.y??entry.roof;
     },
-    render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,night,layout,lamps=[],fx}){
+    render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],fx}){
       if(!ready)return null;
       const active=new Set(plots.map(p=>p.id));
       for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
@@ -176,8 +182,9 @@ export function createCity3D(onReady){
         streetKey=nextStreets;
       }
       // 只启用镜头附近路灯的真实光源；远景保留灯具与光池，灯不投独立阴影。
+      const visible=lightViewport??{left:-panX/cell,right:(width-panX)/cell,top:-panY/cell,bottom:(height-panY)/cell};
       const reach=22/cellMeters,cx=(width/2-panX)/cell,cy=(height/2-panY)/cell;
-      const nearby=streetLights.filter(p=>p.x>=-panX/cell-reach&&p.x<=(width-panX)/cell+reach&&p.y>=-panY/cell-reach&&p.y<=(height-panY)/cell+reach).sort((a,b)=>Math.hypot(a.x-cx,a.y-cy)-Math.hypot(b.x-cx,b.y-cy)).slice(0,lightBudget);
+      const nearby=streetLights.filter(p=>p.x>=visible.left-reach&&p.x<=visible.right+reach&&p.y>=visible.top-reach&&p.y<=visible.bottom+reach).sort((a,b)=>Math.hypot(a.x-cx,a.y-cy)-Math.hypot(b.x-cx,b.y-cy)).slice(0,lightBudget);
       // 固定池规模，空闲灯只归零强度；平移不改变Shader灯数，跨预算边缘渐变换位。
       while(localLights.length>lightBudget)localLights.pop().removeFromParent();
       while(localLights.length<lightBudget){const light=new THREE.PointLight('#ffd08a',0,reach,2);light.userData.level=0;scene.add(light);localLights.push(light);}
@@ -190,7 +197,7 @@ export function createCity3D(onReady){
       }
       streets.traverse(node=>{if(node.isMesh){if(node.material.map)node.material.opacity=night*.32;else if(node.material.name==='#ffe1a3'){node.material.emissive.set('#ffb75c');node.material.emissiveIntensity=night*1.8;}}});
       const lightItems=[...fx.sweeps,...fx.fires].map(item=>{const size=new THREE.Box3().setFromObject(models.get(item.asset)).getSize(new THREE.Vector3());return {...item,height:size.y*Math.min(item.w/size.x,item.h/size.z)*(item.asset==='watch'?.84:.65)};});
-      effects.updateLights(lightItems,fx.time,night,{left:-panX/cell,right:(width-panX)/cell,top:-panY/cell,bottom:(height-panY)/cell});
+      effects.updateLights(lightItems,fx.time,night,visible);
       // 静态云纹/悬停刷新复用城市画面；扫光与火光读取同一动效时间重画承光层。
       const shapes=plots.map(p=>`${p.id}:${entries.get(p.id).signature}`).join('|');
       const signature=shapes+plots.map(p=>p.powered?'1':'0').join('')+streetKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightBudget}:${fx.time}`;
@@ -216,7 +223,7 @@ export function createCity3D(onReady){
           if(['near','far'].includes(item.asset))model.traverse(node=>{if(node.isMesh){const color=node.material.name==='#6c7775'?'#354b4b':['#3f5057','#1e2b32'].includes(node.material.name)?'#98aaa1':item.asset==='far'?'#c3c5d0':'#a8b7a0';node.material.color.set(color);node.material.userData.baseColor=node.material.color.clone();node.material.emissive.set(color);node.material.emissiveIntensity=.10;}});
           const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
           if(item.asset!=='wall'){const scale=Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);}
-          (item.asset==='enemy'?enemies:facilities).add(object);props.set(item.id,{object,signature:shape,motion:facilityMotion(object)});
+          (item.asset==='enemy'?enemies:facilities).add(object);props.set(item.id,{object,signature:shape,height:new THREE.Box3().setFromObject(object).max.y,motion:facilityMotion(object)});
         }
         const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);if(item.asset==='enemy'){object.scale.setScalar(item.visualScale??1);if(item.angle!==undefined)object.rotation.y=item.angle;}else object.scale.y=item.dead&&item.asset!=='sourceRuined'?.3:1;
         object.traverse(node=>{if(node.isMesh){node.material.opacity=item.alpha??1;node.material.transparent=node.material.opacity<1;node.material.color.copy(node.material.userData.baseColor).lerp(new THREE.Color('#84867a'),item.dead?.85:(1-(item.health??1))*.5);if(['#ff9538','#ffd36b'].includes(node.material.name))node.visible=!item.dead;}});
