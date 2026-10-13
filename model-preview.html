@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>CityX · Low poly 模型预览</title><link rel="icon" href="data:,">
-  <link rel="stylesheet" href="src/model-preview.css?v=3">
+  <link rel="stylesheet" href="src/model-preview.css?v=4">
   <script type="importmap">{"imports":{"three":"./assets/model-preview/vendor/three/build/three.module.js","three/addons/":"./assets/model-preview/vendor/three/examples/jsm/"}}</script>
 </head>
 <body>
   <header><a class="brand" href="./">CITYX<span>模型选型</span></a><span class="stage">LOW POLY / 01</span><a class="back" href="./">回到游戏 ↗</a></header>
-  <section class="intro"><div><p class="eyebrow">先看一片城市，再决定它的样子</p><h1>从区块，到城区。</h1><p>用少量模型，观察建筑、设施与恢复前后的感觉。</p></div><div class="intro-note"><b>33 个模型 · 同栋建筑恢复对比</b><span>城市模型来自 Kenney · 设施为自制样件</span></div></section>
+  <section class="intro"><div><p class="eyebrow">先看一片城市，再决定它的样子</p><h1>从区块，到城区。</h1><p>用少量模型，观察建筑、设施与恢复前后的感觉。</p></div><div class="intro-note"><b>34 个模型 · 同栋建筑恢复对比</b><span>城市模型来自 Kenney · 设施为自制样件</span></div></section>
   <main>
     <section class="viewer-panel">
       <div class="toolbar"><div class="segmented"><button id="district" class="active" type="button">街区组合</button><button id="single" type="button">单体模型</button><button id="roads" type="button">道路验证</button></div><div class="segmented"><button id="angle" class="active" type="button">斜视</button><button id="top" type="button">俯视</button></div><button id="motion" type="button" aria-pressed="true">暂停动效</button><button id="light" type="button">切换夜晚</button></div>
@@ -19,12 +19,12 @@
       <div class="catalog-heading"><h2>第一轮模型</h2><span>点击查看单体</span></div>
       <div class="filters" role="group" aria-label="模型分类"><button class="active" data-filter="all">全部</button><button data-filter="building">建筑</button><button data-filter="facility">设施</button><button data-filter="nature">环境</button></div>
       <div id="catalog"></div>
-      <section class="selection" id="modelSelection"><div class="selection-title"><h3 id="assetTitle">双层住宅</h3><span id="assetOrigin">Kenney · CC0</span></div><p id="assetDescription"></p><div id="buildingStates" class="segmented" role="group" aria-label="建筑状态"><button data-state="intact" class="active">完好</button><button data-state="ruined">废墟</button><button data-state="operating">恢复运营</button></div><div class="selection-links"><a id="download" download>下载原模型 ↓</a><a id="source" target="_blank" rel="noopener">资源来源 ↗</a></div></section>
+      <section class="selection" id="modelSelection"><div class="selection-title"><h3 id="assetTitle">双层住宅</h3><span id="assetOrigin">Kenney · CC0</span></div><p id="assetDescription"></p><div id="buildingStates" class="segmented" role="group" aria-label="建筑状态"><button data-state="intact" class="active">完好</button><button data-state="ruined">废墟</button><button data-state="operating">恢复运营</button></div><div id="vehicleColors" class="segmented" role="group" aria-label="车辆颜色" hidden></div><div class="selection-links"><a id="download" download>下载原模型 ↓</a><a id="source" target="_blank" rel="noopener">资源来源 ↗</a></div></section>
       <section class="selection" id="roadDetails" hidden><h3>道路构件</h3><p><b>20m街道</b>：4条3.2m车道、2m分隔带、两侧各2.6m人行道。</p><p><b>40m主路</b>：6条3.5m车道、4m分隔带；两侧各3m人行道、2m绿化带和2.5m停车带。</p><p>路面、路缘、人行道、绿带、停车线、车道线、斑马线和路口共用米制组件。昼夜共用几何，恢复后暖路灯亮起；车辆约4.6m长。</p><div class="selection-links"><a href="src/city-roads.js">横断面与构件定义 ↗</a></div></section>
     </aside>
   </main>
   <section class="plan"><div><p class="eyebrow">模型数量服从体验</p><h2>先补足能辨认、能恢复、能守护的对象。</h2></div><div class="plan-grid"><p><b>同一栋建筑</b>保留占地、门窗与主要轮廓，局部塌损、灰化和瓦砾表现废墟，恢复后仍能认出它。</p><p><b>昼夜光照</b>共用模型和基础贴图。夜间保持冷色环境照明，运营建筑的窗户和路灯亮起暖光。</p><p><b>恢复的痕迹</b>恢复前有垃圾、瓦砾与少量燃烧残骸；恢复后清走杂物、恢复路灯。这里只演示视觉状态。</p></div></section>
   <footer>Kenney 城市模型：CC0 · 自制样件：项目内生成 · <a href="assets/model-preview/ATTRIBUTION.md">来源与授权清单</a></footer>
-  <script type="module" src="src/model-preview.js?v=23"></script>
+  <script type="module" src="src/model-preview.js?v=24"></script>
 </body>
 </html>

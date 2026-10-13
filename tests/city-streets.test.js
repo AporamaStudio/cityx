@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,wreckRoadPose} from '../src/city-streets.js';
+import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,wreckRoadPose,streetVehicles,VEHICLE_PALETTE} from '../src/city-streets.js';
 
 test('运营路灯靠路缘且灯臂朝道路，隐藏、未控、被占道路不生成灯',()=>{
   const layout={width:10,height:10,tiles:Array(100).fill('road')},plot={id:22,x:2,y:2,w:2,h:2,powered:true},controlled=new Set(Array.from({length:100},(_,i)=>i)),occupied=new Set();
@@ -50,4 +50,21 @@ test('临楼车辆沿道路外侧车道停靠，40m主路使用停车带并保�
     assert.ok(axis==='v'?pose.x<x+.5:pose.y<y+.5);
     assert.equal(pose.angle,axis==='v'?.12:Math.PI/2+.12);
   }
+});
+
+test('车辆按修缮和当前控制区分三态，颜色稳定且隐藏/占用道路不生成',()=>{
+  const layout={width:10,height:10,tiles:Array(100).fill('block')};for(let y=0;y<10;y++)layout.tiles[y*10+4]='road';
+  const controlled=new Set(Array.from({length:100},(_,i)=>i)),options={layout,controlled,visible:()=>true,occupied:new Set(),cellMeters:20},plot={id:3,x:2,y:2,w:2,h:3,type:'production',status:'building',powered:false};
+  const before=structuredClone({plot,layout,controlled}),intact=streetVehicles([plot],options);
+  assert.equal(intact.length,1);assert.equal(intact[0].asset,'car');assert.equal(intact[0].w,2.4/20);assert.equal(intact[0].h,4.6/20);assert.ok(VEHICLE_PALETTE.includes(intact[0].color));
+  assert.deepEqual(streetVehicles([plot],options),intact);
+  assert.deepEqual(streetVehicles([plot],{...options,controlled:new Set()}),[]);
+  assert.deepEqual(streetVehicles([plot],{...options,visible:()=>false}),[]);
+  assert.deepEqual(streetVehicles([plot],{...options,occupied:controlled}),[]);
+  const damaged=[];for(let id=0;id<60;id+=3)damaged.push(...streetVehicles([{...plot,id,status:'ruin'}],{...options,controlled:new Set()}));
+  assert.ok(damaged.some(c=>c.asset==='wreck'));assert.ok(damaged.some(c=>c.asset==='damagedCar'));assert.ok(new Set(damaged.map(c=>c.color)).size>=3);
+  assert.equal(streetVehicles([{...plot,status:'ruin'}],options)[0].color,intact[0].color);
+  assert.deepEqual(streetVehicles([{...plot,status:'empty'}],options),[]);
+  assert.deepEqual(streetVehicles([plot],{...options,cellMeters:4}),[]);
+  assert.deepEqual({plot,layout,controlled},before);
 });

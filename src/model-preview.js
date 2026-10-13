@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {addBuildingFoundation} from './city-building-style.js?v=1';
-import {createWreckDressing,updateWreckDressing,styleWreckBody} from './city-wrecks.js?v=1';
+import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
+import {VEHICLE_PALETTE} from './city-streets.js?v=5';
 import {createRoadModel} from './city-road-model.js?v=1';
 import {createPreviewEffects,groundGlow} from './model-preview-effects.js?v=3';
 
@@ -40,11 +41,13 @@ const assets=[
   ['rubble','瓦砾','nature','rubble',2,'附着原建筑的塌损位置，帮助关联废墟与完好状态。'],
   ['street-bench','路缘长椅','nature','street-bench',3.3,'约2.2m长/0.7m深/1.17m高，运营街区少量布置；仅装饰，不增加交互。'],
   ['street-planter','文明花池','nature','street-planter',2.2,'约1.6m见方/1.5m高的小花池，和垃圾/瓦砾形成恢复前后对比。'],
-  ['civil-car','完好车辆','nature','civil-car',2.7,'约4.6m长/2.4m宽/1.85m高，与燃烧车共用车身和车轮布局；生成/移除与交通规则暂不接入。'],
+  ['civil-car','完好车辆','nature','civil-car',2.7,'约4.6m长/2.4m宽/1.85m高；主图已修缮且受控街区旁静态停靠，五种低饱和车色，不增加交通。'],
+  ['damaged-car','损坏车辆','nature','damaged-car',2.7,'与完好车同车身和轮位，车顶塌陷、破窗、断保险杠；没有火焰或烟，混合放在已知废墟旁。'],
   ['burnt-car','燃烧车辆','nature','burnt-car',2.7,'焦黑车身与少量火焰表现灾损，作为恢复前的局部视觉样件。']
 ].map(([id,name,category,file,width,description])=>({id,name,category,file,width,description,local:!file.includes('/'),paired:category==='building'&&file.includes('/'),landmark:['hospital','bank'].includes(id)}));
 const $=id=>document.getElementById(id),models=new Map(),district=new THREE.Group(),single=new THREE.Group(),roads=new THREE.Group();
 const wreckDressing=new Map();
+let vehiclePaint=VEHICLE_PALETTE[0];
 let selected=assets[0],mode='district',night=false,restored=false,angle='angle',ready=false,singleState='intact',singleVariants=null,effects=null;
 const motionPreference=matchMedia('(prefers-reduced-motion: reduce)');let animated=!motionPreference.matches;
 const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-25,25,20,-20,.1,250);
@@ -102,7 +105,8 @@ function cloneModel(asset,width=asset.width,roofLights=true,ruined=false){
     group.add(lighting);
   }
   if(roofLights&&isBuilding(asset)&&!asset.landmark)addRoofLights(anchor);
-  if(asset.id==='burnt-car'){styleWreckBody(anchor);wreckDressing.set(anchor,createWreckDressing(anchor,size.x*scale,size.z*scale));}
+  if(['civil-car','damaged-car'].includes(asset.id))styleVehicleBody(anchor,vehiclePaint,asset.id==='damaged-car');
+  if(asset.id==='burnt-car'){styleWreckBody(anchor,vehiclePaint);wreckDressing.set(anchor,createWreckDressing(anchor,size.x*scale,size.z*scale));}
   effects.attach(asset.id,anchor);
   return anchor;
 }
@@ -194,8 +198,8 @@ function buildDistrict(){
     const pool=groundGlow(2.5,7,'#ffca72',.42);pool.position.set(Math.round(x/8)*8,.075,z);
     light.position.set(x+.3,bounds.max.y-.14,z);district.add(light,pool);streetlights.push({obj,light,pool});
   }
-  for(const [id,x,z,w] of [['trash',-5,2,1.1],['trash',10,2.5,1],['burnt-car',-8,-.8,2.5],['rubble',11,1.8,1.6]])abandoned.push(place(id,x,z,w));
-  for(const [id,x,z,w] of [['street-bench',-9.0,6,1.2],['street-planter',1,1.8,.7],['civil-car',-8,-.8,2.5]])civilDecor.push(place(id,x,z,w));
+  for(const [id,x,z,w] of [['trash',-5,2,1.1],['trash',10,2.5,1],['burnt-car',-8,-.8,2.5],['damaged-car',-6.7,8,2.5],['rubble',11,1.8,1.6]])abandoned.push(place(id,x,z,w));
+  for(const [id,x,z,w] of [['street-bench',-9.0,6,1.2],['street-planter',1,1.8,.7],['civil-car',-8,-.8,2.5],['civil-car',-6.7,8,2.5]])civilDecor.push(place(id,x,z,w));
   const rim=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[-16,.16,-3],[-9,.16,-3],[-9,.16,-1],[-1,.16,-1],[-1,.16,2],[7,.16,2],[7,.16,-2],[16,.16,-2],[16,.16,11],[-16,.16,11]].map(p=>new THREE.Vector3(...p))),new THREE.LineBasicMaterial({color:'#66b6ae'}));district.add(rim);
   // 演示恢复时只改变状态，不将控制与运营视为同一个条件。
   for(const s of structures){
@@ -211,7 +215,11 @@ function buildRoadPreview(){
   box(roads,0,-.12,0,80,.15,80,'#788673');
   const place=(id,x,z,meters)=>{const obj=cloneModel(assets.find(a=>a.id===id),meters/2,false);obj.position.set(x,0,z);roads.add(obj);return obj;};
   roadRuins.push(place('burnt-car',-23,13,4.6),place('trash',-25,21,2.4));
-  roadCivil.push(place('civil-car',-23,13,4.6),place('street-bench',-28,24,2.2),place('street-planter',-27,18,1.6));
+  for(const [i,x,z] of [[0,-23,13],[1,13.1,18],[2,26.9,26]]){
+    const normal=place('civil-car',x,z,4.6);styleVehicleBody(normal,VEHICLE_PALETTE[i]);roadCivil.push(normal);
+    if(i){const damaged=place('damaged-car',x,z,4.6);styleVehicleBody(damaged,VEHICLE_PALETTE[i],true);roadRuins.push(damaged);}
+  }
+  roadCivil.push(place('street-bench',-28,24,2.2),place('street-planter',-27,18,1.6));
   for(const [x,z] of [[-29,-16],[-21,19],[11,-18],[29,21]]){
     const source=models.get('streetlight'),bounds=new THREE.Box3().setFromObject(source),size=bounds.getSize(new THREE.Vector3());
     const obj=place('streetlight',x,z,7.5*Math.max(size.x,size.z)/size.y);obj.rotation.y=x<0?Math.PI/2:-Math.PI/2;
@@ -256,6 +264,7 @@ function selectAsset(asset,show=true){
   single.traverse(node=>{if(node.isMesh||node.isLine){node.material.dispose();if(node.userData.previewGeometry)node.geometry.dispose();}});single.clear();
   const width=asset.landmark?asset.width:Math.min(asset.width,4.8),normal=cloneModel(asset,width),ruined=isBuilding(asset)?ruinedModel(asset,width):null;
   single.add(normal);if(ruined)single.add(ruined);singleVariants={normal,ruined};
+  $('vehicleColors').hidden=!['civil-car','damaged-car','burnt-car'].includes(asset.id);
   $('buildingStates').hidden=!isBuilding(asset);updateSingleState();
   $('assetTitle').textContent=asset.name;$('assetOrigin').textContent=asset.local?'自制样件':'Kenney · CC0';$('assetDescription').textContent=asset.description;
   const path=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb?v=5';$('download').href=path;$('download').textContent='下载原模型 ↓';
@@ -268,7 +277,7 @@ function catalog(filter='all'){
   for(const a of assets.filter(a=>filter==='all'||a.category===filter)){
     const btn=document.createElement('button');btn.type='button';btn.className='asset';btn.dataset.id=a.id;
     if(!a.local){const img=document.createElement('img');img.src=root+'kenney/'+a.file+'.png';img.alt='';btn.append(img);}
-    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','wall-gate':'▥','wall-gate-open':'Ⅱ','wall-gate-ruined':'⋈','courtyard-entry':'∩','camp-plaza':'▤','enemy-squad':'♟','enemy-source-ruined':'◇','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰','street-bench':'▰','street-planter':'♧','civil-car':'▱'})[a.id];btn.append(icon);}
+    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','wall-gate':'▥','wall-gate-open':'Ⅱ','wall-gate-ruined':'⋈','courtyard-entry':'∩','camp-plaza':'▤','enemy-squad':'♟','enemy-source-ruined':'◇','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰','street-bench':'▰','street-planter':'♧','civil-car':'▱','damaged-car':'◩'})[a.id];btn.append(icon);}
     const label=document.createElement('span'),name=document.createElement('b'),origin=document.createElement('small');name.textContent=a.name;origin.textContent=a.local?'自制样件':'Kenney';label.append(name,origin);btn.append(label);
     btn.disabled=!ready;btn.classList.toggle('selected',a.id===selected.id);btn.addEventListener('click',()=>selectAsset(a));$('catalog').append(btn);
   }
@@ -292,6 +301,9 @@ $('motion').addEventListener('click',()=>{animated=!animated;syncMotion();});
 motionPreference.addEventListener('change',event=>{animated=!event.matches;syncMotion();});
 for(const button of document.querySelectorAll('[data-state]'))button.addEventListener('click',()=>{singleState=button.dataset.state;updateSingleState();if(ready)setMode('single');});
 for(const button of document.querySelectorAll('[data-filter]'))button.addEventListener('click',()=>{for(const b of document.querySelectorAll('[data-filter]'))b.classList.toggle('active',b===button);catalog(button.dataset.filter);});
+for(const [index,color] of VEHICLE_PALETTE.entries()){
+  const button=document.createElement('button');button.type='button';button.style.background=color;button.setAttribute('aria-label',['灰蓝车辆','米白车辆','砖红车辆','灰绿车辆','银灰车辆'][index]);button.dataset.paint=color;button.textContent='●';button.addEventListener('click',()=>{vehiclePaint=color;selectAsset(selected);});$('vehicleColors').append(button);
+}
 new ResizeObserver(resize).observe($('viewer'));catalog();setLight();frame();
 const loader=new GLTFLoader();let loaded=0;
 try{

@@ -1,9 +1,18 @@
 import * as THREE from 'three';
 
 let scorch;
-export function styleWreckBody(object){
+export function styleWreckBody(object,color){
   const colors={'#59615b':'#617573','#4a524b':'#354a4c','#323b36':'#263638','#858e82':'#899a96','#778276':'#708783'};
   object.traverse(node=>{if(node.isMesh&&colors[node.material.name])node.material.color.set(colors[node.material.name]);});
+  if(color)object.traverse(node=>{if(node.isMesh&&['#59615b','#4a524b'].includes(node.material.name))node.material.color.set(color).multiplyScalar(.55);});
+}
+export function styleVehicleBody(object,color,damaged=false){
+  object.traverse(node=>{
+    if(!node.isMesh)return;
+    if(['#758d96','#8da4a9'].includes(node.material.name))node.material.color.set(color).multiplyScalar(damaged?.62:node.material.name==='#8da4a9'?.92:1);
+    // 静态停放车不自动点亮前灯，灯片与路灯发光材质分开。
+    if(node.material.name==='#ffe1a3'){node.material.name='vehicle-lens';node.material.color.set('#ced3c5');node.material.emissive.set('#000000');node.material.emissiveIntensity=0;}
+  });
 }
 function scorchTexture(){
   if(scorch)return scorch;

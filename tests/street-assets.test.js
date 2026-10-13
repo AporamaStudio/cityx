@@ -15,3 +15,10 @@ test('长椅花池采用真实小尺寸，完好车辆与燃烧车有同一车�
   assert.equal(car.nodes[0].extras.units,'meters');assert.equal(car.nodes[0].extras.pairedWith,'burnt-car');assert.ok(carSize[1]<2);
   for(const axis of [0,2])assert.ok(Math.abs(carSize[axis]-wreck[axis]*car.nodes[0].extras.partnerScaleToMeters)<1e-6);
 });
+
+test('损坏车与完好车同米制轮廓，不包含火焰或发光材质',()=>{
+  const car=read('civil-car'),damaged=read('damaged-car'),a=size(car),b=size(damaged);
+  assert.equal(damaged.nodes[0].extras.pairedWith,'civil-car');assert.equal(damaged.nodes[0].extras.burning,false);assert.equal(damaged.nodes[0].extras.units,'meters');
+  assert.ok(b[1]<a[1]);for(const axis of [0,2])assert.ok(Math.abs(a[axis]-b[axis])<1e-6);
+  assert.ok(damaged.materials.every(m=>!m.emissiveFactor&&!['#ff9538','#ffd36b'].includes(m.name)));
+});

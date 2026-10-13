@@ -1,6 +1,6 @@
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView} from './city-view.js?v=2';
-import {createCity3D} from './city-3d.js?v=31';
-import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,wreckRoadPose} from './city-streets.js?v=4';
+import {createCity3D} from './city-3d.js?v=32';
+import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=4';
 import {createVisibility} from './visibility.js?v=6';
@@ -531,17 +531,9 @@ function paintMap() {
   for(const frame of enemyFrames){frame.fogAlpha=mapFogEnabled()?view.visibility.enemyAlpha(frame.rawX+.5,frame.rawY+.5):1;frame.alpha*=frame.fogAlpha;if(frame.enemy.hp===0&&!currentlyVisible(frame.enemy.id))frame.alpha=0;}
   const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.role==='hospital'?'hospital':p.content.type,status:p.content.status,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id)),cellMeters:controlState.params.cellMeters}));
   const streetLamps=operatingStreetLamps(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
-  const wrecks=[];
-  // 燃烧车辆是已知废墟旁的装饰，不阻路；恢复邻楼或在此建设时直接移除。
-  // 车辆按约4.6m长换算为地图格，不按道路格放大；火光随实体尺度一起收缩。
-  const wreckWidth=2.4/controlState.params.cellMeters,wreckLength=4.6/controlState.params.cellMeters;
-  for(const p of cityPlots)if(p.status==='ruin'&&p.type!=='hospital'&&p.id%3===0){
-    const candidates=[[p.x-1,p.y+Math.floor(p.h/2)],[p.x+p.w,p.y+Math.floor(p.h/2)],[p.x+Math.floor(p.w/2),p.y-1],[p.x+Math.floor(p.w/2),p.y+p.h]];
-    const cell=candidates.find(([x,y])=>inside(x,y)&&state.layout?.tiles[key(x,y)]==='road'&&currentlyVisible(key(x,y))&&!state.walls.has(key(x,y))&&!state.outposts.has(key(x,y))&&!streetLamps.some(l=>Math.hypot(l.x-x-.5,l.y-y-.5)<2)&&!wrecks.some(l=>Math.hypot(l.x-x-.5,l.y-y-.5)<3));
-    if(cell)wrecks.push({id:'wreck:'+p.id,asset:'wreck',...wreckRoadPose(state.layout,cell[0],cell[1],p,controlState.params.cellMeters),w:wreckWidth,h:wreckLength,fireScale:wreckLength/.95});
-  }
+  const vehicles=streetVehicles(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys()]),lamps:streetLamps,cellMeters:controlState.params.cellMeters}),wrecks=vehicles.filter(car=>car.asset==='wreck');
   cityTransitions=cityTransitions.filter(event=>effectTime-event.at<.8&&currentlyVisible(event.cell));
-  const streetDressing=operatingStreetProps(streetLamps,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys(),...wrecks.map(p=>key(Math.floor(p.x),Math.floor(p.y)))]),cellMeters:controlState.params.cellMeters});
+  const streetDressing=[...operatingStreetProps(streetLamps,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys(),...vehicles.map(p=>key(Math.floor(p.x),Math.floor(p.y)))]),cellMeters:controlState.params.cellMeters}),...vehicles.filter(car=>car.asset!=='wreck')];
   const fx={time:effectTime,cell:size,observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});

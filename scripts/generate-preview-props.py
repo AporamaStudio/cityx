@@ -279,11 +279,35 @@ def street_furniture():
     m.save('civil-car',{'units':'meters','visualOnly':True,'pairedWith':'burnt-car','partnerScaleToMeters':scale})
 
 
+def damaged_car():
+    # 与完好车共用车身/轮位，塌陷车顶、断保险杠和破窗只表达损坏，不含火焰。
+    m=Model();m.box((0,.35,0),(1.15,.35,2.55),'#758d96')
+    m.box((0,.67,.23),(.94,.38,1.24),'#466d80')
+    m.box((-.22,.94,.25),(.5,.07,1.28),'#8da4a9')
+    m.box((.22,.84,.32),(.46,.07,1.08),'#8da4a9')
+    m.box((0,.75,-.41),(.78,.3,.055),'#324443')
+    m.box((0,.70,.87),(.73,.25,.055),'#4f7082')
+    m.beam((-.36,.63,-.45),(.3,.82,-.46),.035,'#8f9b8f')
+    m.box((.18,.55,-.88),(.48,.035,.48),'#293836')
+    m.box((-.27,.53,-.86),(.36,.045,.5),'#8da4a9')
+    for x in (-.58,.58):
+        for z in (-.78,.78):m.box((x,.23,z),(.22,.44,.43),'#242e2a')
+    m.box((-.25,.30,-1.3),(.65,.12,.12),'#949c91')
+    m.box((.37,.23,-1.3),(.28,.12,.12),'#949c91')
+    m.box((0,.32,1.255),(1.1,.12,.04),'#949c91')
+    m.box((-.4,.46,-1.278),(.21,.12,.025),'#c5c6b8')
+    scale=2.4/1.38
+    for positions,_ in m.parts.values():positions[:]=[p*scale for p in positions]
+    m.save('damaged-car',{'units':'meters','visualOnly':True,'pairedWith':'civil-car','burning':False})
+
+
 if __name__ == '__main__':
     if '--entrances' in sys.argv:
         entrances();print('已生成4个配套墙门/文明入口样件')
+    elif '--damaged-car' in sys.argv:
+        damaged_car();print('已生成米制非燃烧损坏车辆样件')
     elif '--street-furniture' in sys.argv:
         street_furniture();print('已生成3个米制长椅/花池/完好车辆样件')
     else:
-        tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad();entrances();street_furniture()
-        print('已生成21个独立GLB样件，含配套门与文明街景')
+        tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad();entrances();street_furniture();damaged_car()
+        print('已生成22个独立GLB样件，含配套门与三态车辆街景')

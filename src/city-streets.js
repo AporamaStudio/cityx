@@ -1,5 +1,34 @@
 import {roadMarkings,roadProfile} from './city-roads.js?v=1';
 
+export const VEHICLE_PALETTE=['#688d9b','#b5b3a0','#a5655b','#6f8772','#8a9198'];
+const vehicleSeed=id=>(Math.imul(id+17,1103515245)>>>8)>>>0;
+
+// 已修缮且当前受控的街区放完好车，废墟混合损坏/燃烧车；所有车辆仍只是静态街景。
+export function streetVehicles(plots,{layout,controlled,visible,occupied,lamps=[],cellMeters}){
+  const cars=[],width=2.4/cellMeters,length=4.6/cellMeters;
+  if(cellMeters<8)return cars; // 极窄比例尺下不把真实尺寸的车塞进一个道路格。
+  for(const p of plots){
+    if(p.type==='hospital'||!['ruin','building'].includes(p.status)||p.status==='ruin'&&p.id%3!==0)continue;
+    const seed=vehicleSeed(p.id),asset=p.status==='building'?'car':seed%4===0?'wreck':'damagedCar';
+    const candidates=[[p.x-1,p.y+Math.floor(p.h/2)],[p.x+p.w,p.y+Math.floor(p.h/2)],[p.x+Math.floor(p.w/2),p.y-1],[p.x+Math.floor(p.w/2),p.y+p.h]];
+    for(const [x,y] of candidates){
+      const id=y*layout.width+x;
+      if(x<0||y<0||x>=layout.width||y>=layout.height||layout.tiles[id]!=='road'||!visible(id)||occupied.has(id)||p.status==='building'&&!controlled.has(id))continue;
+      if(!roadMarkings(layout).get(id)?.axis)continue;
+      const pose=wreckRoadPose(layout,x,y,p,cellMeters),radius=length/2+.5/cellMeters;
+      if(cars.some(c=>Math.hypot(c.x-pose.x,c.y-pose.y)<15/cellMeters)||lamps.some(l=>Math.hypot(l.x-pose.x,l.y-pose.y)<radius))continue;
+      const ew=(Math.abs(Math.cos(pose.angle))*width+Math.abs(Math.sin(pose.angle))*length)/2,eh=(Math.abs(Math.sin(pose.angle))*width+Math.abs(Math.cos(pose.angle))*length)/2;
+      let allowed=true;
+      for(let cy=Math.floor(pose.y-eh);cy<=Math.floor(pose.y+eh);cy++)for(let cx=Math.floor(pose.x-ew);cx<=Math.floor(pose.x+ew);cx++){
+        const cell=cy*layout.width+cx;if(cx<0||cy<0||cx>=layout.width||cy>=layout.height||layout.tiles[cell]!=='road'||!visible(cell)||occupied.has(cell)||p.status==='building'&&!controlled.has(cell))allowed=false;
+      }
+      if(!allowed)continue;
+      cars.push({id:'vehicle:'+p.id,asset,...pose,w:width,h:length,color:VEHICLE_PALETTE[seed%VEHICLE_PALETTE.length],fireScale:length/.95});break;
+    }
+  }
+  return cars;
+}
+
 // 街景只读取现有运营、归属和视野；灯杆靠建筑一侧的路缘，灯臂朝向道路。
 export function operatingStreetLamps(plots,{layout,controlled,visible,occupied,cellMeters}){
   const lamps=[],width=layout.width,height=layout.height;
