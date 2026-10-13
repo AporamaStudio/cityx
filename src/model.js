@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=74';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=75';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -503,6 +503,7 @@ export function changeWall(state, id, remove = false) {
 // 参数先验证、再一次性应用；不静默删除超预算设施或落在新控制范围外的布局。
 export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
+  if(!integer(params.streetLightBudget,0,64))return '真实路灯预算须为 0–64 盏整数，0 保留灯具与暖光池。';
   if(!integer(params.cellMeters,1,1000))return '每格距离须为 1–1000 米整数。';
   if(!integer(params.fireNumbersMinCellPx,0,48))return '火力数字最小格宽须为 0–48 像素整数，0 始终显示。';
   if(!integer(params.mapMidZoomPercent,100,1000)||!integer(params.mapNearZoomPercent,100,1000)||params.mapMidZoomPercent>=params.mapNearZoomPercent)return '中景/近景门槛须为 100–1000% 整数，且中景低于近景。';

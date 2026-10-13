@@ -145,7 +145,7 @@ export function createCity3D(onReady){
       entry.object.updateMatrixWorld(true);const ray=new THREE.Raycaster(new THREE.Vector3(x,entry.roof+1,y),new THREE.Vector3(0,-1,0));
       return ray.intersectObject(entry.object,true)[0]?.point.y??entry.roof;
     },
-    render(plots,{width,height,panX,panY,cell,cellMeters,night,layout,lamps=[],fx}){
+    render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,night,layout,lamps=[],fx}){
       if(!ready)return null;
       const active=new Set(plots.map(p=>p.id));
       for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
@@ -172,18 +172,28 @@ export function createCity3D(onReady){
           model.scale.setScalar(streetScale);model.position.y=-streetBounds.min.y*streetScale;object.position.set(lamp.x,0,lamp.y);object.rotation.y=lamp.angle;
           const pool=groundGlow(18/cellMeters,28/cellMeters,'#ffca72',.32);pool.position.set(lightOffset.x*streetScale,.012,lightOffset.z*streetScale);pool.userData.ownGeometry=true;object.add(pool);streets.add(object);
         }
+        mergePlot(streets);streets.traverse(node=>{if(node.isMesh&&node.material.transparent)node.castShadow=false;});
         streetKey=nextStreets;
       }
       // 只启用镜头附近路灯的真实光源；远景保留灯具与光池，灯不投独立阴影。
-      const reach=22/cellMeters,nearby=streetLights.filter(p=>p.x>=-panX/cell-reach&&p.x<=(width-panX)/cell+reach&&p.y>=-panY/cell-reach&&p.y<=(height-panY)/cell+reach);
-      while(localLights.length<nearby.length){const light=new THREE.PointLight('#ffd08a',0,reach,2);scene.add(light);localLights.push(light);}
-      localLights.forEach((light,i)=>{light.visible=i<nearby.length&&night>0;light.distance=reach;light.intensity=i<nearby.length?night*1.7*(20/cellMeters)**2:0;if(i<nearby.length)light.position.set(nearby[i].x,nearby[i].height,nearby[i].y);});
+      const reach=22/cellMeters,cx=(width/2-panX)/cell,cy=(height/2-panY)/cell;
+      const nearby=streetLights.filter(p=>p.x>=-panX/cell-reach&&p.x<=(width-panX)/cell+reach&&p.y>=-panY/cell-reach&&p.y<=(height-panY)/cell+reach).sort((a,b)=>Math.hypot(a.x-cx,a.y-cy)-Math.hypot(b.x-cx,b.y-cy)).slice(0,lightBudget);
+      // 固定池规模，空闲灯只归零强度；平移不改变Shader灯数，跨预算边缘渐变换位。
+      while(localLights.length>lightBudget)localLights.pop().removeFromParent();
+      while(localLights.length<lightBudget){const light=new THREE.PointLight('#ffd08a',0,reach,2);light.userData.level=0;scene.add(light);localLights.push(light);}
+      const wanted=new Map(nearby.map(p=>[`${p.x}:${p.y}`,p])),claimed=new Set(localLights.map(l=>l.userData.id).filter(id=>wanted.has(id)));
+      for(const light of localLights){
+        let p=wanted.get(light.userData.id);const dt=Math.min(.1,Math.max(0,performance.now()/1000-(light.userData.at??performance.now()/1000)));light.userData.at=performance.now()/1000;
+        light.userData.level=fx.reducedMotion?(p?1:0):Math.max(0,Math.min(1,light.userData.level+(p?1:-1)*dt*5));
+        if(!p&&light.userData.level===0){const next=[...wanted].find(([id])=>!claimed.has(id));if(next){const [id,point]=next;light.userData.id=id;claimed.add(id);p=point;light.userData.level=fx.reducedMotion?1:night>0?.01:0;}}
+        light.visible=night>0;light.distance=reach;light.intensity=night*1.7*(20/cellMeters)**2*light.userData.level;if(p)light.position.set(p.x,p.height,p.y);
+      }
       streets.traverse(node=>{if(node.isMesh){if(node.material.map)node.material.opacity=night*.32;else if(node.material.name==='#ffe1a3'){node.material.emissive.set('#ffb75c');node.material.emissiveIntensity=night*1.8;}}});
       const lightItems=[...fx.sweeps,...fx.fires].map(item=>{const size=new THREE.Box3().setFromObject(models.get(item.asset)).getSize(new THREE.Vector3());return {...item,height:size.y*Math.min(item.w/size.x,item.h/size.z)*(item.asset==='watch'?.84:.65)};});
       effects.updateLights(lightItems,fx.time,night,{left:-panX/cell,right:(width-panX)/cell,top:-panY/cell,bottom:(height-panY)/cell});
       // 静态云纹/悬停刷新复用城市画面；扫光与火光读取同一动效时间重画承光层。
       const shapes=plots.map(p=>`${p.id}:${entries.get(p.id).signature}`).join('|');
-      const signature=shapes+plots.map(p=>p.powered?'1':'0').join('')+streetKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightItems.length?fx.time:0}`;
+      const signature=shapes+plots.map(p=>p.powered?'1':'0').join('')+streetKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightBudget}:${fx.time}`;
       if(signature!==lastFrame){
         const dimensions=`${width}:${height}`;if(pixels!==dimensions){renderer.setSize(width,height,false);pixels=dimensions;}
         camera.left=-panX/cell;camera.right=(width-panX)/cell;camera.top=panY/cell;camera.bottom=-(height-panY)/cell;camera.updateProjectionMatrix();

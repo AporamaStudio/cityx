@@ -3,6 +3,8 @@ export const SIZE = 60;
 export const DEFAULTS = {
   // 每格的现实边长，用于比例尺与3D实体尺度；战斗和建设仍按格计算。
   cellMeters: 20,
+  // 真实路灯固定光源池；超出预算仍保留灯罩和地面暖光，0关闭路灯真实光源。
+  streetLightBudget: 24,
   // 精确火力只在路线格上显示；每格屏幕尺寸小于此值时收起数字，0关闭缩放门槛。
   fireNumbersMinCellPx: 12,
   // 两条倍率分界划分远/中/近景；报价另按实际空间保住可读字号。

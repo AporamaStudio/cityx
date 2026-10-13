@@ -342,3 +342,9 @@ test('当天全返，旧投入按可配置比例向下取整',()=>{
   for(const day of [3,4]){s.day=day;for(const percent of [0,35,50,100]){s.params.demolitionRefundPercent=percent;assert.equal(modelExports.demolitionQuote(s,id).refund,day===3?10:Math.floor(10*percent/100));}}
   assert.match(validateParams({...s.params,demolitionRefundPercent:101},s),/拆除返还/);
 });
+
+test('真实路灯预算可调但不改变游戏规则，非法数量拒绝',()=>{
+  const state=createCampaign();
+  for(const budget of [0,24,64])assert.equal(validateParams({...state.params,streetLightBudget:budget},state,false),'');
+  for(const budget of [-1,.5,65])assert.match(validateParams({...state.params,streetLightBudget:budget},state,false),/路灯预算/);
+});
