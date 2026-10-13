@@ -1,3 +1,5 @@
+import {createShotVFX,createImpactVFX,muzzlePoint} from './cannon-vfx.js?v=1';
+import {SHOT_STYLES,shotEnvelope} from './shot-visuals.js?v=1';
 import * as THREE from 'three';
 import {groundGlow} from './model-preview-effects.js?v=3';
 
@@ -8,7 +10,7 @@ function dispose(object){object.removeFromParent();object.traverse(node=>{if(nod
 
 // 动效只消费显示描述和游戏时间；这里没有自动试射、独立计时或伤害计算。
 export function createCityEffects(scene){
-  const group=new THREE.Group();scene.add(group);const lights=new Map(),shots=new Map(),transitions=new Map();
+  const group=new THREE.Group();scene.add(group);const lights=new Map(),shots=new Map(),transitions=new Map(),impacts=new Map();
   function lightEntry(item){
     if(lights.has(item.id))return lights.get(item.id);
     const sweep=item.asset==='watch',wreck=item.asset==='wreck',object=new THREE.Group(),light=sweep?new THREE.SpotLight('#9fcaff',0,24,.10,.7,2):new THREE.PointLight(wreck?'#ff8745':'#ffb860',0,wreck?2.3:4,2),target=new THREE.Object3D();
@@ -17,11 +19,18 @@ export function createCityEffects(scene){
     const cone=sweep?mesh(new THREE.ConeGeometry(1,1,18,1,true),'#93bdff',.17):null;if(cone){cone.material.side=THREE.DoubleSide;object.add(cone);light.target=target;}
     group.add(object);const entry={object,light,target,pool,cone};lights.set(item.id,entry);return entry;
   }
-  function shotEntry(id,long){
-    if(shots.has(id))return shots.get(id);
-    const object=new THREE.Group(),flash=mesh(new THREE.SphereGeometry(long?.19:.14,6,4),'#fff1ab'),smoke=mesh(new THREE.SphereGeometry(.11,7,5),'#a6b0aa',.18),bullet=mesh(new THREE.SphereGeometry(long?.16:.10,6,4),long?'#ffe3a0':'#ffd082');
-    const tracer=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]),new THREE.LineBasicMaterial({color:long?'#f8dca5':'#ffd38b',transparent:true,opacity:.7,depthTest:false}));tracer.userData.ownGeometry=true;tracer.frustumCulled=false;
-    object.add(flash,smoke,bullet,tracer);group.add(object);const entry={object,flash,smoke,bullet,tracer};shots.set(id,entry);return entry;
+  function targetPoint(item,props,start,cellMeters){
+    const target=props.get(item.targetObject),object=target?.object;
+    if(!object)return new THREE.Vector3(item.x,.95/cellMeters,item.y);
+    object.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(object),center=bounds.getCenter(new THREE.Vector3());
+    center.y=bounds.min.y+(bounds.max.y-bounds.min.y)*.55;
+    // 清源弹迹落在当前源头表面，敌群则指向身体中部；位置不参与攻击判定。
+    if(item.sourceId&&start){
+      const h=bounds.max.y-bounds.min.y;center.y=Math.max(bounds.min.y+Math.min(.6/cellMeters,h*.25),Math.min(start.y,bounds.max.y-Math.min(.2/cellMeters,h*.25)));
+      const direction=center.clone().sub(start).normalize(),ray=new THREE.Raycaster(start,direction);
+      return ray.intersectObject(object,true)[0]?.point??new THREE.Ray(start.clone(),direction).intersectBox(bounds,new THREE.Vector3())??center;
+    }
+    return center;
   }
   return {
     group,
@@ -62,19 +71,25 @@ export function createCityEffects(scene){
         }
       }
     },
-    updateShots(items,props,time,cell){
-      const active=new Set(items.map(item=>item.id));for(const [id,entry] of shots)if(!active.has(id)){dispose(entry.object);shots.delete(id);}
+    updateShots(items,hitItems,props,time,cell,cellMeters=20,night=0){
+      const active=new Set(items.map(item=>item.id));
+      for(const [id,entry] of shots)if(!props.has('tower:'+id)){dispose(entry.group);shots.delete(id);}else if(!active.has(id)){entry.group.visible=false;entry.at=null;}
       for(const item of items){
-        const body=props.get('tower:'+item.id),age=time-item.at;if(!body||age<0||age>.5){if(shots.has(item.id))shots.get(item.id).object.visible=false;continue;}
-        const e=shotEntry(item.id,item.type==='B');body.object.updateMatrixWorld(true);
-        const bounds=new THREE.Box3();for(const node of body.motion.muzzles)bounds.expandByObject(node);if(bounds.isEmpty()){e.object.visible=false;continue;}
-        const start=bounds.getCenter(new THREE.Vector3()),end=new THREE.Vector3(item.x,.35,item.y),t=Math.min(1,age/.24);
-        e.object.visible=true;e.flash.position.copy(start);e.flash.visible=age<.085||(item.type!=='B'&&age>.16&&age<.22);
-        for(const node of [e.flash,e.bullet]){node.material.transparent=true;node.material.opacity=item.alpha;}
-        // 两种炮均从炮口直达目标；屋顶与地面高差形成斜线，不额外抬高弹道。
-        e.bullet.visible=age<.24;e.bullet.scale.setScalar(Math.max(1,3/(cell*(item.type==='B'?.16:.10)*2)));e.bullet.position.lerpVectors(start,end,t);
-        e.tracer.visible=age<.25;e.tracer.material.opacity=.7*(1-age/.25)*item.alpha;const positions=e.tracer.geometry.attributes.position;positions.setXYZ(0,start.x,start.y,start.z);positions.setXYZ(1,e.bullet.position.x,e.bullet.position.y,e.bullet.position.z);positions.needsUpdate=true;
-        e.smoke.visible=age>.06&&age<.45;e.smoke.position.copy(start).add(new THREE.Vector3(0,age*.5,0));e.smoke.scale.setScalar(1+age*3);e.smoke.material.opacity=Math.max(0,.18*(1-age/.45))*item.alpha;
+        const body=props.get('tower:'+item.id),age=time-item.at;if(!body)continue;
+        if(shots.has(item.id)&&shots.get(item.id).type!==item.type){dispose(shots.get(item.id).group);shots.delete(item.id);}
+        if(!shots.has(item.id))shots.set(item.id,createShotVFX(group,item.type));const entry=shots.get(item.id);body.object.updateMatrixWorld(true);
+        if(entry.at!==item.at){
+          entry.side=Math.round(item.at*1000)+item.id;const start=muzzlePoint(body.motion.muzzles,entry.side);if(!start){entry.group.visible=false;continue;}
+          entry.at=item.at;entry.start=start;entry.end=targetPoint(item,props,start,cellMeters);
+        }
+        entry.update(entry.start,entry.end,age,{unitsPerMeter:1/cellMeters,pixelsPerUnit:cell,alpha:item.alpha,night,muzzle:muzzlePoint(body.motion.muzzles,entry.side)??entry.start});
+      }
+      const hitIds=new Set(hitItems.map(hit=>hit.id));for(const [id,entry] of impacts)if(!hitIds.has(id)){dispose(entry.group);impacts.delete(id);}
+      for(const hit of hitItems){
+        if(!impacts.has(hit.id))impacts.set(hit.id,createImpactVFX(group));const entry=impacts.get(hit.id);
+        if(entry.at!==hit.at){entry.at=hit.at;const shot=items.find(item=>hit.sourceId&&item.sourceId===hit.sourceId);entry.point=shot&&shots.get(shot.id)?.end?.clone()||targetPoint(hit,props,null,cellMeters);}
+        const delay=SHOT_STYLES[hit.type]?.flight??.14;
+        entry.update(entry.point,time-hit.at-delay,{unitsPerMeter:1/cellMeters,pixelsPerUnit:cell,alpha:hit.alpha});
       }
     },
   };
@@ -89,7 +104,7 @@ export function animateFacility(entry,item,frame){
   const {time,shots}=frame,shot=shots.find(shot=>'tower:'+shot.id===item.id),age=shot?time-shot.at:1;
   if(shot)entry.object.rotation.y=Math.atan2(item.x-shot.x,item.y-shot.y);
   if(item.target)for(const head of entry.motion.heads)head.rotation.y=Math.atan2(item.x-item.target.x,item.y-item.target.y);
-  for(const {node,z} of entry.motion.barrels)node.position.z=z+Math.max(0,1-age/.38)*(item.asset==='far'?.18:.12);
+  for(const {node,z} of entry.motion.barrels){const type=item.asset==='far'?'B':'A',scale=node.getWorldScale(new THREE.Vector3()).z;node.position.z=z+shotEnvelope(age,type).recoil*SHOT_STYLES[type].recoil/((frame.cellMeters??20)*scale);}
   entry.motion.flames.forEach(({node,scale,position},i)=>{
     node.scale.set(scale.x*(1+.06*Math.sin(time*6+i)),scale.y*(.88+.10*Math.sin(time*7.5+item.x+i)+.055*Math.sin(time*13+i*2)),scale.z*(1+.05*Math.cos(time*9+i)));
     node.position.x=position.x+.015*Math.sin(time*8+item.y+i);node.rotation.z=.035*Math.sin(time*5.7+i);node.material.emissiveIntensity=item.dead?0:.9+.17*Math.sin(time*9+item.x);

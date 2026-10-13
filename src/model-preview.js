@@ -5,7 +5,7 @@ import {addBuildingFoundation} from './city-building-style.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
 import {VEHICLE_PALETTE} from './city-streets.js?v=5';
 import {createRoadModel} from './city-road-model.js?v=1';
-import {createPreviewEffects,groundGlow} from './model-preview-effects.js?v=3';
+import {createPreviewEffects,groundGlow} from './model-preview-effects.js?v=4';
 
 // 独立选型页：模型、灯光与状态仅用于看效果，不读取或修改原型游戏。
 const root='assets/model-preview/',kenney='https://kenney.nl/assets/';
@@ -70,7 +70,7 @@ Object.assign(sun.shadow.camera,{left:-38,right:38,top:38,bottom:-38,near:1,far:
 const fireLight=new THREE.PointLight('#ffb860',22,13,2);fireLight.position.set(4,2.2,0);
 const wreckLight=new THREE.PointLight('#ff9a49',9,6,2);wreckLight.position.set(-8,1.1,-.8);
 scene.add(sky,sun,fireLight,wreckLight,district,single,roads);
-effects=createPreviewEffects({isNight:()=>night,render:time=>{
+effects=createPreviewEffects({isNight:()=>night,view:()=>({pixelsPerUnit:renderer.domElement.height/renderer.getPixelRatio()/(camera.top-camera.bottom)*camera.zoom}),render:time=>{
   fireLight.intensity=22*(1+.12*Math.sin(time*8.7)+.05*Math.sin(time*13));
   wreckLight.intensity=9*(1+.16*Math.sin(time*9.1+2));for(const entry of wreckDressing.values())updateWreckDressing(entry,time,night,!animated);renderer.render(scene,camera);
 }});
@@ -268,7 +268,7 @@ function setMode(next){
 function selectAsset(asset,show=true){
   selected=asset;
   if(singleVariants){effects.remove(singleVariants.normal);wreckDressing.delete(singleVariants.normal);}
-  single.traverse(node=>{if(node.isMesh||node.isLine){node.material.dispose();if(node.userData.previewGeometry)node.geometry.dispose();}});single.clear();
+  single.traverse(node=>{if(node.isMesh||node.isLine||node.isSprite){node.material.dispose();if(node.userData.previewGeometry)node.geometry.dispose();}});single.clear();
   const width=asset.landmark?asset.width:Math.min(asset.width,4.8),normal=cloneModel(asset,width),ruined=isBuilding(asset)?ruinedModel(asset,width):null;
   single.add(normal);if(ruined)single.add(ruined);singleVariants={normal,ruined};
   $('vehicleColors').hidden=!['civil-car','damaged-car','burnt-car'].includes(asset.id);

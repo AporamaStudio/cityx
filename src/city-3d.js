@@ -5,8 +5,8 @@ import {addBuildingFoundation,buildingVariation} from './city-building-style.js?
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
 import {createRoadModel} from './city-road-model.js?v=1';
 import {PLANT_MODELS} from './city-vegetation.js?v=1';
-import {groundGlow} from './model-preview-effects.js?v=3';
-import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=6';
+import {groundGlow} from './model-preview-effects.js?v=4';
+import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=7';
 import {createCityObservation} from './city-observation.js?v=4';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
@@ -244,13 +244,13 @@ export function createCity3D(onReady){
         }
         const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);if(item.asset==='wreck')object.rotation.y=item.angle??0;if(item.asset==='enemy'){object.scale.setScalar(item.visualScale??1);if(item.angle!==undefined)object.rotation.y=item.angle;}else object.scale.y=item.dead&&item.asset!=='sourceRuined'?.3:1;
         object.traverse(node=>{if(node.isMesh){node.material.opacity=item.alpha??1;node.material.transparent=node.material.opacity<1;if(!node.material.userData.baseColor)node.material.userData.baseColor=node.material.color.clone();node.material.color.copy(node.material.userData.baseColor).lerp(new THREE.Color('#84867a'),item.dead?.85:(1-(item.health??1))*.5);if(['#ff9538','#ffd36b'].includes(node.material.name))node.visible=!item.dead;}});
-        if(item.asset==='enemy')object.traverse(node=>{if(node.isMesh){node.material.color.lerp(new THREE.Color(item.fogColor),(1-item.fogAlpha)*.75);node.material.emissive.copy(node.material.color);node.material.emissiveIntensity=.08;}});
+        if(item.asset==='enemy')object.traverse(node=>{if(node.isMesh){node.material.color.lerp(new THREE.Color('#fff0c9'),item.hitMix??0);node.material.color.lerp(new THREE.Color(item.fogColor),(1-item.fogAlpha)*.75);node.material.emissive.copy(node.material.color);node.material.emissiveIntensity=.08;}});
         animateFacility(props.get(item.id),item,fx);
         if(props.get(item.id).wreck)updateWreckDressing(props.get(item.id).wreck,fx.time,night,fx.reducedMotion);
       }
-      const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+JSON.stringify(fx.transitions)+`/${lastFrame}:${night}:${fx.time}`;
+      const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+JSON.stringify(fx.impacts)+JSON.stringify(fx.transitions)+`/${lastFrame}:${night}:${fx.time}`;
       if(signature!==lastProps){
-        effects.updateTransitions(fx.transitions??[],fx.time);effects.updateShots(fx.shots,props,fx.time,fx.cell);
+        effects.updateTransitions(fx.transitions??[],fx.time);effects.updateShots(fx.shots,fx.impacts??[],props,fx.time,fx.cell,fx.cellMeters,night);
         if(!fx.observer){
           buildings.visible=false;facilities.visible=true;enemies.visible=false;streets.visible=false;roads.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
           facilities.visible=false;enemies.visible=true;renderer.render(scene,camera);capture(enemyCanvas);enemies.visible=false;

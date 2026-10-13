@@ -1,3 +1,5 @@
+import {createShotVFX,createImpactVFX,muzzlePoint} from './cannon-vfx.js?v=1';
+import {SHOT_STYLES,shotEnvelope} from './shot-visuals.js?v=1';
 import * as THREE from 'three';
 
 // 选型页的轻量动效：只改变模型与灯光，不参与探索、射程或伤害。
@@ -19,7 +21,7 @@ function effectMesh(geometry,color,opacity=1){
 }
 function visible(object){for(let node=object;node;node=node.parent)if(!node.visible)return false;return !!object.parent;}
 
-export function createPreviewEffects({render,isNight}){
+export function createPreviewEffects({render,isNight,view}){
   const entries=[];let enabled=false,time=0,previous=0,lastPaint=0,frame=0,forcedShot=-10;
   function fire(object){
     const flames=[];
@@ -53,33 +55,23 @@ export function createPreviewEffects({render,isNight}){
     };
   }
   function cannon(object,long){
-    const barrels=[],muzzles=[];
+    const barrels=[],muzzles=[],type=long?'B':'A';
     object.traverse(node=>{if(node.isMesh){if(['#3f5057','#1e2b32'].includes(node.material.name))barrels.push({node,z:node.position.z});if(node.material.name==='#1e2b32')muzzles.push(node);}});
-    object.updateWorldMatrix(true,true);const bounds=new THREE.Box3();for(const node of muzzles)bounds.expandByObject(node);
-    if(bounds.isEmpty())return ()=>{};
-    const center=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3()),origin=object.worldToLocal(center.clone());
-    const originZ=origin.z,barrelScale=barrels[0]?.node.getWorldScale(new THREE.Vector3()).z??1;
-    const flashes=[];
-    for(const sign of [-1,1]){
-      const flash=effectMesh(new THREE.SphereGeometry(long?.14:.1,6,4),'#fff4ba');flash.position.copy(origin);flash.position.x+=sign*size.x*.28;flash.position.z-=.07;object.add(flash);flashes.push(flash);
-    }
-    const shot=effectMesh(new THREE.SphereGeometry(long?.065:.045,6,4),long?'#ffe5a0':'#ffd082');object.add(shot);
-    const distance=long?7.5:4.8,end=origin.clone().add(new THREE.Vector3(0,-.8,-distance));
-    const tracer=new THREE.Line(new THREE.BufferGeometry().setFromPoints([origin,end]),new THREE.LineBasicMaterial({color:long?'#f8dca5':'#ffd38b',transparent:true,opacity:.65}));tracer.userData.previewGeometry=true;object.add(tracer);
-    const smoke=effectMesh(new THREE.SphereGeometry(.13,7,5),'#a6b0aa',.2);smoke.position.copy(origin);object.add(smoke);
-    const phase=entries.length*.4,period=long?4.3:3.1;
+    object.updateWorldMatrix(true,true);const bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),u=Math.max(size.x,size.z)/(long?6:5);
+    const shot=createShotVFX(object,type),impact=createImpactVFX(object),phase=entries.length*.4,period=long?4.3:3.1;
+    let lastToken,start,end,side=0;
     return t=>{
-      const age=t-forcedShot<.7?t-forcedShot:(t+phase)%period;
-      const flashOn=age<.09||(!long&&age>.17&&age<.24),recoil=Math.max(0,1-age/.48);
-      for(const {node,z} of barrels)node.position.z=z+recoil*(long?.18:.12);
-      origin.z=originZ+recoil*(long?.18:.12)*barrelScale;
-      for(const flash of flashes){flash.visible=flashOn;flash.position.z=origin.z-.07;flash.scale.setScalar(long?1.35:1);}
-      tracer.visible=age>.035&&age<.25;tracer.material.opacity=.65*(1-age/.3);
-      tracer.geometry.attributes.position.setXYZ(0,origin.x,origin.y,origin.z);tracer.geometry.attributes.position.needsUpdate=true;
-      shot.visible=age<.3;shot.position.lerpVectors(origin,end,Math.min(1,age/.3));
-      smoke.visible=age>.06&&age<.65;smoke.scale.setScalar(1+age*3);smoke.position.set(origin.x,origin.y+age*.45,origin.z);smoke.material.opacity=Math.max(0,.22*(1-age/.65));
+      const forced=t-forcedShot>=0&&t-forcedShot<.7,age=forced?t-forcedShot:(t+phase)%period,token=forced?'force:'+forcedShot:Math.floor((t+phase)/period),e=shotEnvelope(age,type);
+      for(const {node,z} of barrels)node.position.z=z+e.recoil*SHOT_STYLES[type].recoil*u/node.getWorldScale(new THREE.Vector3()).z;
+      if(token!==lastToken){
+        object.updateWorldMatrix(true,true);side=Math.floor(t*10);const point=muzzlePoint(muzzles,side);if(!point)return;
+        start=object.worldToLocal(point);end=start.clone().add(new THREE.Vector3(0,-Math.min(start.y,u),-(long?12:8)*u));lastToken=token;
+      }
+      object.updateWorldMatrix(true,true);const options={unitsPerMeter:u,pixelsPerUnit:view().pixelsPerUnit,night:isNight()?1:0,muzzle:object.worldToLocal(muzzlePoint(muzzles,side))};
+      shot.update(start,end,age,options);impact.update(end,age-SHOT_STYLES[type].flight,options);
     };
   }
+
   function update(){for(const {object,tick} of entries)if(visible(object))tick(time);}
   function animate(now){
     frame=0;if(!enabled||document.hidden)return;
