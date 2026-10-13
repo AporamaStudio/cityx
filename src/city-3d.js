@@ -3,7 +3,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {drawRoadTexture} from './city-textures.js?v=16';
 import {groundGlow} from './model-preview-effects.js?v=3';
-import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=4';
+import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=5';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',enemy:'generated/enemy-squad',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble'};
@@ -213,11 +213,11 @@ export function createCity3D(onReady){
         if(item.asset==='enemy')object.traverse(node=>{if(node.isMesh){node.material.color.lerp(new THREE.Color(item.fogColor),(1-item.fogAlpha)*.75);node.material.emissive.copy(node.material.color);node.material.emissiveIntensity=.08;}});
         animateFacility(props.get(item.id),item,fx);
       }
-      const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+`/${lastFrame}:${night}:${fx.time}`;
+      const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+JSON.stringify(fx.transitions)+`/${lastFrame}:${night}:${fx.time}`;
       if(signature!==lastProps){
         buildings.visible=false;facilities.visible=true;enemies.visible=false;streets.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
         facilities.visible=false;enemies.visible=true;renderer.render(scene,camera);capture(enemyCanvas);enemies.visible=false;
-        effects.updateShots(fx.shots,props,fx.time,fx.cell);facilities.visible=false;effects.group.visible=true;renderer.render(scene,camera);capture(effectCanvas);lastProps=signature;
+        effects.updateTransitions(fx.transitions??[],fx.time);effects.updateShots(fx.shots,props,fx.time,fx.cell);facilities.visible=false;effects.group.visible=true;renderer.render(scene,camera);capture(effectCanvas);lastProps=signature;
       }
       return facilityCanvas;
     },

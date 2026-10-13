@@ -1,4 +1,4 @@
-import {createCity3D} from './city-3d.js?v=20';
+import {createCity3D} from './city-3d.js?v=21';
 import {operatingStreetLamps,ruinStreetProps} from './city-streets.js?v=2';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=4';
@@ -92,7 +92,7 @@ let placementFx = null, playbackSpeed = 1, recentGain = 0, gainUntil = 0, dawnAt
 let nightMix = 0, sight=visionField(state), lastFogFrame=0;
 // 流速调节只累计云纹时间，避免调参时跳位，也不改变揭雾过渡与战斗速度。
 let cloudTime=0,cloudSpeed=state.params.cloudSpeedMultiplier;
-let effectTime=0,combatShots=[],lastEffectsFrame=0;
+let effectTime=0,combatShots=[],cityTransitions=[],transitionToken=0,lastEffectsFrame=0;
 let dayEndHold=null,dayEndReturn=null,dayEndProgress=0,sceneProgress=-1,duskMix=0,skipStartClick=false;
 let nightVisualTick=0;
 const effectiveSpeed=()=>sourceCleanup?Math.max(playbackSpeed,state.params.nightCleanupSpeed):playbackSpeed;
@@ -505,7 +505,8 @@ function paintMap() {
     const cell=candidates.find(([x,y])=>inside(x,y)&&state.layout?.tiles[key(x,y)]==='road'&&currentlyVisible(key(x,y))&&!state.walls.has(key(x,y))&&!state.outposts.has(key(x,y))&&!streetLamps.some(l=>Math.hypot(l.x-x-.5,l.y-y-.5)<2)&&!wrecks.some(l=>Math.hypot(l.x-x-.5,l.y-y-.5)<3));
     if(cell)wrecks.push({id:'wreck:'+p.id,asset:'wreck',x:cell[0]+.5,y:cell[1]+.5,w:wreckWidth,h:wreckLength,fireScale:wreckLength/.95});
   }
-  const fx={time:effectTime,cell:size,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
+  cityTransitions=cityTransitions.filter(event=>effectTime-event.at<.8&&currentlyVisible(event.cell));
+  const fx={time:effectTime,cell:size,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
   const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,night:nightMix,layout:state.layout,lamps:streetLamps,fx});
@@ -1367,7 +1368,7 @@ function clearPlayback() {
   incomeDay=null;closeResourceDetails();
   nightOutro=null;dawnAt=0;receiptUntil=0;$('economyReceipt').hidden=true;
   selectedSource=null;pinnedSource=null;paused=false;timer=0;motion=null;placementFx=null;impactAge=1000;incoming.clear();recentGain=0;gainUntil=0;$('moneyGain').textContent='';messages=[];$('log').replaceChildren();
-  combatShots=[];effectTime=0;
+  combatShots=[];cityTransitions=[];effectTime=0;
   document.querySelectorAll('.coin-drop').forEach(el=>el.remove());
 }
 function reset(keep=true){
@@ -1592,6 +1593,7 @@ canvas.addEventListener('pointerup',e=>{
     sound.play(tool==='erase'?'demolish':tool==='repair'?'repair':'build');
     const names={wall:'墙已建造',build:'近防炮就位',long:'远防炮就位',outpost:'控制区扩张',housing:`入住 +${population(state).total-beforePeople} 人`,production:'生产已完成',repair:id===state.camp?`HP +${state.hp-beforeHP}`:'墙已修满',erase:'已拆除'};
     placementFx={id:site?key(site.x,site.y):id,size:site?.width||site?.size||1,height:site?.height||site?.size||1,start:performance.now(),color:delta<0?'#ffe1a0':'#aef2ce',text:`${names[tool]}${delta?` ${delta>0?'+':''}${delta} 金币`:''}`};
+    if(site&&(['housing','production'].includes(tool)||tool==='erase'&&['housing','production','ruin'].includes(erasedType)))addCityTransition(site,tool==='erase'?'clear':'restore');
     pulse($('budget'),delta<0?'#ffe1a0':'#bff5ce');
   }else{showTopNotice(/失去与篝火的连接/.test(actionError)?'无法拆除：会切断与篝火的连接。':actionError);}
   update();
@@ -1657,6 +1659,12 @@ function showCoins(id, amount) {
   $('budget').animate([{color:'#fff4a3',transform:'scale(1.15)'},{color:'#b8e4c8',transform:'scale(1)'}],{duration:500});
 }
 
+// 状态变化只产生短视觉反馈，不增加施工等待，也不从隐藏受击生成扬尘。
+function addCityTransition(site,kind){
+  const cell=key(site.x,site.y);if(reducedMotion.matches||!currentlyVisible(cell))return;
+  const w=site.width??site.size??1,h=site.height??site.size??1;
+  cityTransitions.push({token:++transitionToken,cell,kind,x:site.x+w/2,y:site.y+h/2,w,h,at:effectTime});
+}
 // 只记录当前波次的近期反馈，不建设存档或回放系统。
 function advance() {
   const plan=attackVisualPlan(state,[...incoming.values()],currentlyVisible);
@@ -1665,6 +1673,7 @@ function advance() {
   motion=null;impactAge=0;timer=0;sight=visionField(state);
   const shotSounds=combatShots.filter(shot=>currentlyVisible(shot.id)&&currentlyVisible(key(Math.floor(shot.x),Math.floor(shot.y)))).flatMap(shot=>{const view=shotSoundView(shot.id,{panX,panY,cell:base*zoom,width,height,zoom});return view?[{id:shot.id,type:shot.type,...view}]:[];});
   sound.fireShots(shotSounds,effectiveSpeed());
+  for(const event of state.events)if(['sourceLost','wallLost'].includes(event.type)&&currentlyVisible(event.id)){const [x,y]=xy(event.id);addCityTransition({x,y,size:1},'break');}
   const kills=state.events.filter(event=>event.type==='kill');
   if(kills.some(event=>currentlyVisible(event.id))||state.events.some(e=>e.type==='sourceLost'))sound.play('kill');
   // 金币音暂时只服务夜间实际击杀奖励，拆返与经营收入不播放。

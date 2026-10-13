@@ -8,7 +8,7 @@ function dispose(object){object.removeFromParent();object.traverse(node=>{if(nod
 
 // 动效只消费显示描述和游戏时间；这里没有自动试射、独立计时或伤害计算。
 export function createCityEffects(scene){
-  const group=new THREE.Group();scene.add(group);const lights=new Map(),shots=new Map();
+  const group=new THREE.Group();scene.add(group);const lights=new Map(),shots=new Map(),transitions=new Map();
   function lightEntry(item){
     if(lights.has(item.id))return lights.get(item.id);
     const sweep=item.asset==='watch',wreck=item.asset==='wreck',object=new THREE.Group(),light=sweep?new THREE.SpotLight('#9fcaff',0,24,.10,.7,2):new THREE.PointLight(wreck?'#ff8745':'#ffb860',0,wreck?2.3:4,2),target=new THREE.Object3D();
@@ -25,6 +25,20 @@ export function createCityEffects(scene){
   }
   return {
     group,
+    // 建筑状态立即结算；短扬尘/修缮光圈只说明刚发生的变化，暂停时共用游戏动效时间。
+    updateTransitions(items,time){
+      const active=new Set(items.map(item=>item.token));for(const [id,entry] of transitions)if(!active.has(id)){dispose(entry.object);transitions.delete(id);}
+      for(const item of items){
+        if(!transitions.has(item.token)){
+          const object=new THREE.Group(),puffs=[];
+          for(let i=0;i<8;i++){const puff=mesh(new THREE.SphereGeometry(1,6,4),item.kind==='restore'?'#d4d0b3':'#938d7a',.25);object.add(puff);puffs.push(puff);}
+          const ring=mesh(new THREE.RingGeometry(.91,1,24),item.kind==='restore'?'#f0d893':'#bbb5a0',.7);ring.rotation.x=-Math.PI/2;ring.position.y=.025;object.add(ring);group.add(object);transitions.set(item.token,{object,puffs,ring});
+        }
+        const e=transitions.get(item.token),t=Math.max(0,Math.min(1,(time-item.at)/.8));e.object.position.set(item.x,0,item.y);
+        e.puffs.forEach((puff,i)=>{const angle=i*Math.PI/4,r=.3+t*.45;puff.position.set(Math.cos(angle)*item.w*r,.04+t*.12,Math.sin(angle)*item.h*r);puff.scale.set(item.w*(.08+t*.06),.04+t*.10,item.h*(.08+t*.06));puff.material.opacity=Math.sin(t*Math.PI)*.22;});
+        e.ring.scale.set(item.w*(.5+t*.12),item.h*(.5+t*.12),1);e.ring.material.opacity=(1-t)*.65;
+      }
+    },
     updateLights(items,time,night,viewport){
       const active=new Set(items.map(item=>item.id));for(const [id,entry] of lights)if(!active.has(id)){dispose(entry.object);entry.light.removeFromParent();entry.target.removeFromParent();lights.delete(id);}
       for(const item of items){
