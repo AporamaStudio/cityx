@@ -1,4 +1,4 @@
-import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback} from './enemy-overlay.js?v=2';
+import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback} from './enemy-overlay.js?v=3';
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=1';
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=3';
@@ -14,8 +14,8 @@ import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=3';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=9';
 import {createGameAudio} from './audio.js?v=10';
-import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=83';
-import {applyExperimentParams,validateVisualParams, bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=98';
+import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=84';
+import {applyExperimentParams,validateVisualParams, bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=99';
 import {generateCityMap} from './city-map.js?v=9';
 import {readMapSettings} from './map-settings.js?v=1';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -386,11 +386,12 @@ function changeZoom(factor, x = width / 2, y = (height-cameraBottom) / 2) {
   draw();
 }
 function cellAt(event) {
-  if(viewMode!=='top'&&!previewParams().returnToTopOnAction&&['build','long'].includes(tool)){
+  if(viewMode!=='top'&&!previewParams().returnToTopOnAction&&['build','long','production','housing','bank'].includes(tool)){
     const rect=canvas.getBoundingClientRect(),sx=event.clientX-rect.left,sy=event.clientY-rect.top;
     // 只吸附屏幕上已绘制的合法落点，解决低角度点中虚拟屋顶格却命中后方地面的偏差。
     const target=observationBuildTargets.filter(p=>p.tool===tool&&Math.hypot(p.x-sx,p.y-sy)<=6).sort((a,b)=>Math.hypot(a.x-sx,a.y-sy)-Math.hypot(b.x-sx,b.y-sy))[0];
-    if(target&&!weaponPlacementError(target.id))return target.id;
+    const error=target?['build','long'].includes(tool)?weaponPlacementError(target.id):tool==='housing'?housingError(state,target.id):tool==='bank'?bankError(state,target.id):productionError(state,target.id):'';
+    if(target&&!error)return target.id;
   }
   const rect=canvas.getBoundingClientRect(),point=(viewMode!=='top'?city3D?.observationPick(event.clientX-rect.left,event.clientY-rect.top,width,height):null)??groundAt(event.clientX-rect.left,event.clientY-rect.top,cameraView()),x=Math.floor(point.x),y=Math.floor(point.y);
   return !point.sky&&inside(x, y)&&visibleCell(key(x,y)) ? key(x, y) : null;
@@ -1169,6 +1170,16 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
       for(const id of coverage(hover,selectedWeapon().range,selectedWeapon().shape))if(currentlyVisible(id)){const [x,y]=xy(id),path=polygon(x,y,1,1,.035);if(path){ctx.fill(path);ctx.stroke(path);}}ctx.restore();
     }
   }
+  if(directBuild&&state.phase==='build'&&!view.dirty&&['production','housing','bank'].includes(tool)){
+    // 资格随状态缓存；镜头重画只投影，不反复计算整城的经营/劳动力校验。
+    view.economyCandidates??=new Map();
+    if(!view.economyCandidates.has(tool))view.economyCandidates.set(tool,[...view.towers.plots].filter(([id,p])=>p.cells.some(cell=>view.raw.has(cell))&&p.cells.every(visibleCell)&&!(tool==='housing'?housingError(state,id):tool==='bank'?bankError(state,id):productionError(state,id))).map(([id,p])=>({id,site:p.site})));
+    for(const {id,site} of view.economyCandidates.get(tool)){
+      const w=site.width??site.size,h=site.height??site.size,x=site.x+w/2,y=site.y+h/2,z=city3D.roofAt(id,x,y)+.04,p=point(x,y,z);if(p.hidden||p.x<0||p.y<0||p.x>width||p.y>height)continue;
+      const path=polygon(site.x,site.y,w,h,.035);ctx.save();if(path){ctx.strokeStyle='#c2d5a888';ctx.lineWidth=1.3;ctx.stroke(path);}
+      ctx.fillStyle='#253b35e8';ctx.strokeStyle='#b8ddac';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(p.x-8,p.y-8,16,16,3);ctx.fill();ctx.stroke();drawFacility(tool,p.x-6,p.y-6,12);ctx.restore();observationBuildTargets.push({id,x:p.x,y:p.y,tool});
+    }
+  }
   // 路线与真实边界投影到地面，线宽始终为屏幕像素；绝不取未知源头的路径。
   const routeSources=viewedSources(),linked=linkedSource(),focus=new Set([pinnedSource,linked].filter(Boolean));
   const routes=state.phase==='battle'&&forecastDay===state.day?battleRoutes(state):plannedRoutes;
@@ -1221,6 +1232,10 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     if(!Number.isFinite(x)||!Number.isFinite(y)||x< -30||y< -30||x>width+30||y>height+30)return;
     ctx.save();ctx.globalAlpha=alpha;ctx.font='600 11px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';const w=Math.max(16,ctx.measureText(text).width+8);ctx.fillStyle='#172630ed';ctx.fillRect(x-w/2,y-8,w,16);ctx.fillStyle=color;ctx.fillText(text,x,y);ctx.restore();
   };
+  const metricBadge=(icon,value,x,y,color)=>{
+    if(!Number.isFinite(x)||!Number.isFinite(y))return;
+    ctx.save();ctx.font='600 11px system-ui';const w=ctx.measureText(value).width+22;ctx.fillStyle='#172630ed';ctx.fillRect(x-w/2,y-9,w,18);const image=resourceIcons[icon];if(image.complete&&image.naturalWidth)ctx.drawImage(image,x-w/2+3,y-6,12,12);ctx.fillStyle=color;ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(value,x-w/2+18,y);ctx.restore();
+  };
   for(const item of items)if(['near','far','watch','camp'].includes(item.asset)){
     const p=point(item.x,item.y,city3D.facilityTopAt(item.id)+.03);if(p.hidden)continue;ctx.save();ctx.fillStyle=nightMix>.5?'#182a35f2':'#e8e9ddf2';ctx.strokeStyle='#819999';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(p.x-7,p.y-7,14,14,3);ctx.fill();ctx.stroke();
     if(item.asset==='camp')drawCampfire(ctx,p.x-6,p.y-6,12,state.hp>0);else drawFacility(item.asset==='watch'?'watch':item.asset,p.x-6,p.y-6,12);
@@ -1259,7 +1274,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     if(corners.every(p=>!p.hidden)){ctx.save();ctx.beginPath();ctx.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));ctx.closePath();ctx.fillStyle=operationValid?'#92ffd42b':'#ff77662b';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=operationValid?'#b9f0d1':'#ff9a8c';ctx.stroke();ctx.restore();}
     const center=point(x+w/2,y+h/2,z);
     if(!center.hidden&&weaponSelected){const ground=point(hx+.5,hy+.5,.025);ctx.save();ctx.strokeStyle='#d3eed7b0';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(ground.x,ground.y);ctx.lineTo(center.x,center.y);ctx.stroke();ctx.restore();}
-    if(site&&['production','housing'].includes(tool)&&operationValid){const q=economyBuildQuote(state,hover,tool);badge(tool==='housing'?`+${q.residents} 人`:`+${q.income} 金币/晚`,center.x,center.y-17,'#bff5ce');}
+    if(site&&['production','housing'].includes(tool)&&operationValid){const q=economyBuildQuote(state,hover,tool);metricBadge(tool==='housing'?'residents':'coin','+'+(tool==='housing'?q.residents:q.income),center.x,center.y-17,tool==='housing'?'#f4d3a2':'#bff5ce');}
   }
   // 自由/斜视建设也给出同一笔真实结果，反馈随世界位置投影，不把画面回正。
   if(placementFx){
