@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=79';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=80';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -542,6 +542,7 @@ export function changeWall(state, id, remove = false) {
 export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   if(!integer(params.obliqueElevationDegrees,25,80))return '斜视俯仰角须为 25–80 度整数（与水平面的夹角）。';
+  if(typeof params.returnToTopOnAction!=='boolean')return '操作返回俯视须为开启或关闭。';
   if(!['orthographic','perspective'].includes(params.freeProjection))return '自由观察投影须为正交或透视。';
   if(!integer(params.freePerspectiveFovDegrees,20,60))return '透视垂直视野角须为 20–60 度整数。';
   if(!integer(params.mapMaxCellPx,48,256))return '最大格宽须为 48–256 像素整数。';

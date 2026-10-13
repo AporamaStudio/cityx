@@ -9,6 +9,8 @@ export const DEFAULTS = {
   obliqueElevationDegrees: 45,
   // 只切换自由观察投影；俯视/固定斜视保持正交，透视FOV为垂直视野角。
   freeProjection: 'orthographic', freePerspectiveFovDegrees: 40,
+  // 默认维持操作回俯视；关闭可在原观察姿态比较投影并进行建设。
+  returnToTopOnAction: true,
   // 真实路灯固定光源池；超出预算仍保留灯罩和地面暖光，0关闭路灯真实光源。
   streetLightBudget: 24,
   // 精确火力只在路线格上显示；每格屏幕尺寸小于此值时收起数字，0关闭缩放门槛。
