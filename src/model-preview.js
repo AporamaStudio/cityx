@@ -22,6 +22,12 @@ const assets=[
   ['workshop','工业车间','building','industrial/building-f',4.7,'经营建筑的第二种外观候选，先观察烟囱与屋顶是否过于杂乱。'],
   ['tree','街道树','nature','suburban/tree-large',.9,'少量点缀恢复后的街区，不能挡住道路和建设提示。'],
   ['tree-small','小树','nature','suburban/tree-small',.7,'用于院落、公园边缘和高度对比，暂不增加环境模拟。'],
+  ['tree-broad','宽冠阔叶树','nature','tree-broad',3.5,'原生约6.6m树冠/8m高；空地边缘少量树群，纯装饰，不阻路。'],
+  ['tree-column','窄冠乔木','nature','tree-column',2.8,'原生约3.6m树冠/10m高，修长轮廓与宽冠树区分。'],
+  ['tree-young','幼树','nature','tree-young',2.5,'原生约2.9m树冠/4.5m高，用于树群外围和小空地。'],
+  ['bush-round','圆形灌木','nature','bush-round',3.2,'原生约2.7m宽/1.3m高，低矮圆冠和少量浅绿层次。'],
+  ['bush-wild','矮灌丛与草','nature','bush-wild',3,'原生约2.2m宽/0.8m高，不规则灌丛及草叶，保留开阔地面。'],
+  ['tree-dead','枯树','nature','tree-dead',2.6,'原生约3.2m宽/6m高，少量灰褐枝干；控制扩张不会自动长叶。'],
   ['watchtower','瞭望塔','facility','watchtower',2.1,'自制木架样件，夜间探照灯缓慢扫过地面；扫光只演示气氛。'],
   ['cannon-near','近防炮','facility','cannon-near',1.25,'短双管、短促连发与轻后坐；点击试射查看，不进行实际战斗。'],
   ['cannon-long','远防炮','facility','cannon-long',1.65,'长双管、单次较强闪光与后坐；可暂停后点击试射检查。'],
@@ -188,6 +194,7 @@ function buildDistrict(){
   for(const [id,x,z,width] of [['hospital',-8,-20,12],['bank',10,-21,8]]){
     const obj=place(id,x,z,width);structures.push({obj,x,z,id,front:true});
   }
+  for(const [id,x,z,w] of [['tree-broad',-15,-15,1.1],['tree-column',-13.5,-16,.7],['tree-young',-15,-17,.6],['bush-round',-12.5,-16,.55],['bush-wild',-13,-14.5,.5],['tree-dead',-15.5,-19,.6]])place(id,x,z,w);
   place('campfire',4,0,2.2);place('watchtower',-1.7,5.5,1.7);place('watchtower',14,3,1.6);
   const factory=structures.find(s=>s.id==='factory'),roof=new THREE.Box3().setFromObject(factory.obj).max.y;
   place('cannon-long',3.6,7.7,1.3,roof+.04);place('cannon-near',11.8,8,1.15,new THREE.Box3().setFromObject(structures.find(s=>s.id==='house-wide'&&s.front).obj).max.y+.03);
@@ -277,7 +284,7 @@ function catalog(filter='all'){
   for(const a of assets.filter(a=>filter==='all'||a.category===filter)){
     const btn=document.createElement('button');btn.type='button';btn.className='asset';btn.dataset.id=a.id;
     if(!a.local){const img=document.createElement('img');img.src=root+'kenney/'+a.file+'.png';img.alt='';btn.append(img);}
-    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','wall-gate':'▥','wall-gate-open':'Ⅱ','wall-gate-ruined':'⋈','courtyard-entry':'∩','camp-plaza':'▤','enemy-squad':'♟','enemy-source-ruined':'◇','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰','street-bench':'▰','street-planter':'♧','civil-car':'▱','damaged-car':'◩'})[a.id];btn.append(icon);}
+    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'tree-broad':'♣','tree-column':'♠','tree-young':'♧','bush-round':'●','bush-wild':'♒','tree-dead':'♱','hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','wall-gate':'▥','wall-gate-open':'Ⅱ','wall-gate-ruined':'⋈','courtyard-entry':'∩','camp-plaza':'▤','enemy-squad':'♟','enemy-source-ruined':'◇','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰','street-bench':'▰','street-planter':'♧','civil-car':'▱','damaged-car':'◩'})[a.id];btn.append(icon);}
     const label=document.createElement('span'),name=document.createElement('b'),origin=document.createElement('small');name.textContent=a.name;origin.textContent=a.local?'自制样件':'Kenney';label.append(name,origin);btn.append(label);
     btn.disabled=!ready;btn.classList.toggle('selected',a.id===selected.id);btn.addEventListener('click',()=>selectAsset(a));$('catalog').append(btn);
   }

@@ -4,12 +4,14 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {addBuildingFoundation,buildingVariation} from './city-building-style.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
 import {createRoadModel} from './city-road-model.js?v=1';
+import {PLANT_MODELS} from './city-vegetation.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=3';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=5';
-import {createCityObservation} from './city-observation.js?v=3';
+import {createCityObservation} from './city-observation.js?v=4';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',enemy:'generated/enemy-squad',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
+for(const [name,file] of Object.entries(PLANT_MODELS))files[name]='generated/'+file;
 for(const name of ['home','small','wide','factory','workshop'])files[name+'Ruined']=files[name]+'-ruined';
 const resource=file=>new URL('../assets/model-preview/'+file+'.glb?v=5',import.meta.url).href;
 
@@ -83,6 +85,7 @@ export function createCity3D(onReady){
   sun.position.set(-30,60,20);sun.target.position.set(30,0,30);scene.add(sky,sun,sun.target);
   sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-64,right:64,top:64,bottom:-64,near:1,far:180});sun.shadow.bias=-.00025;sun.shadow.normalBias=.03;
   const buildings=new THREE.Group(),facilities=new THREE.Group(),enemies=new THREE.Group();scene.add(buildings,facilities,enemies);
+  const vegetation=new THREE.Group(),plantEntries=new Map();facilities.add(vegetation);let plantKey='';
   const streets=new THREE.Group();scene.add(streets);let terrain=null,roadLayout=null,streetKey='',lastShadow='';
   let roads=new THREE.Group(),roadKey='';scene.add(roads);
   const localLights=[];
@@ -136,7 +139,7 @@ export function createCity3D(onReady){
       entry.object.updateMatrixWorld(true);const ray=new THREE.Raycaster(new THREE.Vector3(x,entry.roof+1,y),new THREE.Vector3(0,-1,0));
       return ray.intersectObject(entry.object,true)[0]?.point.y??entry.roof;
     },
-    render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],dressing=[],roadCells=[],fx}){
+    render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],dressing=[],plants=[],plantPreview=null,roadCells=[],fx}){
       if(!ready)return null;
       const active=new Set(plots.map(p=>p.id));
       for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
@@ -156,6 +159,24 @@ export function createCity3D(onReady){
       if(roads.userData.layout!==layout||nextRoads!==roadKey){
         release({object:roads});const visibleRoads=new Set(roadCells);roads=createRoadModel(layout,cellMeters,id=>visibleRoads.has(id));roads.userData.layout=layout;scene.add(roads);roadKey=nextRoads;
       }
+      const plantPlots=new Map();for(const plant of plants){if(!plantPlots.has(plant.plot))plantPlots.set(plant.plot,[]);plantPlots.get(plant.plot).push(plant);}
+      for(const [id,entry] of plantEntries)if(!plantPlots.has(id)){release(entry);plantEntries.delete(id);}
+      // 同一空地的静态树群按共用材质合并；悬停建设只改透明度，不重建几何。
+      for(const [id,list] of plantPlots){
+        const signature=JSON.stringify(list);
+        if(plantEntries.get(id)?.signature!==signature){
+          if(plantEntries.has(id))release(plantEntries.get(id));const group=new THREE.Group();
+          for(const plant of list){
+            const object=models.get(plant.asset).clone(true),bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3()),scale=plant.w/Math.max(size.x,size.z);
+            object.traverse(node=>{if(node.isMesh)node.material=node.material.clone();});
+            object.scale.setScalar(scale);object.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
+            const anchor=new THREE.Group();anchor.add(object);anchor.position.set(plant.x,0,plant.y);anchor.rotation.y=plant.angle;group.add(anchor);
+          }
+          mergePlot(group);group.traverse(node=>{if(node.isMesh)node.userData.cityDecoration=true;});vegetation.add(group);plantEntries.set(id,{object:group,signature});
+        }
+        const faded=id===plantPreview;plantEntries.get(id).object.traverse(node=>{if(node.isMesh){node.material.transparent=faded;node.material.opacity=faded ? .18 : 1;node.material.depthWrite=!faded;node.castShadow=!faded;}});
+      }
+      plantKey=JSON.stringify(plants)+':'+plantPreview;
       const nextStreets=cellMeters+JSON.stringify([lamps,dressing]),streetLights=[];
       const rawStreet=models.get('street'),streetBounds=new THREE.Box3().setFromObject(rawStreet),streetScale=7.5/cellMeters/(streetBounds.max.y-streetBounds.min.y);
       let lightOffset=new THREE.Vector3();rawStreet.traverse(node=>{if(node.isMesh&&node.material.name==='#ffe1a3')lightOffset=new THREE.Box3().setFromObject(node).getCenter(new THREE.Vector3());});
@@ -195,13 +216,13 @@ export function createCity3D(onReady){
       effects.updateLights(lightItems,fx.time,night,visible);
       // 静态云纹/悬停刷新复用城市画面；扫光与火光读取同一动效时间重画承光层。
       const shapes=plots.map(p=>`${p.id}:${entries.get(p.id).signature}`).join('|');
-      const signature=shapes+plots.map(p=>p.powered?'1':'0').join('')+streetKey+roadKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightBudget}:${fx.observer??false}:${fx.time}`;
+      const signature=shapes+plantKey+plots.map(p=>p.powered?'1':'0').join('')+streetKey+roadKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightBudget}:${fx.observer??false}:${fx.time}`;
       if(signature!==lastFrame){
         const dimensions=`${width}:${height}`;if(pixels!==dimensions){renderer.setSize(width,height,false);pixels=dimensions;}
         camera.left=-panX/cell;camera.right=(width-panX)/cell;camera.top=panY/cell;camera.bottom=-(height-panY)/cell;camera.updateProjectionMatrix();
         sky.color.set('#f4f6e2').lerp(new THREE.Color('#b9d7ed'),night);sky.groundColor.set('#809180').lerp(new THREE.Color('#4c676b'),night);sky.intensity=2.4-night*.9;
         sun.color.set('#fff1cd').lerp(new THREE.Color('#b9cfff'),night);sun.intensity=3.2-night*2.3;
-        const shadowKey=shapes+streetKey;if(shadowKey!==lastShadow){renderer.shadowMap.needsUpdate=true;lastShadow=shadowKey;}
+        const shadowKey=shapes+streetKey+plantKey;if(shadowKey!==lastShadow){renderer.shadowMap.needsUpdate=true;lastShadow=shadowKey;}
         // 斜视只准备同一批对象，由观察相机统一画；不再拷贝四张不会显示的俯视层。
         if(!fx.observer){buildings.visible=true;facilities.visible=false;enemies.visible=false;streets.visible=true;roads.visible=true;effects.group.visible=false;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);}lastFrame=signature;
       }

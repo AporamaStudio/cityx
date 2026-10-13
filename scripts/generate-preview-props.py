@@ -301,13 +301,53 @@ def damaged_car():
     m.save('damaged-car',{'units':'meters','visualOnly':True,'pairedWith':'civil-car','burning':False})
 
 
+def vegetation():
+    # 原生米制、少量共用色板；树冠按环形低面数曲面构造，不含碰撞或灯光。
+    def crown(m, center, radii, color):
+        rings=5;sides=8
+        def point(row, side):
+            lat=math.pi*row/rings;angle=math.tau*side/sides
+            return (center[0]+radii[0]*math.sin(lat)*math.cos(angle),center[1]+radii[1]*math.cos(lat),center[2]+radii[2]*math.sin(lat)*math.sin(angle))
+        for row in range(rings):
+            for side in range(sides):
+                a,b,c,d=point(row,side),point(row+1,side),point(row+1,side+1),point(row,side+1)
+                m.triangle([a,c,b],color);m.triangle([a,d,c],color)
+    wood='#796b52';leaf='#789064';light='#91a473';dark='#5e7d65'
+    for name in ['tree-broad','tree-column','tree-young','bush-round','bush-wild','tree-dead']:
+        m=Model()
+        if name=='tree-broad':
+            m.cylinder((0,2,0),.3,4,wood,top=.17)
+            for x,z in [(-1.5,.2),(1.3,.6),(0,-1.1)]:
+                m.beam((0,2.4,0),(x,4.7,z),.18,wood);crown(m,(x,5.6,z),(1.9,2.4,1.8),leaf if x else light)
+        elif name=='tree-column':
+            m.cylinder((0,3,0),.26,6,wood,top=.12)
+            crown(m,(0,6,0),(1.8,4,1.65),dark);crown(m,(.4,7.3,.25),(1.2,2.3,1.2),leaf)
+        elif name=='tree-young':
+            m.cylinder((0,1.4,0),.13,2.8,wood,top=.06)
+            crown(m,(0,3,0),(1.45,1.5,1.35),light)
+        elif name=='bush-round':
+            crown(m,(0,.65,0),(1.05,.65,.95),leaf);crown(m,(.6,.65,.25),(.6,.55,.55),light)
+        elif name=='bush-wild':
+            for x,z in [(-.45,.1),(.4,.3),(.1,-.4)]:crown(m,(x,.4,z),(.6,.4,.6),dark if x<0 else leaf)
+            for i in range(7):
+                angle=i*2.4;x=math.cos(angle)*.7;z=math.sin(angle)*.7
+                m.triangle([(x-.13,.02,z),(x+.13,.02,z),(x+.16,.72,z+.12)],light)
+                m.triangle([(x+.16,.72,z+.12),(x+.13,.02,z),(x-.13,.02,z)],light)
+        else:
+            m.cylinder((0,2.3,0),.25,4.6,wood,top=.09)
+            for a,b in [((0,2.4,0),(-1.5,4.6,.2)),((0,3.2,0),(1.2,5.2,.5)),((0,4,0),(.2,6,-.8)),((-1,3.9,.15),(-1.5,5.3,-.2))]:m.beam(a,b,.11,wood)
+        m.save(name,{'units':'meters','visualOnly':True,'foliage':True})
+
+
 if __name__ == '__main__':
-    if '--entrances' in sys.argv:
+    if '--vegetation' in sys.argv:
+        vegetation();print('已生成6个米制树木/灌丛样件')
+    elif '--entrances' in sys.argv:
         entrances();print('已生成4个配套墙门/文明入口样件')
     elif '--damaged-car' in sys.argv:
         damaged_car();print('已生成米制非燃烧损坏车辆样件')
     elif '--street-furniture' in sys.argv:
         street_furniture();print('已生成3个米制长椅/花池/完好车辆样件')
     else:
-        tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad();entrances();street_furniture();damaged_car()
-        print('已生成22个独立GLB样件，含配套门与三态车辆街景')
+        tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad();entrances();street_furniture();damaged_car();vegetation()
+        print('已生成28个独立GLB样件，含配套门与三态车辆街景')

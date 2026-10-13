@@ -21,7 +21,7 @@ export function createCityObservation(scene,renderer){
   return {
     pick(x,y,width,height){
       const ray=new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2(x/width*2-1,1-y/height*2),camera);
-      const hit=ray.intersectObjects(pickObjects,true).find(hit=>!hit.object.material.transparent);return hit?{x:hit.point.x,y:hit.point.z}:null;
+      const hit=ray.intersectObjects(pickObjects,true).find(hit=>!hit.object.material.transparent&&!hit.object.userData.cityDecoration);return hit?{x:hit.point.x,y:hit.point.z}:null;
     },
     render({ground,groundVersion,mist,view,background,objects,enemies,effects}){
       pickObjects=[...objects,floor];

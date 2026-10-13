@@ -1,5 +1,6 @@
+import {emptyLandPlants} from './city-vegetation.js?v=1';
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView} from './city-view.js?v=2';
-import {createCity3D} from './city-3d.js?v=32';
+import {createCity3D} from './city-3d.js?v=33';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=4';
@@ -537,7 +538,11 @@ function paintMap() {
   const fx={time:effectTime,cell:size,observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
-  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,roadCells:state.layout.tiles.flatMap((type,id)=>type==='road'&&visibleCell(id)?[id]:[]),fx});
+  const emptyPlots=[...view.towers.plots].filter(([,p])=>p.content.status==='empty').map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,kind:p.site.kind,role:p.site.role,status:p.content.status}));
+  const plantOccupied=new Set([...state.walls,...previewState.outposts.keys(),...(hover!==null&&tool==='wall'?[hover]:[])]);
+  const plants=emptyLandPlants(emptyPlots,{width:SIZE,cellMeters:controlState.params.cellMeters,visible:visibleCell,occupied:plantOccupied});
+  const plantPreview=hover!==null&&['production','housing'].includes(tool)?productionId(hover,state):null;
+  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,plants,plantPreview,roadCells:state.layout.tiles.flatMap((type,id)=>type==='road'&&visibleCell(id)?[id]:[]),fx});
   // 道路承接真实点光与太阳阴影；在热力、格线和云雾下面一次性裁剪绘制。
   if(cityFrame){ctx.save();ctx.beginPath();for(let y=bounds.top;y<bounds.bottom;y++)for(let x=bounds.left;x<bounds.right;x++)if(visibleCell(key(x,y))&&state.layout?.tiles[key(x,y)]==='road')ctx.rect(x,y,1,1);ctx.clip();ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
   const eligibleCells=weaponPlacementReady?view.towers.eligible(weaponType()):new Set();
@@ -612,7 +617,9 @@ function paintMap() {
     // 悬停时把街区作为一个操作对象，盖住内部格线，避免误认为逐格恢复。
     if(view.sourceSites.has(id)){if(cityFrame&&city3D.has(id)){ctx.save();ctx.beginPath();ctx.rect(x,y,n,m);ctx.clip();ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}else{ctx.fillStyle=nightMix>.5?'#322c36':'#67504f';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);}continue;}
     if(p.role==='camp'){if(!drawCityFacility('camp-plaza',x,y,n,m)){ctx.fillStyle=nightMix>.5?'#49433a':'#ad9468';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);}ctx.strokeStyle='#e8c481';ctx.lineWidth=.10;ctx.strokeRect(x+.12,y+.12,n-.24,m-.24);continue;}
-    if(empty){ctx.strokeStyle=selected?'#fff0ae':'#a8d5ad';ctx.lineWidth=selected?.12:.06;ctx.setLineDash([.2,.12]);ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);ctx.setLineDash([]);continue;}
+    if(empty){
+      if(facilityFrame){ctx.save();ctx.beginPath();for(const cell of overlay.cells)if(visibleCell(cell)){const [cx,cy]=xy(cell);ctx.rect(cx,cy,1,1);}ctx.clip();ctx.drawImage(facilityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
+      ctx.strokeStyle=selected?'#fff0ae':'#a8d5ad';ctx.lineWidth=selected?.12:.06;ctx.setLineDash([.2,.12]);ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);ctx.setLineDash([]);continue;}
     // 按物理 footprint 画建筑，屋顶炮位保留建筑底色；经营面积独立计算。
     ctx.save();if(!overlay.controlled&&!overlay.cells.some(currentlyVisible))ctx.globalAlpha=.68;ctx.beginPath();
     for(const cell of overlay.footprint){if(postGhost&&cell===hover)continue;const [cx,cy]=xy(cell);ctx.rect(cx,cy,1,1);}ctx.clip();
