@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 import math
 import struct
+import sys
 
 ROOT = Path(__file__).resolve().parents[1] / 'assets/model-preview/generated'
 
@@ -215,6 +216,44 @@ def enemy_squad():
     m.save('enemy-squad', {'units':'meters','visualOnly':True})
 
 
+def entrances():
+    # 同一20m墙段的闭合/敞开/破损样件；4m净口适配车辆，尚不定义游戏通行。
+    for variant in ('closed', 'open', 'ruined'):
+        m=Model();wall='#ac9a80';metal='#697b7c'
+        for side in (-1,1):
+            m.box((side*6.4,1.25,0),(7.2,2.5,.6),wall)
+            for row in range(7):
+                for i in range(6):
+                    for z in (-.315,.315):m.box((side*(3.4+i*1.2),.19+row*.35,z),(1.12,.29,.035),'#918974' if (i+row)%3==0 else '#b9ad92')
+            m.box((side*2.4,1.4,0),(.8,2.8,.8),'#c0baa5')
+            m.box((side*2.4,2.85,0),(1,.15,1),'#9aab9d')
+        if variant!='ruined':
+            m.box((0,2.7,0),(4,.15,.22),metal)
+            for side in (-1,1):
+                cx,cz=(side*2,1) if variant=='open' else (side,0)
+                basis=((0,0,1),(0,1,0),(-1,0,0)) if variant=='open' else None
+                m.box((cx,1.1,cz),(1.95,2.05,.12),metal,basis)
+                for row in (.28,1.88):m.box((cx,row,cz),(1.95,.09,.19),'#b3bcb0',basis)
+                for i in (-.75,-.25,.25,.75):m.box((cx if variant=='open' else cx+i,1.1,cz+i if variant=='open' else cz),(.08,1.8,.19),'#8f9d98',basis)
+        else:
+            m.box((-.45,.12,.35),(1.95,.18,2.05),metal)
+            m.beam((-1.75,.15,-.15),(-.25,1.25,.35),.12,'#89988f')
+            m.beam((-2.35,2.7,0),(-.75,1.15,.3),.15,'#8f9d98')
+            for i in range(8):m.box(((i%4-.8)*.6,.1,(i//4-.5)*.45),(.35,.2,.28),'#ada48c')
+        name='wall-gate' if variant=='closed' else 'wall-gate-'+variant
+        m.save(name,{'units':'meters','visualOnly':True,'family':'wall-gate','variant':variant,'wallSpanMeters':20,'openingMeters':4})
+    # 文明城区入口只是一组门柱和标识，与防线门保持不同轮廓。
+    m=Model()
+    for x in (-2.4,2.4):
+        m.box((x,1.5,0),(.8,3,.8),'#c6c4af');m.box((x,3.06,0),(1,.12,1),'#7c9281')
+    m.box((0,2.85,0),(4,.35,.3),'#91a38c')
+    m.box((0,2.87,-.2),(1.1,.22,.06),'#e9dfbd')
+    m.save('courtyard-entry',{'units':'meters','visualOnly':True,'openingMeters':4})
+
+
 if __name__ == '__main__':
-    tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad()
-    print('已生成14个独立GLB样件，含环境、营地广场、普通敌群与敌源残骸')
+    if '--entrances' in sys.argv:
+        entrances();print('已生成4个配套墙门/文明入口样件')
+    else:
+        tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad();entrances()
+        print('已生成18个独立GLB样件，含配套墙门与文明入口')

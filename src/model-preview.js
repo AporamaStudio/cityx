@@ -22,6 +22,10 @@ const assets=[
   ['cannon-near','近防炮','facility','cannon-near',1.25,'短双管、短促连发与轻后坐；点击试射查看，不进行实际战斗。'],
   ['cannon-long','远防炮','facility','cannon-long',1.65,'长双管、单次较强闪光与后坐；可暂停后点击试射检查。'],
   ['brick-wall','墙体','facility','brick-wall',2.5,'自制砖墙段，便于后续表现连续墙、破损及拆除。'],
+  ['wall-gate','闭合墙门','facility','wall-gate',6,'20m墙段中央4m净口，两扇门；仅模型样件，未新增门通行或受击规则。'],
+  ['wall-gate-open','敞开墙门','facility','wall-gate-open',6,'与闭合门共用墙段和立柱，两扇门向内打开；通行和开关玩法仍待确定。'],
+  ['wall-gate-ruined','破损墙门','facility','wall-gate-ruined',6,'保留原墙段与门柱，门扇倒落、断梁和瓦砾；与完好门保持同一身份。'],
+  ['courtyard-entry','文明入口','nature','courtyard-entry',4,'约5.8m宽/3.1m高的开放门柱，区别于防线墙门；仅装饰候选。'],
   ['campfire','篝火','facility','campfire',1.9,'木柴、石圈与缓慢跳动的火焰，夜间暖光轻微闪动。'],
   ['camp-plaza','篝火广场','nature','camp-plaza',6,'主地图3×3格营地广场，默认60×60m；铺装、长椅与花池只作装饰，火堆独立适配，不增加阻挡。'],
   ['enemy-squad','普通敌群','facility','enemy-squad',2.85,'约2m高的人形组成统一小队符号，不代表新增单位；主图HP、合流和迷雾权限沿用原规则。'],
@@ -67,14 +71,14 @@ function resize(){
   camera.left=-half*aspect;camera.right=half*aspect;camera.top=half;camera.bottom=-half;camera.updateProjectionMatrix();render();
 }
 function frame(){
-  const target=new THREE.Vector3(0,mode==='district'?1:1.7,mode==='district'?-7:0),offset=angle==='top'?new THREE.Vector3(0,45,.01):new THREE.Vector3(32,34,40);
+  const target=new THREE.Vector3(0,mode==='district'?1:(singleVariants?.normal.userData.previewModelHeight??3.4)/2,mode==='district'?-7:0),offset=angle==='top'?new THREE.Vector3(0,45,.01):new THREE.Vector3(32,34,40);
   controls.target.copy(target);camera.position.copy(target).add(offset);camera.zoom=1;camera.updateProjectionMatrix();controls.update();resize();
 }
 function cloneModel(asset,width=asset.width,roofLights=true,ruined=false){
   const group=models.get(asset.id+(ruined?'-ruined':'')).clone(true),bounds=new THREE.Box3().setFromObject(group),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
   const scale=width/Math.max(size.x,size.z);group.scale.setScalar(scale);
   group.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
-  const anchor=new THREE.Group();anchor.add(group);anchor.updateMatrixWorld(true);
+  const anchor=new THREE.Group();anchor.userData.previewModelHeight=size.y*scale;anchor.add(group);anchor.updateMatrixWorld(true);
   group.traverse(node=>{if(node.isMesh){node.castShadow=true;node.receiveShadow=true;node.material=node.material.clone();
     if(asset.landmark){
       // 专用建筑明确指定玻璃/灯具材质；同一GLB昼夜共用，墙面不参与发光。
@@ -236,7 +240,7 @@ function updateSingleState(){
   if(singleVariants.ruined)singleVariants.ruined.visible=singleState==='ruined';
   setPower(singleVariants.normal,isBuilding(selected)?singleState==='operating':true);
   for(const button of document.querySelectorAll('[data-state]'))button.classList.toggle('active',button.dataset.state===singleState);
-  if(selected.landmark){$('download').href=root+'generated/'+selected.file+(singleState==='ruined'?'-ruined':'')+'.glb?v=3';$('download').textContent=singleState==='ruined'?'下载破损模型 ↓':'下载完好模型 ↓';}
+  if(selected.landmark){$('download').href=root+'generated/'+selected.file+(singleState==='ruined'?'-ruined':'')+'.glb?v=4';$('download').textContent=singleState==='ruined'?'下载破损模型 ↓':'下载完好模型 ↓';}
   if(mode==='single')$('sceneSubtitle').textContent=isBuilding(selected)?({intact:'完好 · 尚未运营',ruined:'原建筑局部塌损 · 占地与门窗保留',operating:'恢复运营 · 窗户与屋顶亮灯'})[singleState]:(selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0');
 }
 function setMode(next){
@@ -254,7 +258,7 @@ function selectAsset(asset,show=true){
   single.add(normal);if(ruined)single.add(ruined);singleVariants={normal,ruined};
   $('buildingStates').hidden=!isBuilding(asset);updateSingleState();
   $('assetTitle').textContent=asset.name;$('assetOrigin').textContent=asset.local?'自制样件':'Kenney · CC0';$('assetDescription').textContent=asset.description;
-  const path=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb?v=3';$('download').href=path;$('download').textContent='下载原模型 ↓';
+  const path=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb?v=4';$('download').href=path;$('download').textContent='下载原模型 ↓';
   $('source').href=asset.local?'assets/model-preview/ATTRIBUTION.md':kenney+({suburban:'city-kit-suburban',commercial:'city-kit-commercial',industrial:'city-kit-industrial'}[asset.file.split('/')[0]]);
   for(const btn of $('catalog').children)btn.classList.toggle('selected',btn.dataset.id===asset.id);
   if(show)setMode('single');else updateSingleState();
@@ -264,7 +268,7 @@ function catalog(filter='all'){
   for(const a of assets.filter(a=>filter==='all'||a.category===filter)){
     const btn=document.createElement('button');btn.type='button';btn.className='asset';btn.dataset.id=a.id;
     if(!a.local){const img=document.createElement('img');img.src=root+'kenney/'+a.file+'.png';img.alt='';btn.append(img);}
-    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰'})[a.id];btn.append(icon);}
+    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','wall-gate':'▥','wall-gate-open':'Ⅱ','wall-gate-ruined':'⋈','courtyard-entry':'∩','camp-plaza':'▤','enemy-squad':'♟','enemy-source-ruined':'◇','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰'})[a.id];btn.append(icon);}
     const label=document.createElement('span'),name=document.createElement('b'),origin=document.createElement('small');name.textContent=a.name;origin.textContent=a.local?'自制样件':'Kenney';label.append(name,origin);btn.append(label);
     btn.disabled=!ready;btn.classList.toggle('selected',a.id===selected.id);btn.addEventListener('click',()=>selectAsset(a));$('catalog').append(btn);
   }
@@ -292,7 +296,7 @@ const loader=new GLTFLoader();let loaded=0;
 try{
   const files=assets.flatMap(asset=>[{asset,id:asset.id,file:asset.file},...(asset.landmark?[{asset,id:asset.id+'-ruined',file:asset.file+'-ruined'}]:[])]);
   await Promise.all(files.map(async ({asset,id,file})=>{
-    const url=root+(asset.local?'generated/':'kenney/')+file+'.glb?v=3';const gltf=await loader.loadAsync(url);models.set(id,gltf.scene);
+    const url=root+(asset.local?'generated/':'kenney/')+file+'.glb?v=4';const gltf=await loader.loadAsync(url);models.set(id,gltf.scene);
     loaded++;$('loading').textContent=`正在装载模型… ${loaded}/${files.length}`;
   }));
   ready=true;buildDistrict();selectAsset(selected,false);catalog();setMode('district');syncMotion();$('loading').hidden=true;$('loadStatus').textContent=`${assets.length} 个模型已就绪`;
