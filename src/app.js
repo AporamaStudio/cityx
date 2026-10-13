@@ -1,5 +1,5 @@
-import {projectView,groundAt,panView,observationView,viewBounds} from './city-view.js?v=1';
-import {createCity3D} from './city-3d.js?v=24';
+import {projectView,groundAt,panView,observationView,viewBounds,orbitView} from './city-view.js?v=2';
+import {createCity3D} from './city-3d.js?v=26';
 import {operatingStreetLamps,ruinStreetProps} from './city-streets.js?v=2';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=4';
@@ -86,12 +86,22 @@ let observationGroundKey='';
 const cameraView=()=>{const view={width,height,panX,panY,cell:base*zoom,zoom,yaw:viewMode==='top'?0:viewYaw,elevation:viewMode==='top'?Math.PI/2:viewElevation};return viewMode==='top'?view:observationView(view,SIZE);};
 function setViewMode(mode){
   if(mode!=='top'&&!city3D?.isReady()){showTopNotice('3D模型仍在加载，请稍后。');return;}
-  viewMode=mode;if(mode==='oblique'){viewYaw=Math.PI/4;viewElevation=55*Math.PI/180;}
+  viewMode=mode;$('orbitControls').hidden=mode!=='free';if(mode==='oblique'){viewYaw=Math.PI/4;viewElevation=55*Math.PI/180;}
   for(const button of document.querySelectorAll('[data-city-view]')){const selected=button.dataset.cityView===mode;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));}
-  canvas.setAttribute('aria-label',mode==='top'?'60乘60防守棋盘，单击布置，拖动平移':'城市斜视观察，拖动平移；建设操作返回俯视');
+  canvas.setAttribute('aria-label',mode==='top'?'60乘60防守棋盘，单击布置，拖动平移':mode==='free'?'自由观察，拖动平移，Shift拖动或方向键旋转；建设返回俯视':'城市斜视观察，拖动平移；建设操作返回俯视');
   tool=null;hover=null;dragging=null;mapPointerSource=null;update();
 }
 for(const button of document.querySelectorAll('[data-city-view]'))button.onclick=()=>setViewMode(button.dataset.cityView);
+function rotateView(turn,tilt){
+  const next=orbitView(viewYaw,viewElevation,turn,tilt);viewYaw=next.yaw;viewElevation=next.elevation;hover=null;updateMapSourceHover();draw();
+}
+for(const button of document.querySelectorAll('[data-orbit]'))button.onclick=()=>rotateView(...({left:[-Math.PI/12,0],right:[Math.PI/12,0],up:[0,Math.PI/18],down:[0,-Math.PI/18]})[button.dataset.orbit]);
+canvas.tabIndex=0;
+canvas.addEventListener('keydown',event=>{
+  if(event.key==='Escape'&&viewMode!=='top'){event.preventDefault();setViewMode('top');return;}
+  const moves={ArrowLeft:[-Math.PI/12,0],ArrowRight:[Math.PI/12,0],ArrowUp:[0,Math.PI/18],ArrowDown:[0,-Math.PI/18]};
+  if(viewMode==='free'&&moves[event.key]){event.preventDefault();rotateView(...moves[event.key]);}
+});
 // 用户要求左右栏任何操作先回俯视；只读悬停不触发，不吞掉原按钮或输入操作。
 const returnForSidebar=event=>{if(viewMode!=='top'&&event.target.closest('aside'))setViewMode('top');};
 document.addEventListener('pointerdown',returnForSidebar,{capture:true});
@@ -531,7 +541,7 @@ function paintMap() {
     if(cell)wrecks.push({id:'wreck:'+p.id,asset:'wreck',x:cell[0]+.5,y:cell[1]+.5,w:wreckWidth,h:wreckLength,fireScale:wreckLength/.95});
   }
   cityTransitions=cityTransitions.filter(event=>effectTime-event.at<.8&&currentlyVisible(event.cell));
-  const fx={time:effectTime,cell:size,reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
+  const fx={time:effectTime,cell:size,observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
   const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,fx});
@@ -1025,6 +1035,11 @@ function paintMap() {
   ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillStyle='#81999c';
   for(let i=0;i<SIZE;i+=5){ctx.fillText(i,panX+(i+.5)*size,panY-8);ctx.fillText(i,panX-14,panY+(i+.65)*size);}
   updateCameraLabels(size,controlState.params);
+  updateMapInfo(view,mapDetail,potentials,linked);
+}
+// 动画只刷新显示值，不把插值后的拍数写回战斗状态。
+function updateMapInfo(view,mapDetail,potentials=[],linked=null){
+  const controlState=view.controlState,hoveredPlot=productionId(hover,state);
   const nextBorderLegendKey=[nightMix.toFixed(2),...['controlBorderInnerCells','controlBorderOuterCells','controlBorderInnerOpacity','controlBorderOuterOpacity','controlBorderLinePx'].map(name=>controlState.params[name])].join(':');
   if(borderLegendKey!==nextBorderLegendKey){
     borderLegendKey=nextBorderLegendKey;
@@ -1051,7 +1066,6 @@ function paintMap() {
   }else $('cellInfo').textContent='';
   if(potentials.some(potential=>potential.sourceId===linked))$('cellInfo').textContent='潜在路线 · 今晚不出兵';
 }
-// 动画只刷新显示值，不把插值后的拍数写回战斗状态。
 function updateCameraLabels(size,params){
   $('zoom').textContent = `${Math.round(zoom * 100)}%`;
   // 比例尺选择 1/2/5 档距离，长度不超过 60 像素，缩放时始终对应实际米数。
@@ -1062,9 +1076,9 @@ function updateCameraLabels(size,params){
   $('mapScale').setAttribute('aria-label',`地图比例尺 ${scaleText}`);
 }
 function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,palette,fogTime){
-  const size=base*zoom,span=76,px=16,camera=cameraView(),g=observationGround.getContext('2d'),m=observationMist.getContext('2d');
-  if(observationGround.width!==span*px){for(const c of [observationGround,observationMist]){c.width=span*px;c.height=span*px;}}
-  const terrainKey=view.controlBorder.signature+JSON.stringify(plots)+`${nightMix}:${$('heat').checked}:${size}`;
+  const size=base*zoom,span=76,px=16,fogPx=4,camera=cameraView(),g=observationGround.getContext('2d'),m=observationMist.getContext('2d');
+  if(observationGround.width!==span*px){observationGround.width=observationGround.height=span*px;observationMist.width=observationMist.height=span*fogPx;}
+  const terrainKey=view.controlBorder.signature+JSON.stringify(plots)+`${nightMix}:${$('heat').checked}:${size}:${$('heat').checked?JSON.stringify([...fire]):''}`;
   if(observationGroundKey!==terrainKey){
     g.setTransform(px,0,0,px,8*px,8*px);g.fillStyle=fogColor(nightMix);g.fillRect(-8,-8,span,span);
     drawCitySurroundings(g,state.layout,nightMix,null,fogColor(nightMix));
@@ -1077,9 +1091,9 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     for(const p of state.sites)if(p.role!=='camp'&&!detailed.has(key(p.x,p.y))&&view.towers.plots.get(key(p.x,p.y)).footprint.length)drawCitySilhouette(g,p,nightMix);
     drawControlBorderBands(g,view.controlBorder,nightMix);observationGroundKey=terrainKey;
   }
-  m.setTransform(1,0,0,1,0,0);m.clearRect(0,0,observationMist.width,observationMist.height);m.setTransform(px,0,0,px,8*px,8*px);
+  m.setTransform(1,0,0,1,0,0);m.clearRect(0,0,observationMist.width,observationMist.height);m.setTransform(fogPx,0,0,fogPx,8*fogPx,8*fogPx);
   if(mapFogEnabled())drawFog(m,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom);
-  const image=city3D.observationFrame({ground:observationGround,mist:observationMist,view:camera,background:fogColor(nightMix)});
+  const image=city3D.observationFrame({ground:observationGround,groundVersion:observationGroundKey,mist:observationMist,view:camera,background:fogColor(nightMix)});
   ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.clearRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);
   const point=(x,y,z=0)=>projectView(x,y,z,camera);
   const segment=(a,b)=>{ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);};
@@ -1090,12 +1104,14 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   for(const id of focus)if(forecastDay===state.day&&!routeSources.some(s=>sourceIdentity(s)===id)){
     view.potentialRoutes??=new Map();if(!view.potentialRoutes.has(id))view.potentialRoutes.set(id,potentialSourceRoute(state,id));const p=view.potentialRoutes.get(id);if(p)potentials.push({...p,potential:true});
   }
+  const sightClip=new Path2D();if(mapFogEnabled())for(const id of sight){const [x,y]=xy(id),corners=[[x,y],[x+1,y],[x+1,y+1],[x,y+1]].map(([x,y])=>point(x,y,.04));sightClip.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>sightClip.lineTo(p.x,p.y));sightClip.closePath();}
   for(const route of [...routes,...potentials]){
     const index=route.sources?.[0]??route.index??0,source=route.potential?displayedEnemySources().find(s=>s.id===route.sourceId):routeSources[index],focused=route.potential||focus.has(source&&sourceIdentity(source));if(!$('routes').checked&&!focused)continue;
-    ctx.save();ctx.strokeStyle=enemyRouteColor(source?.index??(sourceNumber(source)>=0?sourceNumber(source):index));ctx.lineWidth=focused?3:1.8;ctx.setLineDash(route.potential?[14,10]:[]);
+    ctx.save();if(mapFogEnabled())ctx.clip(sightClip);ctx.strokeStyle=enemyRouteColor(source?.index??(sourceNumber(source)>=0?sourceNumber(source):index));ctx.lineWidth=focused?3:1.8;ctx.setLineDash(route.potential||route.future?[14,10]:[]);let walked=0;
     for(let i=1;i<route.path.length;i++){
       const [x,y]=xy(route.path[i-1]),[nx,ny]=xy(route.path[i]),alpha=mapFogEnabled()?view.visibility.enemyAlpha((x+nx)/2+.5,(y+ny)/2+.5):1;if(alpha<=0)continue;
-      ctx.globalAlpha=alpha;ctx.beginPath();segment(point(x+.5,y+.5,.04),point(nx+.5,ny+.5,.04));ctx.stroke();
+      const a=point(x+.5,y+.5,.04),b=point(nx+.5,ny+.5,.04),length=Math.hypot(b.x-a.x,b.y-a.y);ctx.globalAlpha=alpha;ctx.lineDashOffset=-walked;walked+=length;ctx.beginPath();segment(a,b);ctx.stroke();
+      if(i%4===0&&length>=10){const angle=Math.atan2(b.y-a.y,b.x-a.x),tip={x:(a.x+b.x)/2,y:(a.y+b.y)/2};ctx.save();ctx.setLineDash([]);ctx.beginPath();ctx.moveTo(tip.x-5*Math.cos(angle-.5),tip.y-5*Math.sin(angle-.5));ctx.lineTo(tip.x,tip.y);ctx.lineTo(tip.x-5*Math.cos(angle+.5),tip.y-5*Math.sin(angle+.5));ctx.stroke();ctx.restore();}
     }ctx.restore();
   }
   const border=new Path2D();for(const [x,y,nx,ny] of view.boundary){const a=point(x,y,.02),b=point(nx,ny,.02);border.moveTo(a.x,a.y);border.lineTo(b.x,b.y);}
@@ -1117,13 +1133,14 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   for(const source of displayedEnemySources()){
     const w=source.width??1,h=source.height??1,p=point((source.bx??source.x)+w/2,(source.by??source.y)+h/2,(city3D.baseAt(source.site)??0)+.5);
     const alpha=source.active||focus.has(sourceIdentity(source))?1:.72;
+    ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=source.hp===0?'#9ac8ad':source.active?'#ff574b':'#b07e78';ctx.lineWidth=source.active?2:1.2;ctx.setLineDash(source.active?[]:[6,4]);if(source.active){ctx.shadowColor='#ff3c31';ctx.shadowBlur=7;}ctx.beginPath();const sx=source.bx??source.x,sy=source.by??source.y;[[sx,sy],[sx+w,sy],[sx+w,sy+h],[sx,sy+h]].map(([x,y])=>point(x,y,.03)).forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.stroke();ctx.restore();
     badge(source.hp>0?String(source.index+1):'×',p.x,p.y,source.hp>0?'#ffb3a0':'#b9d8c1',alpha);
     if(source.hp>0){ctx.save();ctx.globalAlpha=alpha;ctx.font='600 10px system-ui';const w=ctx.measureText(String(source.hp)).width+23;ctx.fillStyle='#211d24ee';ctx.fillRect(p.x-w/2,p.y+10,w,15);drawShield(ctx,p.x-w/2+3,p.y+12,10);ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillStyle='#ffe6cc';ctx.fillText(source.hp,p.x-w/2+17,p.y+17);ctx.restore();}
     if(focus.has(sourceIdentity(source)))drawSourcePin(ctx,p.x+8,p.y-15,11);
   }
   // 实体和HP沿用同一位置/alpha；牌子悬在人物上方，不被墙、雾或楼顶挡住。
   for(const frame of enemies)if(frame.alpha>0){const p=point(frame.x+.5,frame.y+.5,.11);badge(String(frame.enemy.hp),p.x,p.y-10,'#ffada5',frame.alpha);ctx.save();ctx.globalAlpha=frame.alpha;ctx.fillStyle='#572d34';ctx.fillRect(p.x-6,p.y-4,12,2);ctx.fillStyle='#ffedb6';ctx.fillRect(p.x-6,p.y-4,12*Math.max(0,Math.min(1,frame.barHP/frame.enemy.max)),2);ctx.restore();}
-  updateCameraLabels(camera.cell,view.controlState.params);
+  updateCameraLabels(camera.cell,view.controlState.params);updateMapInfo(view,viewport.dataset.detail,potentials,linked);
 }
 
 function updateNightProgress(){
@@ -1645,19 +1662,21 @@ canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundin
 // 单击放置、拖动平移；在松开时才建造，避免拖地图误花预算。
 canvas.addEventListener('pointerdown',e=>{
   if(e.button===2)return;
-  dragging={x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,moved:false,panOnly:e.button!==0||e.altKey};
+  const rotate=viewMode==='free'&&(e.shiftKey||e.button===1);if(rotate)e.preventDefault();
+  dragging={x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,moved:false,panOnly:e.button!==0||e.altKey,rotate};
   canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener('pointermove',e=>{
   if(dragging){
     if(Math.hypot(e.clientX-dragging.startX,e.clientY-dragging.startY)>4)dragging.moved=true;
-    if(dragging.moved||dragging.panOnly){const delta=panView(e.clientX-dragging.x,e.clientY-dragging.y,cameraView());panX+=delta.x*base*zoom/cameraView().cell;panY+=delta.y*base*zoom/cameraView().cell;constrainCamera();}
+    if(dragging.rotate)rotateView(-(e.clientX-dragging.x)*.008,-(e.clientY-dragging.y)*.006);
+    else if(dragging.moved||dragging.panOnly){const delta=panView(e.clientX-dragging.x,e.clientY-dragging.y,cameraView());panX+=delta.x*base*zoom/cameraView().cell;panY+=delta.y*base*zoom/cameraView().cell;constrainCamera();}
     dragging.x=e.clientX;dragging.y=e.clientY;
   }
-  hover=cellAt(e);updateMapSourceHover();draw();
+  hover=dragging?.rotate?null:cellAt(e);updateMapSourceHover();draw();
 });
 canvas.addEventListener('pointerup',e=>{
-  const shouldPlace=dragging&&!dragging.moved&&!dragging.panOnly;dragging=null;
+  const shouldPlace=dragging&&!dragging.moved&&!dragging.panOnly&&!dragging.rotate;dragging=null;
   if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);
   if(!shouldPlace||nightOutro)return;
   if(viewMode!=='top'){setViewMode('top');return;} // 回正这次点击只改变镜头，下一次才接受落点。

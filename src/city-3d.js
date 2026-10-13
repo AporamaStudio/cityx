@@ -4,7 +4,7 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {drawRoadTexture} from './city-textures.js?v=17';
 import {groundGlow} from './model-preview-effects.js?v=3';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=5';
-import {createCityObservation} from './city-observation.js?v=1';
+import {createCityObservation} from './city-observation.js?v=3';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',enemy:'generated/enemy-squad',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble'};
@@ -200,14 +200,15 @@ export function createCity3D(onReady){
       effects.updateLights(lightItems,fx.time,night,visible);
       // 静态云纹/悬停刷新复用城市画面；扫光与火光读取同一动效时间重画承光层。
       const shapes=plots.map(p=>`${p.id}:${entries.get(p.id).signature}`).join('|');
-      const signature=shapes+plots.map(p=>p.powered?'1':'0').join('')+streetKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightBudget}:${fx.time}`;
+      const signature=shapes+plots.map(p=>p.powered?'1':'0').join('')+streetKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightBudget}:${fx.observer??false}:${fx.time}`;
       if(signature!==lastFrame){
         const dimensions=`${width}:${height}`;if(pixels!==dimensions){renderer.setSize(width,height,false);pixels=dimensions;}
         camera.left=-panX/cell;camera.right=(width-panX)/cell;camera.top=panY/cell;camera.bottom=-(height-panY)/cell;camera.updateProjectionMatrix();
         sky.color.set('#f4f6e2').lerp(new THREE.Color('#b9d7ed'),night);sky.groundColor.set('#809180').lerp(new THREE.Color('#4c676b'),night);sky.intensity=2.4-night*.9;
         sun.color.set('#fff1cd').lerp(new THREE.Color('#b9cfff'),night);sun.intensity=3.2-night*2.3;
         const shadowKey=shapes+streetKey;if(shadowKey!==lastShadow){renderer.shadowMap.needsUpdate=true;lastShadow=shadowKey;}
-        buildings.visible=true;facilities.visible=false;enemies.visible=false;streets.visible=true;effects.group.visible=false;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);lastFrame=signature;
+        // 斜视只准备同一批对象，由观察相机统一画；不再拷贝四张不会显示的俯视层。
+        if(!fx.observer){buildings.visible=true;facilities.visible=false;enemies.visible=false;streets.visible=true;effects.group.visible=false;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);}lastFrame=signature;
       }
       return cityCanvas;
     },
@@ -232,9 +233,13 @@ export function createCity3D(onReady){
       }
       const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+JSON.stringify(fx.transitions)+`/${lastFrame}:${night}:${fx.time}`;
       if(signature!==lastProps){
-        buildings.visible=false;facilities.visible=true;enemies.visible=false;streets.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
-        facilities.visible=false;enemies.visible=true;renderer.render(scene,camera);capture(enemyCanvas);enemies.visible=false;
-        effects.updateTransitions(fx.transitions??[],fx.time);effects.updateShots(fx.shots,props,fx.time,fx.cell);facilities.visible=false;effects.group.visible=true;renderer.render(scene,camera);capture(effectCanvas);lastProps=signature;
+        effects.updateTransitions(fx.transitions??[],fx.time);effects.updateShots(fx.shots,props,fx.time,fx.cell);
+        if(!fx.observer){
+          buildings.visible=false;facilities.visible=true;enemies.visible=false;streets.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
+          facilities.visible=false;enemies.visible=true;renderer.render(scene,camera);capture(enemyCanvas);enemies.visible=false;
+          effects.group.visible=true;renderer.render(scene,camera);capture(effectCanvas);
+        }
+        lastProps=signature;
       }
       return facilityCanvas;
     },

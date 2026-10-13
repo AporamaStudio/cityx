@@ -21,3 +21,7 @@ export function viewBounds(view){
   const corners=[[0,0],[view.width,0],[0,view.height],[view.width,view.height]].map(([x,y])=>groundAt(x,y,view));
   return {left:Math.min(...corners.map(p=>p.x)),right:Math.max(...corners.map(p=>p.x)),top:Math.min(...corners.map(p=>p.y)),bottom:Math.max(...corners.map(p=>p.y))};
 }
+// 绕城可完整旋转，俯仰保留25–80°，避免贴地穿楼或越过俯视翻转。
+export function orbitView(yaw,elevation,turn,tilt){
+  return {yaw:((yaw+turn+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI,elevation:Math.max(25*Math.PI/180,Math.min(80*Math.PI/180,elevation+tilt))};
+}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {projectView,groundAt,panView,viewCenter,observationView} from '../src/city-view.js';
+import {projectView,groundAt,panView,viewCenter,observationView,orbitView} from '../src/city-view.js';
 
 test('俯视与斜视坐标往返保持原观察中心，屋顶投影只改显示高度',()=>{
   for(const yaw of [0,Math.PI/4,-Math.PI/2,Math.PI])for(const elevation of [Math.PI/2,Math.PI/3,Math.PI/6]){
@@ -19,4 +19,14 @@ test('旋转全图在窄屏和横屏完整容纳，正常倍率和回正中心�
     for(const [x,y] of [[0,0],[60,0],[60,60],[0,60]]){const p=projectView(x,y,0,view);assert.ok(p.x>=23.9&&p.x<=width-23.9&&p.y>=23.9&&p.y<=height-23.9);}
     assert.equal(observationView({...input,cell:base*2,zoom:2}).cell,base*2);
   }
+});
+
+test('自由旋转绕回同一方向，俯仰限位不影响地图状态或投影往返',()=>{
+  const view={width:702,height:582,panX:-100,panY:-250,cell:24};
+  let angle={yaw:Math.PI/4,elevation:Math.PI/3};
+  for(let i=0;i<24;i++)angle=orbitView(angle.yaw,angle.elevation,Math.PI/12,0);
+  assert.ok(Math.abs(angle.yaw-Math.PI/4)<1e-10);
+  assert.equal(orbitView(0,Math.PI/3,0,100).elevation,80*Math.PI/180);
+  assert.equal(orbitView(0,Math.PI/3,0,-100).elevation,25*Math.PI/180);
+  for(const tilt of [-100,100]){const camera={...view,...orbitView(1,1,-2,tilt)},p=projectView(22,49,0,camera),world=groundAt(p.x,p.y,camera);assert.ok(Math.abs(world.x-22)<1e-10&&Math.abs(world.y-49)<1e-10);}
 });

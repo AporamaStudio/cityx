@@ -385,3 +385,8 @@ input[type=number]{background:var(--input);color:var(--text);border-color:var(--
 
 /* 三分区共用参数操作，应用/取消/默认覆盖玩法与视觉草稿。 */
 .parameter-actions{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+
+/* 镜头按钮只在自由观察出现，不推动两侧控制区；沿用昼夜按钮配色。 */
+.orbit-controls{position:absolute;top:12px;right:12px;z-index:3;display:grid;grid-template-columns:28px 28px;gap:4px;padding:5px;border:1px solid var(--line);border-radius:7px;background:var(--tooltip)}
+.orbit-controls[hidden]{display:none}.orbit-controls button{width:28px;height:28px;padding:0;font-size:18px;line-height:1}
+#map:focus-visible{outline:2px solid #87c9df;outline-offset:-3px}

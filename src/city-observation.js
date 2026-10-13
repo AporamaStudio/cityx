@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import {viewCenter} from './city-view.js?v=1';
+import {viewCenter} from './city-view.js?v=2';
 
 // 原城市对象共用观察相机，不复制游戏状态；雾纹按世界XZ覆盖楼顶和地面。
 export function createCityObservation(scene,renderer){
   const camera=new THREE.OrthographicCamera(),canvas=document.createElement('canvas');
-  let pickObjects=[];
+  let pickObjects=[],lastGroundVersion=null;
   const groundTexture=new THREE.CanvasTexture(document.createElement('canvas'));groundTexture.colorSpace=THREE.SRGBColorSpace;groundTexture.generateMipmaps=false;groundTexture.minFilter=THREE.LinearFilter;
   const fogTexture=new THREE.CanvasTexture(document.createElement('canvas'));fogTexture.flipY=false;fogTexture.generateMipmaps=false;fogTexture.minFilter=THREE.LinearFilter;
   const fog={enabled:{value:0},texture:{value:fogTexture},bounds:{value:new THREE.Vector4(-8,-8,76,76)}};
@@ -23,9 +23,9 @@ export function createCityObservation(scene,renderer){
       const ray=new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2(x/width*2-1,1-y/height*2),camera);
       const hit=ray.intersectObjects(pickObjects,true).find(hit=>!hit.object.material.transparent);return hit?{x:hit.point.x,y:hit.point.z}:null;
     },
-    render({ground,mist,view,background,objects,enemies,effects}){
+    render({ground,groundVersion,mist,view,background,objects,enemies,effects}){
       pickObjects=[...objects,floor];
-      groundTexture.image=ground;groundTexture.needsUpdate=true;fogTexture.image=mist;fogTexture.needsUpdate=true;
+      if(groundTexture.image!==ground||lastGroundVersion!==groundVersion){groundTexture.image=ground;groundTexture.needsUpdate=true;lastGroundVersion=groundVersion;}fogTexture.image=mist;fogTexture.needsUpdate=true;
       const {width,height,cell,yaw,elevation}=view,center=viewCenter(view),distance=100;
       camera.left=-width/(2*cell);camera.right=width/(2*cell);camera.top=height/(2*cell);camera.bottom=-height/(2*cell);camera.near=.1;camera.far=300;
       camera.position.set(center.x+Math.sin(yaw)*Math.cos(elevation)*distance,Math.sin(elevation)*distance,center.y+Math.cos(yaw)*Math.cos(elevation)*distance);camera.up.set(0,1,0);camera.lookAt(center.x,0,center.y);camera.updateProjectionMatrix();
