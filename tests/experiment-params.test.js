@@ -10,6 +10,7 @@ test('第7天视觉可独立应用，忽略玩法草稿并完整保留运行状�
   assert.equal(applyExperimentParams(state,draft,'visual'),'');
   const {params:after,...rest}=state;assert.deepEqual(rest,before);assert.equal(funds(state),1000);assert.equal(after.wallHP,params.wallHP);assert.equal(after.budget,params.budget);assert.equal(after.freeProjection,'perspective');
   const unchanged=structuredClone(state);assert.match(applyExperimentParams(state,{...draft,freePerspectiveFovDegrees:99},'visual'),/视野角/);assert.deepEqual(state,unchanged);
+  assert.match(applyExperimentParams(state,{...draft,showRenderStats:'true'},'visual'),/绘制统计/);assert.deepEqual(state,unchanged);
 });
 
 test('第7天玩法原地应用保留日期、损伤与视觉，降低上限不复活残墙',()=>{

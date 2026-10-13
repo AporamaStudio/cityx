@@ -15,6 +15,8 @@ export const DEFAULTS = {
   streetLightBudget: 24,
   // 每个原始敌群的基础视觉人数；合流增加密度，人物不独立结算HP。
   enemyFiguresPerGroup: 16,
+  // 仅视觉实验显示CPU绘制与提交量，默认关闭；不代表GPU帧率。
+  showRenderStats: false,
   // 精确火力只在路线格上显示；每格屏幕尺寸小于此值时收起数字，0关闭缩放门槛。
   fireNumbersMinCellPx: 12,
   // 两条倍率分界划分远/中/近景；报价另按实际空间保住可读字号。
@@ -69,7 +71,7 @@ export const DEFAULTS = {
 
 
 // 视觉实验独立应用的白名单；不能借此修改战斗、经济或控制参数。
-export const VISUAL_PARAM_KEYS = ['cellMeters', 'mapMaxCellPx', 'obliqueElevationDegrees', 'freeProjection', 'freePerspectiveFovDegrees', 'returnToTopOnAction', 'streetLightBudget', 'enemyFiguresPerGroup', 'fireNumbersMinCellPx', 'mapMidZoomPercent', 'mapNearZoomPercent', 'controlBorderInnerCells', 'controlBorderOuterCells', 'controlBorderInnerOpacity', 'controlBorderOuterOpacity', 'controlBorderLinePx', 'cloudSpeedMultiplier', 'fogS12', 'fogS23', 'enemyFogFadeCells', 'campWarningPercent', 'nightIdleTransitionMs', 'incomeReportMs', 'resourceHoverMs', 'resourceHoverTolerancePx'];
+export const VISUAL_PARAM_KEYS = ['cellMeters', 'mapMaxCellPx', 'obliqueElevationDegrees', 'freeProjection', 'freePerspectiveFovDegrees', 'returnToTopOnAction', 'streetLightBudget', 'enemyFiguresPerGroup', 'showRenderStats', 'fireNumbersMinCellPx', 'mapMidZoomPercent', 'mapNearZoomPercent', 'controlBorderInnerCells', 'controlBorderOuterCells', 'controlBorderInnerOpacity', 'controlBorderOuterOpacity', 'controlBorderLinePx', 'cloudSpeedMultiplier', 'fogS12', 'fogS23', 'enemyFogFadeCells', 'campWarningPercent', 'nightIdleTransitionMs', 'incomeReportMs', 'resourceHoverMs', 'resourceHoverTolerancePx'];
 
 // 十五晚实验：前五晚保留原节奏，后十晚逐步增加强度；参数仍须真人试玩。
 const OPENING_WAVES = [

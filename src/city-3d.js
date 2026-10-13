@@ -8,10 +8,10 @@ import {PLANT_MODELS} from './city-vegetation.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=9';
 import {createCityObservation} from './city-observation.js?v=6';
-import {createZombieCrowds} from './city-enemies.js?v=4';
+import {createZombieCrowds} from './city-enemies.js?v=5';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
-const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',enemy:'generated/enemy-squad',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
+const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
 for(const [name,file] of Object.entries(PLANT_MODELS))files[name]='generated/'+file;
 for(const name of ['home','small','wide','factory','workshop'])files[name+'Ruined']=files[name]+'-ruined';
 const resource=file=>new URL('../assets/model-preview/'+file+'.glb?v=5',import.meta.url).href;
@@ -129,6 +129,8 @@ export function createCity3D(onReady){
     return {object,signature:`${type}:${status}:${w}:${h}:${cellMeters}`,roof:new THREE.Box3().setFromObject(object).max.y};
   }
   return {
+    beginStats(){renderer.info.autoReset=false;renderer.info.reset();},
+    renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats()};renderer.info.autoReset=true;return stats;},
     isReady(){return ready;},
     observationPick(x,y,width,height){return ready?observation.pick(x,y,width,height):null;},
     observationFrame(options){if(!ready)return null;if(terrain)terrain.visible=false;return observation.render({...options,objects:[buildings,facilities,streets,roads],enemies,effects:effects.group});},
@@ -249,11 +251,10 @@ export function createCity3D(onReady){
           if(['near','far'].includes(item.asset))model.traverse(node=>{if(node.isMesh){const color=node.material.name==='#6c7775'?'#354b4b':['#3f5057','#1e2b32'].includes(node.material.name)?'#98aaa1':item.asset==='far'?'#c3c5d0':'#a8b7a0';node.material.color.set(color);node.material.userData.baseColor=node.material.color.clone();node.material.emissive.set(color);node.material.emissiveIntensity=.10;}});
           const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
           if(item.asset!=='wall'){const scale=Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);}
-          (item.asset==='enemy'?enemies:facilities).add(object);props.set(item.id,{object,signature:shape,height:new THREE.Box3().setFromObject(object).max.y,motion:facilityMotion(object),wreck:item.asset==='wreck'?createWreckDressing(object,item.w,item.h):null});
+          facilities.add(object);props.set(item.id,{object,signature:shape,height:new THREE.Box3().setFromObject(object).max.y,motion:facilityMotion(object),wreck:item.asset==='wreck'?createWreckDressing(object,item.w,item.h):null});
         }
-        const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);if(item.asset==='wreck')object.rotation.y=item.angle??0;if(item.asset==='enemy'){object.scale.setScalar(item.visualScale??1);if(item.angle!==undefined)object.rotation.y=item.angle;}else object.scale.y=item.dead&&item.asset!=='sourceRuined'?.3:1;
+        const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);if(item.asset==='wreck')object.rotation.y=item.angle??0;object.scale.y=item.dead&&item.asset!=='sourceRuined'?.3:1;
         object.traverse(node=>{if(node.isMesh){node.material.opacity=item.alpha??1;node.material.transparent=node.material.opacity<1;if(!node.material.userData.baseColor)node.material.userData.baseColor=node.material.color.clone();node.material.color.copy(node.material.userData.baseColor).lerp(new THREE.Color('#84867a'),item.dead?.85:(1-(item.health??1))*.5);if(['#ff9538','#ffd36b'].includes(node.material.name))node.visible=!item.dead;}});
-        if(item.asset==='enemy')object.traverse(node=>{if(node.isMesh){node.material.color.lerp(new THREE.Color('#fff0c9'),item.hitMix??0);node.material.color.lerp(new THREE.Color(item.fogColor),(1-item.fogAlpha)*.75);node.material.emissive.copy(node.material.color);node.material.emissiveIntensity=.08;}});
         animateFacility(props.get(item.id),item,fx);
         if(props.get(item.id).wreck)updateWreckDressing(props.get(item.id).wreck,fx.time,night,fx.reducedMotion);
       }

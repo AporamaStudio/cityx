@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=84';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=85';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -548,6 +548,7 @@ export function validateVisualParams(params){
   if(!integer(params.mapMaxCellPx,48,256))return '最大格宽须为 48–256 像素整数。';
   if(!integer(params.streetLightBudget,0,64))return '真实路灯预算须为 0–64 盏整数，0 保留灯具与暖光池。';
   if(!integer(params.enemyFiguresPerGroup,3,20))return '每敌群视觉人数须为 3–20 人整数，不改变实际敌群数量。';
+  if(typeof params.showRenderStats!=='boolean')return '绘制统计须为开启或关闭。';
   if(!integer(params.cellMeters,1,1000))return '每格距离须为 1–1000 米整数。';
   if(!integer(params.fireNumbersMinCellPx,0,48))return '火力数字最小格宽须为 0–48 像素整数，0 始终显示。';
   if(!integer(params.mapMidZoomPercent,100,1000)||!integer(params.mapNearZoomPercent,100,1000)||params.mapMidZoomPercent>=params.mapNearZoomPercent)return '中景/近景门槛须为 100–1000% 整数，且中景低于近景。';

@@ -7,6 +7,7 @@ export function createZombieCrowds(parent,capacity=2048){
   const group=new THREE.Group();parent.add(group);
   const parts={},headings=new Map(),dummy=new THREE.Object3D(),local=new THREE.Object3D(),world=new THREE.Object3D(),color=new THREE.Color(),fog=new THREE.Color(),hit=new THREE.Color('#fff0c9');
   const clothes=['#726b58','#7a5350','#536370','#696354'],skin=['#b3b39b','#b7a695','#a7ac99','#b8af9a'];
+  let figures=0;
   const definitions={
     body:new THREE.CylinderGeometry(.19,.15,.57,5),head:new THREE.DodecahedronGeometry(.17,0),
     leftArm:new THREE.CylinderGeometry(.065,.055,.61,5),rightArm:new THREE.CylinderGeometry(.065,.055,.61,5),
@@ -33,7 +34,7 @@ export function createZombieCrowds(parent,capacity=2048){
     local.position.set(x,y,z);local.rotation.set(rx,0,0);local.scale.set(sx,sy,sz);local.updateMatrix();dummy.matrix.multiplyMatrices(world.matrix,local.matrix);
     const {mesh,opacity}=parts[name];mesh.setMatrixAt(index,dummy.matrix);if(name!=='shadow')mesh.setColorAt(index,paint);opacity.setX(index,alpha);
   }
-  return {group,update(items,fx){
+  return {group,stats(){return {figures,capacity};},update(items,fx){
     let total=0;const quota=Math.min(32,Math.floor(capacity/Math.max(1,items.length)));
     const active=new Set(items.map(item=>item.id));for(const id of headings.keys())if(!active.has(id))headings.delete(id);
     for(const item of items){
@@ -60,6 +61,10 @@ export function createZombieCrowds(parent,capacity=2048){
         }
       }
     }
-    for(const {mesh,opacity} of Object.values(parts)){mesh.material.userData.cityEnemyNight.value=fx.night??0;mesh.count=total;mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;opacity.needsUpdate=true;}
+    figures=total;for(const {mesh,opacity} of Object.values(parts)){
+      mesh.material.userData.cityEnemyNight.value=fx.night??0;mesh.count=total;if(!total)continue;
+      // 只上传当前人数，避免几十个人物也反复上传2048人的完整预留缓冲。
+      for(const [attribute,size] of [[mesh.instanceMatrix,16],[mesh.instanceColor,3],[opacity,1]])if(attribute){attribute.clearUpdateRanges();attribute.addUpdateRange(0,total*size);attribute.needsUpdate=true;}
+    }
   }};
 }
