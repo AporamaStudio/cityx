@@ -149,6 +149,11 @@ function enemyRouteColor(index){
   const pair=enemyRouteColors[((index%enemyRouteColors.length)+enemyRouteColors.length)%enemyRouteColors.length];
   return '#'+[1,3,5].map(i=>{const day=parseInt(pair[0].slice(i,i+2),16),night=parseInt(pair[1].slice(i,i+2),16);return Math.round(day+(night-day)*nightMix).toString(16).padStart(2,'0');}).join('');
 }
+// 三种视角共用来源色与提亮/透明度；转向不重新选色。
+const brightenRoute=(color,amount)=>`rgb(${[1,3,5].map(i=>{const value=parseInt(color.slice(i,i+2),16);return Math.round(value+(255-value)*amount);}).join(',')})`;
+function routeAppearance(color,{focused=false,potential=false,future=false}={}){
+  return {line:brightenRoute(color,potential?.12:focused?.18:0),arrow:brightenRoute(color,potential?.25:focused?.35:0),alpha:potential?.7:focused?.95:future?.35:.8,arrowAlpha:potential?.6:focused?.95:future?.35:.8};
+}
 const notify = message => { $('notice').textContent = message; };
 let topNoticeTimer=null;
 // 拒绝操作统一在顶栏短暂显示；下次点击可提前清除，不占左下说明区。
@@ -710,7 +715,6 @@ function paintMap() {
   }
   const routeColor=index=>enemyRouteColor(sourceNumber(routeSources[index])>=0?sourceNumber(routeSources[index]):index);
   // 颜色继续表达来源；合流时按当前联动的源头着色，而不是只取第一来源。
-  const brighten=(color,amount)=>`rgb(${[1,3,5].map(i=>{const value=parseInt(color.slice(i,i+2),16);return Math.round(value+(255-value)*amount);}).join(',')})`;
   ctx.save();clipSight();
   // 复用已锁定路径，关联路线最后描画；临时显线不修改开关或揭开迷雾。
   const routeUnit=Math.min(size,48)/size; // 放大近景只增加地图细节，路线线宽和箭头不无限变粗。
@@ -729,24 +733,27 @@ function paintMap() {
     if(focusActive&&linkedRoute(route))return;
     const {path,index,future}=route;
     ctx.setLineDash(future?[.45,.3]:[]);
-    ctx.strokeStyle='#392328';ctx.globalAlpha=(future?.35:.8)*(focusActive?.3:1);ctx.lineWidth=Math.max((future?.13:.18)*routeUnit,2/size);strokeRoute(path,index);
-    ctx.strokeStyle=routeColor(index);ctx.globalAlpha=(future?.35:.8)*(focusActive?.3:1);ctx.lineWidth=(future?.065:.10)*routeUnit;
+    const appearance=routeAppearance(routeColor(index),{future});
+    ctx.strokeStyle='#392328';ctx.globalAlpha=appearance.alpha*(focusActive?.3:1);ctx.lineWidth=Math.max((future?.13:.18)*routeUnit,2/size);strokeRoute(path,index);
+    ctx.strokeStyle=appearance.line;ctx.globalAlpha=appearance.alpha*(focusActive?.3:1);ctx.lineWidth=(future?.065:.10)*routeUnit;
     strokeRoute(path,index);routeArrows(path,index,4);
   });
   for(const route of focusedRoutes){
     const {path,index,future}=route,id=linked&&linkedRoute(route,linked)?linked:pinnedSource;
     const color=routeColor(routeSources.findIndex(source=>sourceIdentity(source)===id));
     ctx.setLineDash(future?[.5,.32]:[]);ctx.lineJoin='round';ctx.lineCap='round';
-    ctx.globalAlpha=.95;ctx.strokeStyle='#172029';ctx.lineWidth=Math.max(.32*routeUnit,5/size);strokeRoute(path,index);
-    ctx.strokeStyle=brighten(color,.18);ctx.lineWidth=Math.max(.16*routeUnit,2.5/size);strokeRoute(path,index);
-    ctx.setLineDash([]);ctx.strokeStyle=brighten(color,.35);ctx.lineWidth=Math.max(.10*routeUnit,1.5/size);routeArrows(path,index,6);
+    const appearance=routeAppearance(color,{focused:true,future});
+    ctx.globalAlpha=appearance.alpha;ctx.strokeStyle='#172029';ctx.lineWidth=Math.max(.32*routeUnit,5/size);strokeRoute(path,index);
+    ctx.strokeStyle=appearance.line;ctx.lineWidth=Math.max(.16*routeUnit,2.5/size);strokeRoute(path,index);
+    ctx.setLineDash([]);ctx.strokeStyle=appearance.arrow;ctx.lineWidth=Math.max(.10*routeUnit,1.5/size);routeArrows(path,index,6);
   }
   for(const potential of potentials){
     // 潜在方向用更长、更疏的虚线；仍受同一S0/S1裁剪，不揭雾、不预告日期。
-    ctx.setLineDash([.75,.5]);ctx.lineCap='butt';ctx.lineJoin='round';ctx.globalAlpha=.7;
+    const appearance=routeAppearance(enemyRouteColor(potential.index),{potential:true});
+    ctx.setLineDash([.75,.5]);ctx.lineCap='butt';ctx.lineJoin='round';ctx.globalAlpha=appearance.alpha;
     ctx.strokeStyle='#392328';ctx.lineWidth=Math.max(.24*routeUnit,3.5/size);strokeRoute(potential.path,potential.index);
-    ctx.strokeStyle=brighten(enemyRouteColor(potential.index),.12);ctx.lineWidth=Math.max(.11*routeUnit,1.6/size);strokeRoute(potential.path,potential.index);
-    ctx.setLineDash([]);ctx.globalAlpha=.6;ctx.strokeStyle=brighten(enemyRouteColor(potential.index),.25);ctx.lineWidth=Math.max(.08*routeUnit,1.2/size);routeArrows(potential.path,potential.index,6);
+    ctx.strokeStyle=appearance.line;ctx.lineWidth=Math.max(.11*routeUnit,1.6/size);strokeRoute(potential.path,potential.index);
+    ctx.setLineDash([]);ctx.globalAlpha=appearance.arrowAlpha;ctx.strokeStyle=appearance.arrow;ctx.lineWidth=Math.max(.08*routeUnit,1.2/size);routeArrows(potential.path,potential.index,6);
   }
   ctx.restore();
   if (tool !== null && hover !== null && (state.phase === 'build' || weaponHover) && (!productionSite(hover,state)||weaponHover||postHover)) {
@@ -1134,7 +1141,6 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   const image=city3D.observationFrame({ground:observationGround,groundVersion:observationGroundKey,mist:observationMist,view:camera,background:fogColor(nightMix)});
   ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.clearRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);
   const point=(x,y,z=0)=>projectView(x,y,z,camera);
-  const segment=(a,b)=>{ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);};
   // 路线与真实边界投影到地面，线宽始终为屏幕像素；绝不取未知源头的路径。
   const routeSources=viewedSources(),linked=linkedSource(),focus=new Set([pinnedSource,linked].filter(Boolean));
   const routes=state.phase==='battle'&&forecastDay===state.day?battleRoutes(state):plannedRoutes;
@@ -1143,24 +1149,33 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     view.potentialRoutes??=new Map();if(!view.potentialRoutes.has(id))view.potentialRoutes.set(id,potentialSourceRoute(state,id));const p=view.potentialRoutes.get(id);if(p)potentials.push({...p,potential:true});
   }
   const sightClip=new Path2D();if(mapFogEnabled())for(const id of sight){const [x,y]=xy(id),corners=[[x,y],[x+1,y],[x+1,y+1],[x,y+1]].map(([x,y])=>point(x,y,.04));if(corners.some(p=>p.hidden))continue;sightClip.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>sightClip.lineTo(p.x,p.y));sightClip.closePath();}
-  for(const route of [...routes,...potentials]){
-    const index=route.sources?.[0]??route.index??0,source=route.potential?displayedEnemySources().find(s=>s.id===route.sourceId):routeSources[index],focused=route.potential||focus.has(source&&sourceIdentity(source));if(!$('routes').checked&&!focused)continue;
-    const color=enemyRouteColor(source?.index??(sourceNumber(source)>=0?sourceNumber(source):index)),lineWidth=focused?4:2.8,spacing=focused?42:56;
-    ctx.save();if(mapFogEnabled())ctx.clip(sightClip);ctx.lineCap='round';ctx.lineJoin='round';let walked=0,nextArrow=spacing*.5;
-    // 深色衬边托住敌方色线；箭头按屏幕距离排布，斜视/远景仍可辨方向。
-    for(let i=1;i<route.path.length;i++){
-      const [x,y]=xy(route.path[i-1]),[nx,ny]=xy(route.path[i]),a=point(x+.5,y+.5,.04),b=point(nx+.5,ny+.5,.04);if(a.hidden||b.hidden)continue;const length=Math.hypot(b.x-a.x,b.y-a.y);
-      const alpha=mapFogEnabled()?view.visibility.enemyAlpha((x+nx)/2+.5,(y+ny)/2+.5):1,start=walked;walked+=length;
-      ctx.globalAlpha=alpha*(focus.size && !focused ? .48 : 1);ctx.setLineDash(route.potential||route.future?[14,10]:[]);ctx.lineDashOffset=-start;
-      if(alpha>0)for(const [stroke,width] of [['#211c25',lineWidth+3],[color,lineWidth]]){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.beginPath();segment(a,b);ctx.stroke();}
+  const linkedRoute=(route,id)=>(route.sources??[route.index]).some(index=>routeSources[index]&&(id?sourceIdentity(routeSources[index])===id:focus.has(sourceIdentity(routeSources[index]))));
+  const focusedRoute=route=>route.potential||linkedRoute(route);
+  const focusActive=potentials.length>0||routes.some(route=>route.path.length>1&&focusedRoute(route));
+  // 聚焦路线最后画；像俯视一样错开重叠路径，避免转弯后被另一来源覆盖。
+  const ordered=[...routes.filter(route=>!focusedRoute(route)),...routes.filter(focusedRoute),...potentials];
+  for(const route of ordered){
+    const index=route.index??route.sources?.[0]??0,focused=focusedRoute(route);if(!$('routes').checked&&!focused)continue;
+    const source=route.potential?displayedEnemySources().find(s=>s.id===route.sourceId):focused?routeSources.find(s=>sourceIdentity(s)===(linked&&linkedRoute(route,linked)?linked:pinnedSource)):routeSources[index];
+    const colorIndex=route.potential?route.index:sourceNumber(source)>=0?sourceNumber(source):index;
+    const appearance=routeAppearance(enemyRouteColor(colorIndex),{focused,potential:route.potential,future:route.future}),lineWidth=focused?4:2.8,spacing=focused?42:56,dim=focusActive&&!focused?.3:1;
+    const offset=(index%3-1)*.12,points=route.path.map(id=>{const [x,y]=xy(id);return point(x+.5+offset,y+.5,.04);});
+    ctx.save();if(mapFogEnabled())ctx.clip(sightClip);ctx.lineCap=route.potential?'butt':'round';ctx.lineJoin='round';ctx.globalAlpha=appearance.alpha*dim;ctx.setLineDash(route.potential||route.future?[14,10]:[]);ctx.lineDashOffset=0;
+    // 完整折线分两遍绘制；逐格交替衬边/彩线会覆盖上一段彩线，拐角因此变暗。
+    for(const [stroke,width] of [[focused&&!route.potential?'#172029':'#392328',lineWidth+3],[appearance.line,lineWidth]]){
+      ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.beginPath();let connected=false;
+      for(const p of points){if(p.hidden){connected=false;continue;}if(connected)ctx.lineTo(p.x,p.y);else ctx.moveTo(p.x,p.y);connected=true;}ctx.stroke();
+    }
+    let walked=0,nextArrow=spacing*.5;
+    ctx.setLineDash([]);ctx.globalAlpha=appearance.arrowAlpha*dim;
+    for(let i=1;i<points.length;i++){
+      const a=points[i-1],b=points[i];if(a.hidden||b.hidden)continue;const length=Math.hypot(b.x-a.x,b.y-a.y),start=walked;walked+=length;
       while(nextArrow<=walked&&length>0){
         const t=(nextArrow-start)/length;nextArrow+=spacing;if(t<0)continue;
-        const scaleA=viewPixelScale(x+.5,y+.5,.04,camera),scaleB=viewPixelScale(nx+.5,ny+.5,.04,camera),worldT=t*scaleA/((1-t)*scaleB+t*scaleA);
-        const arrowAlpha=mapFogEnabled()?view.visibility.enemyAlpha(x+.5+(nx-x)*worldT,y+.5+(ny-y)*worldT):1;if(arrowAlpha<=0)continue;
         const angle=Math.atan2(b.y-a.y,b.x-a.x),tip={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},size=focused?9:7;
-        ctx.save();ctx.globalAlpha=arrowAlpha*(focus.size && !focused ? .48 : 1);ctx.setLineDash([]);ctx.translate(tip.x,tip.y);ctx.rotate(angle);
+        ctx.save();ctx.translate(tip.x,tip.y);ctx.rotate(angle);
         ctx.beginPath();ctx.moveTo(size*.5,0);ctx.lineTo(-size*.6,-size*.5);ctx.lineTo(-size*.3,0);ctx.lineTo(-size*.6,size*.5);ctx.closePath();
-        ctx.strokeStyle='#211c25';ctx.lineWidth=2.5;ctx.stroke();ctx.fillStyle=color;ctx.fill();ctx.restore();
+        ctx.strokeStyle='#211c25';ctx.lineWidth=2.5;ctx.stroke();ctx.fillStyle=appearance.arrow;ctx.fill();ctx.restore();
       }
     }ctx.restore();
   }
