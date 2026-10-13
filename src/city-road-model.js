@@ -14,7 +14,7 @@ export function createRoadModel(layout,cellMeters=20,visible=()=>true){
       // 边带垂直面很薄，仅解释15cm路缘，不能暗示新增障碍。
       if(part.height>=.10){
         for(const [u,v,t,q,nx,nz] of [[a,z,r,z,0,-1],[r,s,a,s,0,1],[a,s,a,z,-1,0],[r,z,r,s,1,0]]){
-          b.positions.push(u,.002,v,t,.002,q,u,elevation,v,u,elevation,v,t,.002,q,t,elevation,q);
+          b.positions.push(u,.002,v,u,elevation,v,t,.002,q,u,elevation,v,t,elevation,q,t,.002,q);
           for(let i=0;i<6;i++)b.normals.push(nx,0,nz);
         }
       }

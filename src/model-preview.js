@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {addBuildingFoundation} from './city-building-style.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody} from './city-wrecks.js?v=1';
 import {createRoadModel} from './city-road-model.js?v=1';
 import {createPreviewEffects,groundGlow} from './model-preview-effects.js?v=3';
@@ -175,8 +176,9 @@ function buildDistrict(){
   box(district,0,.02,-20,1.7,.06,15,palette.road);
   const lots=[['house-small',-12,8],['house',-4,8],['factory',4,8],['house-wide',12,8],['apartment',-12,0],['shop',-4,0],['house',12,0],['house-wide',-12,-8],['apartment',-4,-8],['workshop',4,-8],['landmark',12,-8]];
   for(const [id,x,z] of lots){
-    box(district,x,.065,z,6.2,.13,5.7,palette.stone);
-    const obj=place(id,x,z);structures.push({obj,x,z,id,front:z>=0});
+    const base=new THREE.Group();base.position.set(x,0,z);addBuildingFoundation(base,{w:6.2,h:5.7,height:.13,cellMeters:6,housing:id.startsWith('house'),ruined:false});district.add(base);
+    const ruinBase=new THREE.Group();ruinBase.position.copy(base.position);addBuildingFoundation(ruinBase,{w:6.2,h:5.7,height:.13,cellMeters:6,housing:id.startsWith('house'),ruined:true});district.add(ruinBase);
+    const obj=place(id,x,z);structures.push({obj,x,z,id,base,ruinBase,front:z>=0});
     for(const [dx,dz] of [[-2.7,2.2],[2.65,2.3]])place('tree-small',x+dx,z+dz,.7);
   }
   for(const [id,x,z,width] of [['hospital',-8,-20,12],['bank',10,-21,8]]){
@@ -220,7 +222,7 @@ function buildRoadPreview(){
 }
 function updateRestore(){
   for(const s of structures){
-    const damaged=!restored&&s.front&&['house','shop','apartment','hospital','bank'].includes(s.id);s.obj.visible=!damaged;s.ruins.visible=damaged;
+    const damaged=!restored&&s.front&&['house','shop','apartment','hospital','bank'].includes(s.id);s.obj.visible=!damaged;s.ruins.visible=damaged;if(s.base){s.base.visible=!damaged;s.ruinBase.visible=damaged;}
     s.obj.traverse(node=>{if(node.isMesh&&node.material.userData.previewPower){node.material.color.set(restored||s.front?'#ffffff':'#9ba7a0');}});
     setPower(s.obj,restored&&s.front);
   }
