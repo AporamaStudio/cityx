@@ -1,6 +1,6 @@
 import {drawBlockTexture} from './city-textures.js?v=3';
-import {readMapSettings,mapSearch} from './map-settings.js';
-import {generateCityMap,walkableDistances} from './city-map.js?v=8';
+import {readMapSettings,mapSearch} from './map-settings.js?v=1';
+import {generateCityMap,walkableDistances} from './city-map.js?v=9';
 const $=id=>document.getElementById(id),canvas=$('map'),ctx=canvas.getContext('2d'),viewport=$('viewport');
 let appliedSettings,map,lookup=[],scale=16,panX=0,panY=0,hover=-1,drag=null,width=0,height=0;
 // 地图可视化只依赖生成数据，点击不修改地形或模拟修复。
@@ -34,13 +34,13 @@ function draw(){
   ctx.restore();
   ctx.font='600 11px system-ui';ctx.textAlign='center';
   for(const [p,text,color] of [[map.camp,'起点','#ffe1a6'],[map.goal,'远端目标','#b9f4ff']]){const x=panX+(p.x+.5)*scale,y=panY+(p.y+.5)*scale;ctx.fillStyle='#132322ee';ctx.fillRect(x-30,y-27,60,18);ctx.fillStyle=color;ctx.fillText(text,x,y-14);}
-  for(const b of map.blocks.filter(b=>b.role==='hospital')){ctx.fillStyle='#dbefeb';ctx.fillText('医院 · 10×12',panX+(b.x+b.width/2)*scale,panY+(b.y+b.height/2)*scale);}
-  if(hover>=0){const b=map.blocks[hover],x=panX+(b.x+b.width/2)*scale,y=panY+b.y*scale;ctx.fillStyle='#132322ee';ctx.fillRect(x-38,y-23,76,19);ctx.fillStyle='#ffe3a1';ctx.fillText(`${b.width} × ${b.height} ${b.kind==='open'?'空地':b.role==='hospital'?'医院':b.ruinType==='housing'?'住房废墟':'生产废墟'}`,x,y-9);}
+  for(const b of map.blocks.filter(b=>['hospital','bank'].includes(b.role))){ctx.fillStyle='#dbefeb';ctx.fillText(b.role==='bank'?'银行 · 8×8':'医院 · 10×12',panX+(b.x+b.width/2)*scale,panY+(b.y+b.height/2)*scale);}
+  if(hover>=0){const b=map.blocks[hover],x=panX+(b.x+b.width/2)*scale,y=panY+b.y*scale;ctx.fillStyle='#132322ee';ctx.fillRect(x-38,y-23,76,19);ctx.fillStyle='#ffe3a1';ctx.fillText(`${b.width} × ${b.height} ${b.kind==='open'?'空地':b.role==='hospital'?'医院':b.role==='bank'?'银行':b.ruinType==='housing'?'住房废墟':'生产废墟'}`,x,y-9);}
 }
 function generate(){
   try{
     const settings={seed:$('seed').value,starterPlot:true,hospital:true};
-    for(const name of ['width','height','mainRoadWidth','minBlock','maxBlock','specialMin','specialMax'])settings[name]=Number($(name).value);
+    for(const name of ['width','height','mainRoadWidth','minBlock','maxBlock','specialMin','specialMax','bankCount'])settings[name]=Number($(name).value);
     for(const name of ['special','touching'])settings[name]=$(name).checked;
     map=generateCityMap(settings);appliedSettings=settings;
     $('play').hidden=map.width!==60||map.height!==60;
@@ -64,7 +64,7 @@ canvas.addEventListener('pointermove',e=>{
   const r=canvas.getBoundingClientRect(),x=Math.floor((e.clientX-r.left-panX)/scale),y=Math.floor((e.clientY-r.top-panY)/scale);
   const id=x>=0&&y>=0&&x<map.width&&y<map.height?y*map.width+x:-1;hover=id>=0?lookup[id]:-1;
   const block=hover>=0?map.blocks[hover]:null;
-  $('info').textContent=block?`${block.kind==='open'?'开放场地':block.role==='hospital'?'医院（收复目标）':block.special?'特殊设施':'建筑街区'} ${block.id+1} · ${block.width}×${block.height} 格 · ${block.kind==='open'?'可通行 · 可建瞭望塔、墙或经营设施':block.role==='hospital'?'不可通行 · 占领待实现 · 不可清理换建':'废墟 · 不可通行 · 可修缮或清理换建'}`:id>=0?`(${x}, ${y}) · 道路 · 可通行 · 可建墙或挑高瞭望塔；敌人只攻击挡路墙`:'悬停查看街区占地与通行规则';draw();
+  $('info').textContent=block?`${block.kind==='open'?'开放场地':block.role==='hospital'?'医院（收复目标）':block.role==='bank'?'银行POI':block.special?'特殊设施':'建筑街区'} ${block.id+1} · ${block.width}×${block.height} 格 · ${block.kind==='open'?'可通行 · 可建瞭望塔、墙或经营设施':block.role==='hospital'?'不可通行 · 占领待实现 · 不可清理换建':'废墟 · 不可通行 · 可修缮或清理换建'}`:id>=0?`(${x}, ${y}) · 道路 · 可通行 · 可建墙或挑高瞭望塔；敌人只攻击挡路墙`:'悬停查看街区占地与通行规则';draw();
 });
 canvas.addEventListener('pointerup',()=>{drag=null;});canvas.addEventListener('pointercancel',()=>{drag=null;});canvas.addEventListener('lostpointercapture',()=>{drag=null;});canvas.addEventListener('pointerleave',()=>{hover=-1;draw();});
 const initial=readMapSettings(location.search);

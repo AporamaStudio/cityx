@@ -390,3 +390,11 @@ input[type=number]{background:var(--input);color:var(--text);border-color:var(--
 .orbit-controls{position:absolute;top:12px;right:12px;z-index:3;display:grid;grid-template-columns:28px 28px;gap:4px;padding:5px;border:1px solid var(--line);border-radius:7px;background:var(--tooltip)}
 .orbit-controls[hidden]{display:none}.orbit-controls button{width:28px;height:28px;padding:0;font-size:18px;line-height:1}
 #map:focus-visible{outline:2px solid #87c9df;outline-offset:-3px}
+
+/* 银行反馈沿用资源浮层，不推动左栏；负余额醒目，额度不混入金币总额。 */
+#budget.in-debt{color:var(--danger)}
+#financeDetails:not([hidden]){margin-top:8px;padding-top:8px}
+#loanPreview dd{color:var(--danger)}
+
+.worker-cost .worker-icon{display:inline-flex;width:14px;height:14px;flex:none}
+#financeDetails .facility-icon{width:12px;height:12px;flex:none}

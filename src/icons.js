@@ -39,9 +39,10 @@ const facilityPaths={
   wall:'<rect x="3" y="7" width="26" height="22" rx="2" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="2.5"/><path d="M3 14h26M3 22h26M16 7v7M10 14v8m12-8v8m-6 0v7M4 4h24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   production:'<path d="M3 29V15l9-6v6l9-6v6h3V3h5v26zM6 21v4h4v-4zm8 0v4h4v-4z" fill="currentColor" fill-rule="evenodd"/><path d="M25 7h3" stroke="currentColor" stroke-width="2"/>',
   housing:'<path d="m2 15 14-12 14 12" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 14v15h20V14L16 6zM10 17v5h5v-5zm9 4v8h4v-8z" fill="currentColor" fill-rule="evenodd"/>',
+  bank:'<path d="M3 11 16 3l13 8H3ZM5 28h22M8 13v12m8-12v12m8-12v12" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>',
   watch:'<path d="M9 29 12 13h8l3 16M11 21l11 8M21 21l-11 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M6 12h20v4H6zM5 9 16 2 27 9z" fill="currentColor"/><path d="M10 9v3m12-3v3" stroke="currentColor" stroke-width="2"/>'
 };
-export const FACILITY_COLORS={near:['#28654f','#a0e7c3'],far:['#575487','#d2c2fa'],wall:['#62634c','#d9d0af'],production:['#346970','#a1d9d7'],housing:['#89582d','#efc18c'],watch:['#245d73','#b3e8f2']};
+export const FACILITY_COLORS={near:['#28654f','#a0e7c3'],far:['#575487','#d2c2fa'],wall:['#62634c','#d9d0af'],production:['#346970','#a1d9d7'],housing:['#89582d','#efc18c'],watch:['#245d73','#b3e8f2'],bank:['#78612a','#efda94']};
 export const FACILITY_SVGS=Object.fromEntries(Object.entries(facilityPaths).map(([name,path])=>[name,`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" class="facility-icon${['near','far'].includes(name)?' weapon-icon':''}" data-facility="${name}" style="--icon-day:${FACILITY_COLORS[name][0]};--icon-night:${FACILITY_COLORS[name][1]}" aria-hidden="true">${path}</svg>`]));
 // 保留瞭望塔入口，形状与其它设施一样由共享图标表提供。
 export const WATCHTOWER_SVG=FACILITY_SVGS.watch;

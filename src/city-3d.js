@@ -10,7 +10,7 @@ import {createCityEffects,facilityMotion,animateFacility} from './city-effects.j
 import {createCityObservation} from './city-observation.js?v=4';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
-const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',enemy:'generated/enemy-squad',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
+const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',enemy:'generated/enemy-squad',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
 for(const [name,file] of Object.entries(PLANT_MODELS))files[name]='generated/'+file;
 for(const name of ['home','small','wide','factory','workshop'])files[name+'Ruined']=files[name]+'-ruined';
 const resource=file=>new URL('../assets/model-preview/'+file+'.glb?v=5',import.meta.url).href;
@@ -99,28 +99,28 @@ export function createCity3D(onReady){
     entry.object.removeFromParent();const maps=new Set();entry.object.traverse(node=>{if(node.isMesh){if(node.material.map?.userData.cityOwned)maps.add(node.material.map);node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});for(const map of maps)map.dispose();
   }
   function build(plot){
-    const {id,x,y,w,h,type,status,cellMeters}=plot;
+    const {id,x,y,w,h,type,status,cellMeters}=plot,landmark=['hospital','bank'].includes(type);
     const pool=type==='housing'?['small','home','wide']:['factory','workshop'];
-    const object=new THREE.Group(),housing=type==='housing',columns=type==='hospital'?1:housing?Math.min(w,4):Math.ceil(w/2),rows=type==='hospital'?1:housing?Math.min(h,3):Math.ceil(h/2),slotW=w/columns,slotH=h/rows;
-    const podium=type==='hospital'?0:(housing?2.5:1.5)/cellMeters;
+    const object=new THREE.Group(),housing=type==='housing',columns=landmark?1:housing?Math.min(w,4):Math.ceil(w/2),rows=landmark?1:housing?Math.min(h,3):Math.ceil(h/2),slotW=w/columns,slotH=h/rows;
+    const podium=landmark?0:(housing?2.5:1.5)/cellMeters;
     if(podium){addBuildingFoundation(object,{w,h,height:podium,cellMeters,housing,ruined:status==='ruin'});object.userData.podiumHeight=podium;}
     for(let row=0;row<rows;row++)for(let column=0;column<columns;column++){
-      let name=type==='hospital'?(status==='ruin'?'hospitalRuined':'hospital'):'',rotation=0,best=Infinity;
-      if(type!=='hospital')for(const candidate of pool){
+      let name=landmark?(status==='ruin'?type+'Ruined':type):'',rotation=0,best=Infinity;
+      if(!landmark)for(const candidate of pool){
         const size=new THREE.Box3().setFromObject(models.get(candidate)).getSize(new THREE.Vector3());
         for(const turn of [0,1]){const ratio=turn?size.z/size.x:size.x/size.z,score=Math.abs(Math.log(slotW/slotH/ratio))+((id+column+row)%3===pool.indexOf(candidate)?0:.20);if(score<best){best=score;name=candidate;rotation=turn*Math.PI/2;}}
       }
-      const variation=buildingVariation(id,column,row);if(type!=='hospital')rotation+=variation.turn;
+      const variation=buildingVariation(id,column,row);if(!landmark)rotation+=variation.turn;
       const reference=models.get(name).clone(true);reference.rotation.y=rotation;reference.updateMatrixWorld(true);
-      const model=models.get(type!=='hospital'&&status==='ruin'?name+'Ruined':name).clone(true);model.rotation.y=rotation;model.updateMatrixWorld(true);
-      model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();if(type!=='hospital')node.material.color.multiply(new THREE.Color(variation.tint));node.material.roughness=.95;node.castShadow=true;node.receiveShadow=true;}});
+      const model=models.get(!landmark&&status==='ruin'?name+'Ruined':name).clone(true);model.rotation.y=rotation;model.updateMatrixWorld(true);
+      model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();if(!landmark)node.material.color.multiply(new THREE.Color(variation.tint));node.material.roughness=.95;node.castShadow=true;node.receiveShadow=true;}});
       const bounds=new THREE.Box3().setFromObject(reference),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
-      const scale=type==='hospital'?Math.min((w-.16)/size.x,(h-.16)/size.z):Math.min(slotW*.86/size.x,slotH*.86/size.z,(housing?12:22)/cellMeters/size.y)*variation.scale;
-      model.scale.setScalar(scale);if(type==='hospital')model.scale.y=1/cellMeters;model.position.set(-w/2+(column+.5)*slotW-center.x*scale,podium-bounds.min.y*model.scale.y,-h/2+(row+.5)*slotH-center.z*scale);object.add(model);
+      const scale=landmark?Math.min((w-.16)/size.x,(h-.16)/size.z):Math.min(slotW*.86/size.x,slotH*.86/size.z,(housing?12:22)/cellMeters/size.y)*variation.scale;
+      model.scale.setScalar(scale);if(landmark)model.scale.y=1/cellMeters;model.position.set(-w/2+(column+.5)*slotW-center.x*scale,podium-bounds.min.y*model.scale.y,-h/2+(row+.5)*slotH-center.z*scale);object.add(model);
     }
     object.position.set(x+w/2,0,y+h/2);buildings.add(object);
-    if(type!=='hospital')mergePlot(object);
-    if(status==='ruin'&&type!=='hospital')ruinAppearance(object);
+    if(!landmark)mergePlot(object);
+    if(status==='ruin'&&!landmark)ruinAppearance(object);
     if(status==='building')operatingLights(object);
     return {object,signature:`${type}:${status}:${w}:${h}:${cellMeters}`,roof:new THREE.Box3().setFromObject(object).max.y};
   }

@@ -1,10 +1,11 @@
 // 先划地块与道路，再给出初始内容；战斗中的清理与换建保存在独立运行状态。
-export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2,minBlock=2,maxBlock=5,special=false,specialMin=10,specialMax=30,touching=false,starterPlot=false,hospital=false}={}) {
+export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2,minBlock=2,maxBlock=5,special=false,specialMin=10,specialMax=30,touching=false,starterPlot=false,hospital=false,bankCount=0}={}) {
   for(const [name,value,min,max] of [['width',width,20,240],['height',height,20,240],['mainRoadWidth',mainRoadWidth,2,3],['minBlock',minBlock,2,8],['maxBlock',maxBlock,2,8],['specialMin',specialMin,10,30],['specialMax',specialMax,10,30]]) {
     if(!Number.isInteger(value)||value<min||value>max)throw new Error(`${name} 必须是 ${min}–${max} 的整数`);
   }
   if(minBlock>maxBlock||specialMin>specialMax)throw new Error('最小边长不能超过最大边长');
   if(hospital&&(width<26||height<26))throw new Error('医院地图至少需要 26×26 格');
+  if(!Number.isInteger(bankCount)||bankCount<0||bankCount>4)throw new Error('银行数量须为0–4整数');
   seed=String(seed);
   let hash=2166136261;
   for(const c of seed){hash^=c.codePointAt(0);hash=Math.imul(hash,16777619);}
@@ -48,7 +49,7 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
   road({x:0,y:1,width:1,height:height-2},'street');road({x:width-1,y:1,width:1,height:height-2},'street');
   // 开局街区先划定完整带状区域，避免事后删整块建筑留下宽马路。
   const cityEnd=starterPlot?height-9:height-1;
-  const bands=[];let y=1,specialPlaced=false;
+  const bands=[];let y=1,specialPlaced=false,banksPlaced=0;
   while(y<cityEnd){
     const remaining=cityEnd-y;let h=Math.min(int(7,10),remaining);
     if(remaining-h<minBlock+2)h=remaining;
@@ -56,6 +57,8 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
     let spine=Math.floor((width-mainRoadWidth)/2)+int(-2,2);
     if(special&&!specialPlaced&&(!hospital||y>1)&&h>=specialMin)spine=Math.max(spine,specialMin+1);
     if(hospital&&y===1){h=12;spine=Math.max(spine,12);}
+    const bankBand=banksPlaced<bankCount&&y>=Math.floor(cityEnd*(banksPlaced+1)/(bankCount+1))&&remaining>=8&&width-spine-mainRoadWidth-1>=11;
+    if(bankBand)h=Math.max(8,h);
     bands.push({y,height:h,spine});
     road({x:spine,y,width:mainRoadWidth,height:h},mainRoadWidth===3?'highway':'main');
     if(hospital&&y===1){
@@ -66,7 +69,12 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
       const w=int(specialMin,Math.min(specialMax,spine-1)),b=addBlock({x:1,y,width:w,height:h},'building');b.special=true;b.name='大型设施';specialPlaced=true;
       parcels({x:w+2,y,width:spine-w-2,height:h});
     }else parcels({x:1,y,width:spine-1,height:h});
-    parcels({x:spine+mainRoadWidth,y,width:width-1-spine-mainRoadWidth,height:h});
+    if(bankBand){
+      // 专用银行占地独立预留，四周沿用1格街道；不合并普通地块或挖宽道路。
+      const bx=spine+mainRoadWidth,b=addBlock({x:bx,y,width:8,height:8},'building');b.special=true;b.role='bank';b.name='银行';banksPlaced++;
+      road({x:bx+8,y,width:1,height:h},'street');parcels({x:bx+9,y,width:width-bx-10,height:h});
+      if(h>8){road({x:bx,y:y+8,width:8,height:1},'street');if(h>9)parcels({x:bx,y:y+9,width:8,height:h-9});}
+    }else parcels({x:spine+mainRoadWidth,y,width:width-1-spine-mainRoadWidth,height:h});
     y+=h;
     if(y<height-1){road({x:1,y,width:width-2,height:1},'street');y++;}
   }
@@ -122,10 +130,10 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
   roads.length=0;
   for(let cy=0;cy<height;cy++)for(let cx=0;cx<width;cx++)if(tiles[cy*width+cx]==='road')roads.push({x:cx,y:cy,width:1,height:1,kind:roadKinds.get(cy*width+cx)||'street'});
   // 在几何完成后分配原用途，避免改变既有 seed 的街道布局；起步生产点保留。
-  for(const b of blocks)if(b.kind==='building')b.ruinType=b.role==='hospital'?'hospital':['starter','starterLarge'].includes(b.role)?'production':b.role==='starterHousing'?'housing':random()<.35?'housing':'production';
+  for(const b of blocks)if(b.kind==='building')b.ruinType=['hospital','bank'].includes(b.role)?b.role:['starter','starterLarge'].includes(b.role)?'production':b.role==='starterHousing'?'housing':random()<.35?'housing':'production';
   const buildings=blocks.filter(b=>b.kind==='building'),openSpaces=blocks.filter(b=>b.kind==='open');
   const occupied=tiles.filter(t=>t==='block').length;
-  return {version:5,seed,width,height,mainRoadWidth,minBlock,maxBlock,special,specialMin,specialMax,touching,starterPlot,hospital,tiles,roads,blocks,buildings,openSpaces,camp,goal,stats:{hospital:buildings.filter(b=>b.role==='hospital').length,special:buildings.filter(b=>b.special&&b.role!=='hospital').length,joined,buildings:buildings.length,openSpaces:openSpaces.length,occupied,coverage:occupied/(width*height)}};
+  return {version:5,seed,width,height,mainRoadWidth,minBlock,maxBlock,special,specialMin,specialMax,touching,starterPlot,hospital,tiles,roads,blocks,buildings,openSpaces,camp,goal,stats:{banks:buildings.filter(b=>b.role==='bank').length,hospital:buildings.filter(b=>b.role==='hospital').length,special:buildings.filter(b=>b.special&&!['hospital','bank'].includes(b.role)).length,joined,buildings:buildings.length,openSpaces:openSpaces.length,occupied,coverage:occupied/(width*height)}};
 }
 
 // 仅检查生成时的道路和空地连通；运行时通行由 model.js 的地块内容决定。
