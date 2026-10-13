@@ -202,10 +202,10 @@ def camp_plaza():
 
 
 def enemy_squad():
-    # 八个不同衣色的僵尸作为静态导出；主游戏共用实例人物并添加步态，不逐人结算。
+    # 十六个不同衣色的僵尸作为静态导出；主游戏共用实例人物并添加步态，不逐人结算。
     m=Model(); clothes=['#726b58','#7a5350','#536370','#696354']
-    for i in range(8):
-        x=(i%4-1.5)*1.2+math.sin(i*2.8)*.18;z=(i//4-.5)*1.15+math.cos(i*3.1)*.18
+    for i in range(16):
+        x=(i%4-1.5)*1.2+math.sin(i*2.8)*.18;z=(i//4-1.5)*1.15+math.cos(i*3.1)*.18
         h=1.65+(i%4)*.06;shirt=clothes[i%4]
         for dx in (-.10,.10):
             m.beam((x+dx,.08,z),(x+dx,.82*h/1.8,z),.13,'#444c4b')
@@ -213,7 +213,7 @@ def enemy_squad():
         for dx in (-.235,.235):m.beam((x+dx,1.4*h/1.8,z-.07),(x+dx,1*h/1.8,z-.36),.12,shirt)
         m.cylinder((x,1.56*h/1.8,z-.16),.16,.31,'#b3b39b',sides=5)
         m.cylinder((x,1.7*h/1.8,z-.16),.165,.09,'#48483f',top=.12,sides=5)
-    m.save('enemy-squad', {'units':'meters','visualOnly':True,'figures':8})
+    m.save('enemy-squad', {'units':'meters','visualOnly':True,'figures':16})
 
 
 def entrances():
@@ -341,7 +341,7 @@ def vegetation():
 
 if __name__ == '__main__':
     if '--enemies' in sys.argv:
-        enemy_squad();print('已生成八人米制僵尸群体样件')
+        enemy_squad();print('已生成十六人米制僵尸群体样件')
     elif '--vegetation' in sys.argv:
         vegetation();print('已生成6个米制树木/灌丛样件')
     elif '--entrances' in sys.argv:

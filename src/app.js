@@ -1,7 +1,8 @@
+import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges} from './enemy-overlay.js?v=1';
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=1';
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=3';
-import {createCity3D} from './city-3d.js?v=39';
+import {createCity3D} from './city-3d.js?v=41';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=5';
@@ -13,8 +14,8 @@ import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=3';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=9';
 import {createGameAudio} from './audio.js?v=10';
-import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=82';
-import {applyExperimentParams,validateVisualParams, bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=97';
+import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=83';
+import {applyExperimentParams,validateVisualParams, bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=98';
 import {generateCityMap} from './city-map.js?v=9';
 import {readMapSettings} from './map-settings.js?v=1';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -568,7 +569,7 @@ function paintMap() {
   cityTransitions=cityTransitions.filter(event=>effectTime-event.at<.8&&currentlyVisible(event.cell));
   const streetDressing=[...operatingStreetProps(streetLamps,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys(),...vehicles.map(p=>key(Math.floor(p.x),Math.floor(p.y)))]),cellMeters:controlState.params.cellMeters}),...vehicles.filter(car=>car.asset!=='wreck')];
   const effectView=cameraView();
-  const fx={enemyFiguresPerGroup:controlState.params.enemyFiguresPerGroup,cameraKey:JSON.stringify(effectView),time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),pixelsAt:(x,y,z)=>viewPixelScale(x,y,z,effectView),observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
+  const fx={night:nightMix,enemyFiguresPerGroup:controlState.params.enemyFiguresPerGroup,cameraKey:JSON.stringify(effectView),time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),pixelsAt:(x,y,z)=>viewPixelScale(x,y,z,effectView),observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
   const emptyPlots=[...view.towers.plots].filter(([,p])=>p.content.status==='empty').map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,kind:p.site.kind,role:p.site.role,status:p.content.status}));
@@ -882,26 +883,22 @@ function paintMap() {
   const mistColor=fogColor(nightMix).match(/\d+/g).map(Number);
   ctx.save();
   const enemyFrame=city3D?.enemiesFrame();if(enemyFrame){
+    ctx.save();ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+    drawEnemyPressure(ctx,enemyFrames,{project:(x,y)=>({x:panX+x*size,y:panY+y*size}),pixels:()=>size,cellMeters:controlState.params.cellMeters,time:effectTime,reducedMotion:reducedMotion.matches});ctx.restore();
     // 接触暗影让小尺寸实体从道路标线中分离，仍与同一可见度一起淡出。
     for(const frame of enemyFrames)if(frame.alpha>0){ctx.save();ctx.globalAlpha=frame.alpha*.45;ctx.fillStyle='#111b23';ctx.beginPath();ctx.ellipse(frame.x+.5,frame.y+.5,2/controlState.params.cellMeters*frame.scale,1.4/controlState.params.cellMeters*frame.scale,0,0,Math.PI*2);ctx.fill();ctx.restore();}
     ctx.drawImage(enemyFrame,-panX/size,-panY/size,width/size,height/size);
+    ctx.save();ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+    drawEnemyBadges(ctx,enemyBadgeLayouts(enemyFrames,(x,y)=>({x:panX+x*size,y:panY+y*size}),{width,height,cellMeters:controlState.params.cellMeters}));ctx.restore();
   }
   // 移动阶段仍显示出发时的生命，抵达后才展示结算结果。
   const drawEnemy = ({enemy,x,y,scale,alpha,barHP,fogAlpha}) => {
-    if(alpha<=0)return;
+    if(alpha<=0||enemyFrame)return;
     ctx.save();ctx.globalAlpha=alpha;ctx.translate(x+.5,y+.5);ctx.scale(scale,scale);ctx.translate(-.5,-.5);
     // 合流保持同一种敌人外观；瞬间膨胀在结算阶段表现。
     // 走进雾时逐渐失去鲜艳颜色，透明度和HP仍由同一可见权限决定。
     const color=`rgb(${[242,135,128].map((v,i)=>Math.round(v+(mistColor[i]-v)*(1-fogAlpha)*.75)).join(',')})`;
-    if(enemyFrame){
-      // 格心实体不随镜头挪动；HP牌以屏幕尺寸悬在模型上方，生命条收进同一牌子。
-      const font=Math.min(14,Math.max(10,size*.46))/size;ctx.font=`600 ${font}px system-ui`;
-      const w=Math.max(12/size,ctx.measureText(String(enemy.hp)).width+6/size),h=font+2/size,y=.5-h*.5-.08-2/size;
-      ctx.fillStyle=color;ctx.fillRect(.5-w*.5,y-h*.5,w,h);label(enemy.hp,.5,y,'#321d23',font);
-      ctx.fillStyle='#552b30';ctx.fillRect(.5-w*.42,y+h*.5-1.6/size,w*.84,1.2/size);ctx.fillStyle='#fff1c4';ctx.fillRect(.5-w*.42,y+h*.5-1.6/size,w*.84*Math.max(0,Math.min(1,barHP/enemy.max)),1.2/size);
-    }else{
-      ctx.fillStyle=color;ctx.fillRect(.04,.06,.92,.83);label(enemy.hp,.5,.42,'#321d23',Math.max(.46,10/size));ctx.fillStyle='#552b30';ctx.fillRect(.08,.73,.84,.1);ctx.fillStyle='#fff1c4';ctx.fillRect(.08,.73,.84*Math.max(0,Math.min(1,barHP/enemy.max)),.1);
-    }
+    ctx.fillStyle=color;ctx.fillRect(.04,.06,.92,.83);label(enemy.hp,.5,.42,'#321d23',Math.max(.46,10/size));ctx.fillStyle='#552b30';ctx.fillRect(.08,.73,.84,.1);ctx.fillStyle='#fff1c4';ctx.fillRect(.08,.73,.84*Math.max(0,Math.min(1,barHP/enemy.max)),.1);
     if(!reducedMotion.matches&&impact<1&&state.events.some(e=>e.type==='hit'&&e.id===enemy.id&&e.target===enemy.target)){
       ctx.fillStyle=`rgba(255,250,220,${.45*(1-impact)})`;ctx.fillRect(.04,.06,.92,.83);
     }
@@ -1207,6 +1204,8 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   }
   const border=new Path2D();for(const [x,y,nx,ny] of view.boundary){const a=point(x,y,.02),b=point(nx,ny,.02);if(a.hidden||b.hidden)continue;border.moveTo(a.x,a.y);border.lineTo(b.x,b.y);}
   drawControlBorderLine(ctx,border,1,view.controlState.params,nightMix);
+  drawEnemyPressure(ctx,enemies,{project:point,pixels:(x,y,z)=>viewPixelScale(x,y,z,camera),cellMeters:view.controlState.params.cellMeters,elevation:camera.elevation,time:effectTime,reducedMotion:reducedMotion.matches});
+  const enemyLayer=city3D.observationEnemiesFrame();if(enemyLayer)ctx.drawImage(enemyLayer,0,0,width,height);
   const badge=(text,x,y,color='#f3d398',alpha=1)=>{
     if(!Number.isFinite(x)||!Number.isFinite(y)||x< -30||y< -30||x>width+30||y>height+30)return;
     ctx.save();ctx.globalAlpha=alpha;ctx.font='600 11px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';const w=Math.max(16,ctx.measureText(text).width+8);ctx.fillStyle='#172630ed';ctx.fillRect(x-w/2,y-8,w,16);ctx.fillStyle=color;ctx.fillText(text,x,y);ctx.restore();
@@ -1232,8 +1231,9 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     if(source.hp>0){ctx.save();ctx.globalAlpha=alpha;ctx.font='600 10px system-ui';const w=ctx.measureText(String(source.hp)).width+23;ctx.fillStyle='#211d24ee';ctx.fillRect(p.x-w/2,p.y+10,w,15);drawShield(ctx,p.x-w/2+3,p.y+12,10);ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillStyle='#ffe6cc';ctx.fillText(source.hp,p.x-w/2+17,p.y+17);ctx.restore();}
     if(focus.has(sourceIdentity(source)))drawSourcePin(ctx,p.x+8,p.y-15,11);
   }
-  // 实体和HP沿用同一位置/alpha；牌子悬在人物上方，不被墙、雾或楼顶挡住。
-  for(const frame of enemies)if(frame.alpha>0){const p=point(frame.x+.5,frame.y+.5,.11);if(p.hidden)continue;badge(String(frame.enemy.hp),p.x,p.y-10,'#ffada5',frame.alpha);ctx.save();ctx.globalAlpha=frame.alpha;ctx.fillStyle='#572d34';ctx.fillRect(p.x-6,p.y-4,12,2);ctx.fillStyle='#ffedb6';ctx.fillRect(p.x-6,p.y-4,12*Math.max(0,Math.min(1,frame.barHP/frame.enemy.max)),2);ctx.restore();}
+  // 人物与牌子共用同一可见度；标签离开身体并避让相邻敌群及炮位。
+  const occupied=items.filter(item=>['near','far','camp','watch'].includes(item.asset)).map(item=>{const p=point(item.x,item.y,city3D.facilityTopAt(item.id)+.03);return {x:p.x-8,y:p.y-8,w:16,h:16};});
+  drawEnemyBadges(ctx,enemyBadgeLayouts(enemies,point,{width,height,cellMeters:view.controlState.params.cellMeters,occupied}));
   // 关闭回正时把实际落点/整栋操作范围投影为轮廓；报价继续复用原资源栏。
   if(!view.controlState.params.returnToTopOnAction&&tool&&hover!==null&&(state.phase==='build'||['build','long'].includes(tool))){
     const site=productionSite(hover,state),whole=site&&(['production','housing','bank'].includes(tool)||tool==='erase'&&['ruin','production','housing','bank'].includes(demolitionQuote(state,hover).type));

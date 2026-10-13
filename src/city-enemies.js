@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {zombieFigureCount,zombieFigurePose} from './city-enemy-shape.js?v=1';
+import {zombieFigureCount,zombieFigurePose} from './city-enemy-shape.js?v=2';
 
 // 全场共用十一组实例几何；不为每个人物创建光源、骨骼、阴影或独立绘制调用。
 export function createZombieCrowds(parent,capacity=2048){
@@ -17,11 +17,15 @@ export function createZombieCrowds(parent,capacity=2048){
   const features=[new THREE.BoxGeometry(.04,.026,.02).translate(-.06,.03,-.153),new THREE.BoxGeometry(.04,.026,.02).translate(.06,.03,-.153),new THREE.BoxGeometry(.055,.024,.02).translate(0,-.045,-.153)];
   definitions.face=mergeGeometries(features);features.forEach(geometry=>geometry.dispose());
   for(const [name,geometry] of Object.entries(definitions)){
-    const material=name==='shadow'?new THREE.MeshBasicMaterial({color:'#182126',transparent:true,opacity:.24,depthWrite:false}):new THREE.MeshStandardMaterial({roughness:1,flatShading:true,transparent:true,emissive:'#b0a090',emissiveIntensity:.16});
+    const material=name==='shadow'?new THREE.MeshBasicMaterial({color:'#182126',transparent:true,opacity:.24,depthWrite:false}):new THREE.MeshStandardMaterial({roughness:1,flatShading:true,transparent:true,emissive:'#b0a090',emissiveIntensity:.08});
+    material.userData.cityEnemyNight={value:0};
     const opacity=new THREE.InstancedBufferAttribute(new Float32Array(capacity),1);geometry.setAttribute('cityEnemyAlpha',opacity);
     material.onBeforeCompile=shader=>{
       shader.vertexShader='attribute float cityEnemyAlpha; varying float cityEnemyOpacity;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncityEnemyOpacity=cityEnemyAlpha;');
       shader.fragmentShader='varying float cityEnemyOpacity;\n'+shader.fragmentShader.replace('#include <opaque_fragment>','#include <opaque_fragment>\ngl_FragColor.a*=cityEnemyOpacity;');
+      if(name!=='shadow'){
+        shader.uniforms.cityEnemyNight=material.userData.cityEnemyNight;shader.fragmentShader='uniform float cityEnemyNight;\n'+shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\nfloat cityEnemyRim=pow(1.-abs(dot(normal,normalize(vViewPosition))),2.);totalEmissiveRadiance+=cityEnemyNight*(diffuseColor.rgb*.22+vec3(.38,.32,.25)*cityEnemyRim);');
+      }
     };material.customProgramCacheKey=()=> 'cityx-zombie-instance';
     const mesh=new THREE.InstancedMesh(geometry,material,capacity);mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);mesh.count=0;mesh.frustumCulled=false;mesh.castShadow=false;mesh.receiveShadow=false;mesh.userData.cityDecoration=true;group.add(mesh);parts[name]={mesh,opacity};
   }
@@ -34,7 +38,7 @@ export function createZombieCrowds(parent,capacity=2048){
     const active=new Set(items.map(item=>item.id));for(const id of headings.keys())if(!active.has(id))headings.delete(id);
     for(const item of items){
       if(item.angle!==undefined)headings.set(item.id,item.angle);const angle=headings.get(item.id)??0;
-      const seed=[...String(item.id)].reduce((sum,c)=>sum*31+c.charCodeAt(0),7)>>>0,count=zombieFigureCount(item,fx.enemyFiguresPerGroup??8,quota),meters=item.cellMeters??20;
+      const seed=[...String(item.id)].reduce((sum,c)=>sum*31+c.charCodeAt(0),7)>>>0,count=zombieFigureCount(item,fx.enemyFiguresPerGroup??16,quota),meters=item.cellMeters??20;
       for(let i=0;i<count&&total<capacity;i++,total++){
         const pose=zombieFigurePose(i,seed,fx.reducedMotion?0:fx.time,!fx.reducedMotion&&item.moving),s=pose.height/1.8,scale=(item.visualScale??1)/meters;
         const formation=Math.min(1,Math.sqrt(count/16)),x=pose.x*formation,z=(pose.z-(Math.floor((count-1)/4)-3)*.575)*formation;
@@ -55,6 +59,6 @@ export function createZombieCrowds(parent,capacity=2048){
         }
       }
     }
-    for(const {mesh,opacity} of Object.values(parts)){mesh.count=total;mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;opacity.needsUpdate=true;}
+    for(const {mesh,opacity} of Object.values(parts)){mesh.material.userData.cityEnemyNight.value=fx.night??0;mesh.count=total;mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;opacity.needsUpdate=true;}
   }};
 }

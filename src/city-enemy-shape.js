@@ -1,5 +1,5 @@
 // 人物只是原敌群的视觉成员，不新增寻路、碰撞或逐人伤害；形成稳定的疏密队形。
-export function zombieFigureCount(item,base=8,budget=32){
+export function zombieFigureCount(item,base=16,budget=32){
   const groups=Math.max(1,item.members??1),health=Math.max(0,Math.min(1,item.health??1));
   return Math.min(budget,Math.max(1,Math.ceil(base*(1+(groups-1)*.65)*(.4+.6*health))));
 }

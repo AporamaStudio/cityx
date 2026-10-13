@@ -5,7 +5,7 @@ import {viewCenter,viewDistance} from './city-view.js?v=3';
 export function createCityObservation(scene,renderer){
   const orthographic=new THREE.OrthographicCamera(),perspective=new THREE.PerspectiveCamera();
   let camera=orthographic;
-  const canvas=document.createElement('canvas');
+  const canvas=document.createElement('canvas'),enemyCanvas=document.createElement('canvas');
   let pickObjects=[],lastGroundVersion=null;
   const groundTexture=new THREE.CanvasTexture(document.createElement('canvas'));groundTexture.colorSpace=THREE.SRGBColorSpace;groundTexture.generateMipmaps=false;groundTexture.minFilter=THREE.LinearFilter;
   const fogTexture=new THREE.CanvasTexture(document.createElement('canvas'));fogTexture.flipY=false;fogTexture.generateMipmaps=false;fogTexture.minFilter=THREE.LinearFilter;
@@ -21,6 +21,7 @@ export function createCityObservation(scene,renderer){
     material.customProgramCacheKey=()=>key+':cityx-observe-fog';material.needsUpdate=true;
   });}
   return {
+    enemiesFrame(){return enemyCanvas;},
     pick(x,y,width,height){
       const ray=new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2(x/width*2-1,1-y/height*2),camera);
       const hit=ray.intersectObjects(pickObjects,true).find(hit=>!hit.object.material.transparent&&!hit.object.userData.cityDecoration);return hit?{x:hit.point.x,y:hit.point.z}:null;
@@ -39,7 +40,10 @@ export function createCityObservation(scene,renderer){
       if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}
       const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(renderer.domElement,0,0);
       floor.visible=false;objects.forEach(object=>object.visible=false);effects.visible=false;fog.enabled.value=0;enemies.visible=true;
-      renderer.setClearColor('#000000',0);renderer.render(scene,camera);ctx.drawImage(renderer.domElement,0,0);enemies.visible=false;
+      // 单独交回敌人图层，让Canvas路线在实体下面、HP在实体上面。
+      renderer.setClearColor('#000000',0);renderer.render(scene,camera);
+      if(enemyCanvas.width!==canvas.width||enemyCanvas.height!==canvas.height){enemyCanvas.width=canvas.width;enemyCanvas.height=canvas.height;}
+      const enemyContext=enemyCanvas.getContext('2d');enemyContext.clearRect(0,0,enemyCanvas.width,enemyCanvas.height);enemyContext.drawImage(renderer.domElement,0,0);enemies.visible=false;
       return canvas;
     },
   };
