@@ -8,7 +8,8 @@ import {createCityObservation} from './city-observation.js?v=3';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',enemy:'generated/enemy-squad',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble'};
-const resource=file=>new URL('../assets/model-preview/'+file+'.glb?v=3',import.meta.url).href;
+for(const name of ['home','small','wide','factory','workshop'])files[name+'Ruined']=files[name]+'-ruined';
+const resource=file=>new URL('../assets/model-preview/'+file+'.glb?v=5',import.meta.url).href;
 
 function operatingLights(object){
   // 玻璃沿用同一色板发光，屋顶补少量暖灯，保证俯视也能辨认运营状态。
@@ -30,33 +31,12 @@ function operatingLights(object){
   group.userData.cityRoofLights=true;group.visible=false;object.add(group);
 }
 
-function damageBuilding(object){
-  // 同楼局部塌损：保留入口和轮廓，屋顶缺口从俯视可辨；只在状态切换时生成。
-  object.updateMatrixWorld(true);
-  const bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
-  object.traverse(node=>{
-    if(!node.isMesh)return;
-    const previous=node.geometry,geometry=previous.index?previous.toNonIndexed():previous.clone(),positions=geometry.attributes.position;
-    if(node.userData.ownGeometry)previous.dispose();
-    node.geometry=geometry;node.userData.ownGeometry=true;
-    const point=new THREE.Vector3(),inverse=node.matrixWorld.clone().invert(),kept=[];
-    for(let i=0;i<positions.count;i+=3){
-      const middle=new THREE.Vector3();for(let j=0;j<3;j++)middle.add(point.fromBufferAttribute(positions,i+j).applyMatrix4(node.matrixWorld));middle.multiplyScalar(1/3);
-      if(!(middle.x>center.x&&middle.z<center.z+size.z*.15&&middle.y>bounds.min.y+size.y*.4))kept.push(i,i+1,i+2);
-    }
-    geometry.setIndex(kept);
-    for(let i=0;i<positions.count;i++){
-      point.fromBufferAttribute(positions,i).applyMatrix4(node.matrixWorld);
-      if(point.x>center.x&&point.z<center.z+size.z*.15&&point.y>bounds.min.y+size.y*.35)point.y=bounds.min.y+size.y*.35+(point.y-bounds.min.y-size.y*.35)*.1;
-      point.applyMatrix4(inverse);positions.setXYZ(i,point.x,point.y,point.z);
-    }
-    geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
-    node.material.color.set('#a29c87');
+function ruinAppearance(object){
+  // 几何使用固定配套GLB；运行时只灰化原贴图，保留暗内层与碎块本身的材质。
+  object.traverse(node=>{if(!node.isMesh||!node.material.map)return;node.material.color.set('#a29c87');node.material.roughness=1;
     node.material.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\ndiffuseColor.rgb=mix(diffuseColor.rgb,vec3(dot(diffuseColor.rgb,vec3(.2126,.7152,.0722))),.82);');};
     node.material.customProgramCacheKey=()=> 'cityx-game-ruin';
   });
-  const floor=new THREE.Mesh(new THREE.BoxGeometry(size.x*.42,.015,size.z*.42),new THREE.MeshStandardMaterial({color:'#414a43',roughness:1}));
-  floor.position.set(center.x+size.x*.25,bounds.min.y+Math.max(size.y*.12,(object.userData.podiumHeight??0)+.012),center.z-size.z*.22);floor.userData.ownGeometry=true;object.attach(floor);
 }
 
 // 同一地块重复模型按材质合并，减少绘制次数；控制、修缮和炮位仍只对应原建筑对象。
@@ -124,15 +104,16 @@ export function createCity3D(onReady){
         const size=new THREE.Box3().setFromObject(models.get(candidate)).getSize(new THREE.Vector3());
         for(const turn of [0,1]){const ratio=turn?size.z/size.x:size.x/size.z,score=Math.abs(Math.log(slotW/slotH/ratio))+((id+column+row)%3===pool.indexOf(candidate)?0:.20);if(score<best){best=score;name=candidate;rotation=turn*Math.PI/2;}}
       }
-      const model=models.get(name).clone(true);model.rotation.y=rotation;model.updateMatrixWorld(true);
+      const reference=models.get(name).clone(true);reference.rotation.y=rotation;reference.updateMatrixWorld(true);
+      const model=models.get(type!=='hospital'&&status==='ruin'?name+'Ruined':name).clone(true);model.rotation.y=rotation;model.updateMatrixWorld(true);
       model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.material.roughness=.95;node.castShadow=true;node.receiveShadow=true;}});
-      const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+      const bounds=new THREE.Box3().setFromObject(reference),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
       const scale=type==='hospital'?Math.min((w-.16)/size.x,(h-.16)/size.z):Math.min(slotW*.86/size.x,slotH*.86/size.z,(housing?12:22)/cellMeters/size.y);
       model.scale.setScalar(scale);if(type==='hospital')model.scale.y=1/cellMeters;model.position.set(-w/2+(column+.5)*slotW-center.x*scale,podium-bounds.min.y*model.scale.y,-h/2+(row+.5)*slotH-center.z*scale);object.add(model);
     }
     object.position.set(x+w/2,0,y+h/2);buildings.add(object);
     if(type!=='hospital')mergePlot(object);
-    if(status==='ruin'&&type!=='hospital')damageBuilding(object);
+    if(status==='ruin'&&type!=='hospital')ruinAppearance(object);
     if(status==='building')operatingLights(object);
     return {object,signature:`${type}:${status}:${w}:${h}:${cellMeters}`,roof:new THREE.Box3().setFromObject(object).max.y};
   }

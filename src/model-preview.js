@@ -36,7 +36,7 @@ const assets=[
   ['trash','垃圾堆','nature','trash',1.4,'废弃街区的杂物；恢复后清走，先验证清理带来的变化。'],
   ['rubble','瓦砾','nature','rubble',2,'附着原建筑的塌损位置，帮助关联废墟与完好状态。'],
   ['burnt-car','燃烧车辆','nature','burnt-car',2.7,'焦黑车身与少量火焰表现灾损，作为恢复前的局部视觉样件。']
-].map(([id,name,category,file,width,description])=>({id,name,category,file,width,description,local:!file.includes('/'),landmark:['hospital','bank'].includes(id)}));
+].map(([id,name,category,file,width,description])=>({id,name,category,file,width,description,local:!file.includes('/'),paired:category==='building'&&file.includes('/'),landmark:['hospital','bank'].includes(id)}));
 const $=id=>document.getElementById(id),models=new Map(),district=new THREE.Group(),single=new THREE.Group();
 let selected=assets[0],mode='district',night=false,restored=false,angle='angle',ready=false,singleState='intact',singleVariants=null,effects=null;
 const motionPreference=matchMedia('(prefers-reduced-motion: reduce)');let animated=!motionPreference.matches;
@@ -145,42 +145,13 @@ function setPower(object,powered){
   }});
 }
 function ruinedModel(asset,width=asset.width){
-  // 医院/银行使用指定破损组件，保留同一场地和未塌主楼。
-  if(asset.landmark)return cloneModel(asset,width,false,true);
-  // 原楼局部塌损：保留占地、入口与大部分门窗，避免换成无关联的通用废墟。
-  const obj=cloneModel(asset,width,false);obj.updateMatrixWorld(true);
-  const bounds=new THREE.Box3().setFromObject(obj),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3()),height=bounds.max.y,cut=height*.32;
-  obj.traverse(node=>{if(!node.isMesh)return;
-    const positions=node.geometry.attributes.position,p=new THREE.Vector3(),inverse=node.matrixWorld.clone().invert();
-    const index=node.geometry.index,triangles=index?index.count:positions.count,kept=[];
-    for(let i=0;i<triangles;i+=3){
-      const ids=[0,1,2].map(j=>index?index.getX(i+j):i+j),mid=new THREE.Vector3();
-      for(const id of ids)mid.add(p.fromBufferAttribute(positions,id).applyMatrix4(node.matrixWorld));mid.multiplyScalar(1/3);
-      if(!(mid.x>center.x-size.x*.12&&mid.z<center.z+size.z*.24&&mid.y>height*.36))kept.push(...ids);
-    }
-    node.geometry.setIndex(kept);
-    for(let i=0;i<positions.count;i++){
-      p.fromBufferAttribute(positions,i).applyMatrix4(node.matrixWorld);
-      if(p.x>center.x-size.x*.12&&p.z<center.z+size.z*.24&&p.y>cut){
-        const jagged=Math.abs(Math.sin(p.x*5+p.z*7))*.12;
-        p.y=cut+(p.y-cut)*.08+jagged;
-      }
-      p.applyMatrix4(inverse);positions.setXYZ(i,p.x,p.y,p.z);
-    }
-    positions.needsUpdate=true;node.geometry.computeVertexNormals();node.geometry.computeBoundingBox();node.geometry.computeBoundingSphere();
-    node.material.color.set('#807b6b');node.material.roughness=1;
-    node.material.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`#include <map_fragment>
-      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(dot(diffuseColor.rgb,vec3(.2126,.7152,.0722))),.93);`);};
+  // 每栋普通楼与特殊楼都有固定破损GLB，保留原占地、UV和门窗；不再运行时切楼。
+  const object=cloneModel(asset,width,false,true);
+  if(!asset.landmark)object.traverse(node=>{if(!node.isMesh||!node.material.map)return;node.material.color.set('#a29c87');node.material.roughness=1;
+    node.material.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\ndiffuseColor.rgb=mix(diffuseColor.rgb,vec3(dot(diffuseColor.rgb,vec3(.2126,.7152,.0722))),.82);');};
     node.material.customProgramCacheKey=()=> 'cityx-preview-ruins';
   });
-  // 深色内层与断梁让屋顶缺口从正上方也能看清，原楼未塌部分仍保留。
-  const floor=box(obj,center.x,height*.14,center.z,size.x*.86,.05,size.z*.84,'#3c4039');floor.userData.previewGeometry=true;
-  for(const [dx,dz,rotation] of [[.14,-.12,.65],[.22,.08,-.5]]){
-    const beam=box(obj,center.x+size.x*dx,height*.22,center.z+size.z*dz,size.x*.56,.09,.12,'#706959');beam.rotation.y=rotation;beam.userData.previewGeometry=true;
-  }
-  const rubbleAsset=assets.find(a=>a.id==='rubble'),rubble=cloneModel(rubbleAsset,width*.5);rubble.position.set(width*.55,.05,-width*.17);obj.add(rubble);
-  const fallen=cloneModel(rubbleAsset,width*.42);fallen.position.set(size.x*.12,height*.14+.06,-size.z*.08);obj.add(fallen);
-  return obj;
+  return object;
 }
 function place(id,x,z,width,y=.14){
   const obj=cloneModel(assets.find(a=>a.id===id),width);obj.position.set(x,y,z);district.add(obj);return obj;
@@ -240,7 +211,7 @@ function updateSingleState(){
   if(singleVariants.ruined)singleVariants.ruined.visible=singleState==='ruined';
   setPower(singleVariants.normal,isBuilding(selected)?singleState==='operating':true);
   for(const button of document.querySelectorAll('[data-state]'))button.classList.toggle('active',button.dataset.state===singleState);
-  if(selected.landmark){$('download').href=root+'generated/'+selected.file+(singleState==='ruined'?'-ruined':'')+'.glb?v=4';$('download').textContent=singleState==='ruined'?'下载破损模型 ↓':'下载完好模型 ↓';}
+  if(selected.landmark||selected.paired){$('download').href=root+(selected.local?'generated/':'kenney/')+selected.file+(singleState==='ruined'?'-ruined':'')+'.glb?v=5';$('download').textContent=singleState==='ruined'?'下载破损模型 ↓':'下载完好模型 ↓';}
   if(mode==='single')$('sceneSubtitle').textContent=isBuilding(selected)?({intact:'完好 · 尚未运营',ruined:'原建筑局部塌损 · 占地与门窗保留',operating:'恢复运营 · 窗户与屋顶亮灯'})[singleState]:(selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0');
 }
 function setMode(next){
@@ -258,7 +229,7 @@ function selectAsset(asset,show=true){
   single.add(normal);if(ruined)single.add(ruined);singleVariants={normal,ruined};
   $('buildingStates').hidden=!isBuilding(asset);updateSingleState();
   $('assetTitle').textContent=asset.name;$('assetOrigin').textContent=asset.local?'自制样件':'Kenney · CC0';$('assetDescription').textContent=asset.description;
-  const path=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb?v=4';$('download').href=path;$('download').textContent='下载原模型 ↓';
+  const path=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb?v=5';$('download').href=path;$('download').textContent='下载原模型 ↓';
   $('source').href=asset.local?'assets/model-preview/ATTRIBUTION.md':kenney+({suburban:'city-kit-suburban',commercial:'city-kit-commercial',industrial:'city-kit-industrial'}[asset.file.split('/')[0]]);
   for(const btn of $('catalog').children)btn.classList.toggle('selected',btn.dataset.id===asset.id);
   if(show)setMode('single');else updateSingleState();
@@ -294,9 +265,9 @@ for(const button of document.querySelectorAll('[data-filter]'))button.addEventLi
 new ResizeObserver(resize).observe($('viewer'));catalog();setLight();frame();
 const loader=new GLTFLoader();let loaded=0;
 try{
-  const files=assets.flatMap(asset=>[{asset,id:asset.id,file:asset.file},...(asset.landmark?[{asset,id:asset.id+'-ruined',file:asset.file+'-ruined'}]:[])]);
+  const files=assets.flatMap(asset=>[{asset,id:asset.id,file:asset.file},...(asset.landmark||asset.paired?[{asset,id:asset.id+'-ruined',file:asset.file+'-ruined'}]:[])]);
   await Promise.all(files.map(async ({asset,id,file})=>{
-    const url=root+(asset.local?'generated/':'kenney/')+file+'.glb?v=4';const gltf=await loader.loadAsync(url);models.set(id,gltf.scene);
+    const url=root+(asset.local?'generated/':'kenney/')+file+'.glb?v=5';const gltf=await loader.loadAsync(url);models.set(id,gltf.scene);
     loaded++;$('loading').textContent=`正在装载模型… ${loaded}/${files.length}`;
   }));
   ready=true;buildDistrict();selectAsset(selected,false);catalog();setMode('district');syncMotion();$('loading').hidden=true;$('loadStatus').textContent=`${assets.length} 个模型已就绪`;

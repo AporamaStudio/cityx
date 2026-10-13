@@ -1,5 +1,5 @@
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView} from './city-view.js?v=2';
-import {createCity3D} from './city-3d.js?v=26';
+import {createCity3D} from './city-3d.js?v=27';
 import {operatingStreetLamps,ruinStreetProps} from './city-streets.js?v=2';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=4';
