@@ -40,19 +40,20 @@ export function createZombieCrowds(parent,capacity=2048){
       if(item.angle!==undefined)headings.set(item.id,item.angle);const angle=headings.get(item.id)??0;
       const seed=[...String(item.id)].reduce((sum,c)=>sum*31+c.charCodeAt(0),7)>>>0,count=zombieFigureCount(item,fx.enemyFiguresPerGroup??16,quota),meters=item.cellMeters??20;
       for(let i=0;i<count&&total<capacity;i++,total++){
-        const pose=zombieFigurePose(i,seed,fx.reducedMotion?0:fx.time,!fx.reducedMotion&&item.moving),s=pose.height/1.8,scale=(item.visualScale??1)/meters;
+        const pose=zombieFigurePose(i,seed,fx.reducedMotion?0:fx.time,!fx.reducedMotion&&item.moving),s=pose.height/1.8,fall=fx.reducedMotion?0:item.deathProgress??0,scale=(fall>0?1:item.visualScale??1)/meters;
+        const attack=item.attacking&&i<4&&!fx.reducedMotion?Math.sin(fx.time*10+pose.phase):0;
         const formation=Math.min(1,Math.sqrt(count/16)),x=pose.x*formation,z=(pose.z-(Math.floor((count-1)/4)-3)*.575)*formation;
         world.position.set(item.x+Math.cos(angle)*x*scale+Math.sin(angle)*z*scale,0,item.y-Math.sin(angle)*x*scale+Math.cos(angle)*z*scale);
-        world.rotation.set(0,angle,0);world.scale.setScalar(scale);world.updateMatrix();
+        world.rotation.set(fall*Math.PI*.48,angle,0);world.scale.setScalar(scale);world.updateMatrix();
         const alpha=item.alpha??1;fog.set(item.fogColor??'#bfc9ca');
         const tint=hex=>color.set(hex).lerp(hit,item.hitMix??0).lerp(fog,(1-(item.fogAlpha??1))*.75);
         write('shadow',total,0,.015,0,1.1,1,1,-Math.PI/2,color,alpha);
-        write('body',total,pose.sway,1.12*s,-.045,1,s,1,-.18,tint(clothes[pose.variant]),alpha);
+        write('body',total,pose.sway,1.12*s,-.045,1,s,1,-.18-attack*.07,tint(clothes[pose.variant]),alpha);
         write('head',total,pose.sway,1.56*s,-.16,1,s,1,-.12,tint(skin[pose.variant]),alpha);
         write('hair',total,pose.sway,1.57*s,-.16,1,s,1,-.12,tint('#48483f'),alpha);
         write('face',total,pose.sway,1.56*s,-.16,1,s,1,-.12,tint('#414743'),alpha);
         for(const [side,name] of [[-1,'left'],[1,'right']]){
-          const bend=.55+pose.stride*side*.20;
+          const bend=.55+pose.stride*side*.20+attack*.45;
           write(name+'Arm',total,side*.235+pose.sway,1.11*s,-.20,1,s,1,bend,tint(clothes[pose.variant]),alpha);
           write(name+'Hand',total,side*.235+pose.sway,1.11*s-Math.cos(bend)*.34*s,-.20-Math.sin(bend)*.34*s,1,s,1,bend,tint(skin[pose.variant]),alpha);
           write(name+'Leg',total,side*.105,.45*s,0,1,s,1,pose.stride*side*.32,tint('#444c4b'),alpha);

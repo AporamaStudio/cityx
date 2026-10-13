@@ -1,5 +1,6 @@
 import {createShotVFX,createImpactVFX,muzzlePoint} from './cannon-vfx.js?v=1';
 import {SHOT_STYLES,shotEnvelope} from './shot-visuals.js?v=1';
+import {createDefenseVFX} from './defense-vfx.js?v=1';
 import * as THREE from 'three';
 import {groundGlow} from './model-preview-effects.js?v=3';
 
@@ -10,7 +11,7 @@ function dispose(object){object.removeFromParent();object.traverse(node=>{if(nod
 
 // 动效只消费显示描述和游戏时间；这里没有自动试射、独立计时或伤害计算。
 export function createCityEffects(scene){
-  const group=new THREE.Group();scene.add(group);const lights=new Map(),shots=new Map(),transitions=new Map(),impacts=new Map();
+  const group=new THREE.Group();scene.add(group);const lights=new Map(),shots=new Map(),transitions=new Map(),impacts=new Map(),defense=new Map();
   function lightEntry(item){
     if(lights.has(item.id))return lights.get(item.id);
     const sweep=item.asset==='watch',wreck=item.asset==='wreck',object=new THREE.Group(),light=sweep?new THREE.SpotLight('#9fcaff',0,24,.10,.7,2):new THREE.PointLight(wreck?'#ff8745':'#ffb860',0,wreck?2.3:4,2),target=new THREE.Object3D();
@@ -34,6 +35,10 @@ export function createCityEffects(scene){
   }
   return {
     group,
+    updateDefense(items,time){
+      const active=new Set(items.map(item=>item.token));for(const [token,entry] of defense)if(!active.has(token)){entry.dispose();defense.delete(token);}
+      for(const item of items){if(!defense.has(item.token))defense.set(item.token,createDefenseVFX(group,item));defense.get(item.token).update(time-item.at,item.alpha);}
+    },
     // 建筑状态立即结算；短扬尘/修缮光圈只说明刚发生的变化，暂停时共用游戏动效时间。
     updateTransitions(items,time){
       const active=new Set(items.map(item=>item.token));for(const [id,entry] of transitions)if(!active.has(id)){dispose(entry.object);transitions.delete(id);}

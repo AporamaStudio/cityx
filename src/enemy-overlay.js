@@ -36,3 +36,13 @@ export function drawEnemyBadges(ctx,layouts){
     ctx.fillStyle='#62404a';ctx.fillRect(x+3,y+h-5,w-6,2);ctx.fillStyle='#f4c899';ctx.fillRect(x+3,y+h-5,(w-6)*Math.max(0,Math.min(1,frame.barHP/frame.enemy.max)),2);ctx.restore();
   }
 }
+
+export function drawDefenseFeedback(ctx,hits,{project,time}){
+  for(const hit of hits){
+    const t=Math.max(0,Math.min(1,(time-hit.at)/.65)),p=project(hit.x,hit.y,.16);if(p.hidden||t>=1)continue;
+    const text=hit.type==='wallLost'?'缺口':hit.type==='leak'?`火光 −${hit.value}`:`−${hit.value}`;
+    // 破墙文字落在缺口下方，受击数字放墙右侧；给墙HP和拥堵人群的牌子留出空间。
+    const x=p.x+(hit.type==='wallHit'?24:0),y=hit.type==='wallLost'?p.y+22+t*8:p.y-(hit.type==='leak'?40:16)-t*18;
+    ctx.save();ctx.globalAlpha=(1-t)*hit.alpha;ctx.font='700 12px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.lineWidth=3;ctx.strokeStyle='#211d26';ctx.strokeText(text,x,y);ctx.fillStyle=hit.type==='wallLost'?'#ffd096':'#ff9b81';ctx.fillText(text,x,y);ctx.restore();
+  }
+}

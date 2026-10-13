@@ -25,6 +25,18 @@ export function resolvedShots(plan,events){
   return plan.filter(shot=>events.some(e=>e.value>0&&(shot.sourceId?e.type==='sourceHit'&&e.sourceId===shot.sourceId:e.type==='hit'&&e.id===shot.target&&e.target===shot.enemyTarget)));
 }
 
+// 同一墙破损与攻破只显示一次攻破反馈；隐藏位置没有扬尘或数字。
+export function defenseVisualEvents(events,visible){
+  const result=new Map();
+  for(const event of events){
+    if(!['wallHit','wallLost','leak'].includes(event.type)||!visible(event.id))continue;
+    if(event.type!=='wallLost'&&!(event.value>0))continue;
+    const previous=result.get(event.id);if(previous?.type==='wallLost'&&event.type==='wallHit')continue;
+    result.set(event.id,{cell:event.id,type:event.type,value:event.value});
+  }
+  return [...result.values()];
+}
+
 // 以当前镜头作为听音位置：屏外炮位静音，拉远镜头减弱，左右方位用轻量声像表示。
 export function shotSoundView(id,{panX,panY,cell,width,height,zoom}){
   const [x,y]=xy(id),sx=panX+(x+.5)*cell,sy=panY+(y+.5)*cell;
