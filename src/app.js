@@ -1,7 +1,7 @@
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=1';
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=3';
-import {createCity3D} from './city-3d.js?v=38';
+import {createCity3D} from './city-3d.js?v=39';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=5';
@@ -385,12 +385,18 @@ function changeZoom(factor, x = width / 2, y = (height-cameraBottom) / 2) {
   draw();
 }
 function cellAt(event) {
+  if(viewMode!=='top'&&!previewParams().returnToTopOnAction&&['build','long'].includes(tool)){
+    const rect=canvas.getBoundingClientRect(),sx=event.clientX-rect.left,sy=event.clientY-rect.top;
+    // 只吸附屏幕上已绘制的合法落点，解决低角度点中虚拟屋顶格却命中后方地面的偏差。
+    const target=observationBuildTargets.filter(p=>p.tool===tool&&Math.hypot(p.x-sx,p.y-sy)<=6).sort((a,b)=>Math.hypot(a.x-sx,a.y-sy)-Math.hypot(b.x-sx,b.y-sy))[0];
+    if(target&&!weaponPlacementError(target.id))return target.id;
+  }
   const rect=canvas.getBoundingClientRect(),point=(viewMode!=='top'?city3D?.observationPick(event.clientX-rect.left,event.clientY-rect.top,width,height):null)??groundAt(event.clientX-rect.left,event.clientY-rect.top,cameraView()),x=Math.floor(point.x),y=Math.floor(point.y);
   return !point.sky&&inside(x, y)&&visibleCell(key(x,y)) ? key(x, y) : null;
 }
 
 // 先绘制地形和覆盖，再叠加路线、设施、敌群，确保信息优先级清晰。
-let drawPending=false,mapView=null,borderLegendKey=null;
+let drawPending=false,mapView=null,borderLegendKey=null,observationBuildTargets=[];
 // 输入与动画可以同时要求刷新，但同一浏览器帧只重画一次。
 function draw(){drawPending=true;}
 // 四角框包住编号和HP，尺寸按屏幕像素兜底，缩小时仍可快速定位。
@@ -616,8 +622,8 @@ function paintMap() {
   }
   const facilityItems=[];
   const prop=(id,asset,x,y,w=.86,h=.86,extra={})=>facilityItems.push({id,asset,x,y,w,h,...extra});
-  for(const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])])if(currentlyVisible(id)){const [x,y]=xy(id),plot=productionId(id,state);prop('tower:'+id,type==='B'?'far':'near',x+.5,y+.5,(type==='B'?3:4)/controlState.params.cellMeters,(type==='B'?6:5)/controlState.params.cellMeters,{roof:city3D?.roofAt(plot,x+.5,y+.5)??0});}
-  for(const [id,p] of previewState.outposts)if(currentlyVisible(id)){const [x,y]=xy(id);prop('post:'+id,'watch',x+.5,y+.5,5.2/controlState.params.cellMeters,5.2/controlState.params.cellMeters,{target:fx.sweeps.find(s=>s.id==='post:'+id)?.target});}
+  for(const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])])if(currentlyVisible(id)){const [x,y]=xy(id),plot=productionId(id,state);prop('tower:'+id,type==='B'?'far':'near',x+.5,y+.5,(type==='B'?3:4)/controlState.params.cellMeters,(type==='B'?6:5)/controlState.params.cellMeters,{alpha:ghost&&id===hover?.45:1,roof:city3D?.roofAt(plot,x+.5,y+.5)??0});}
+  for(const [id,p] of previewState.outposts)if(currentlyVisible(id)){const [x,y]=xy(id);prop('post:'+id,'watch',x+.5,y+.5,5.2/controlState.params.cellMeters,5.2/controlState.params.cellMeters,{alpha:postGhost&&id===hover?.45:1,target:fx.sweeps.find(s=>s.id==='post:'+id)?.target});}
   for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)){const [x,y]=xy(id),body=state.wallHealth.get(id);prop('wall:'+id,'wall',x+.5,y+.5,1,1,{dead:body?.hp===0,health:body?body.hp/body.max:1,connections:wallConnections(id,state.walls,SIZE,SIZE,roadMarkings(state.layout).get(id)?.axis),cellMeters:controlState.params.cellMeters});}
   const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,campWidth,campWidth,{dead:state.hp<=0});
   const campPlot=state.sites.find(p=>p.role==='camp');if(campPlot)prop('camp-plaza','plaza',campPlot.x+(campPlot.width??campPlot.size)/2,campPlot.y+(campPlot.height??campPlot.size)/2,campPlot.width??campPlot.size,campPlot.height??campPlot.size);
@@ -1141,6 +1147,26 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   const image=city3D.observationFrame({ground:observationGround,groundVersion:observationGroundKey,mist:observationMist,view:camera,background:fogColor(nightMix)});
   ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.clearRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);
   const point=(x,y,z=0)=>projectView(x,y,z,camera);
+  const polygon=(x,y,w,h,z=0)=>{
+    const corners=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(([x,y])=>point(x,y,z));if(corners.some(p=>p.hidden))return null;
+    const path=new Path2D();path.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>path.lineTo(p.x,p.y));path.closePath();return path;
+  };
+  const weaponSelected=canBuildWeapon()&&['build','long'].includes(tool),directBuild=!view.controlState.params.returnToTopOnAction;
+  observationBuildTargets=[];
+  if(directBuild&&weaponSelected&&!view.dirty&&(state.phase==='build'||state.phase==='battle')){
+    const eligible=view.towers.eligible(weaponType());
+    for(const id of eligible){
+      const [x,y]=xy(id),z=city3D.roofAt(productionId(id,state),x+.5,y+.5)+.04,p=point(x+.5,y+.5,z);if(p.hidden||p.x<0||p.y<0||p.x>width||p.y>height)continue;
+      const path=polygon(x+.07,y+.07,.86,.86,z);ctx.save();
+      if(path&&viewPixelScale(x+.5,y+.5,z,camera)>=16){ctx.fillStyle='#81e6b412';ctx.fill(path);ctx.strokeStyle='#9df0c380';ctx.lineWidth=1;ctx.stroke(path);}
+      ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fillStyle='#a2f0c6';ctx.strokeStyle='#203b34';ctx.lineWidth=1.5;ctx.fill();ctx.stroke();ctx.restore();observationBuildTargets.push({id,x:p.x,y:p.y,tool});
+    }
+    for(const [id] of state.towers){if(!currentlyVisible(id))continue;const [x,y]=xy(id),path=polygon(x+.05,y+.05,.90,.90,city3D.roofAt(productionId(id,state),x+.5,y+.5)+.04);if(path){ctx.save();ctx.strokeStyle='#ffd887';ctx.lineWidth=1.5;ctx.stroke(path);ctx.restore();}}
+    if(hover!==null){
+      ctx.save();ctx.fillStyle=operationValid?'#72d6aa18':'#ed77651b';ctx.strokeStyle=operationValid?'#9ce2bf66':'#e9948866';ctx.lineWidth=1;
+      for(const id of coverage(hover,selectedWeapon().range,selectedWeapon().shape))if(currentlyVisible(id)){const [x,y]=xy(id),path=polygon(x,y,1,1,.035);if(path){ctx.fill(path);ctx.stroke(path);}}ctx.restore();
+    }
+  }
   // 路线与真实边界投影到地面，线宽始终为屏幕像素；绝不取未知源头的路径。
   const routeSources=viewedSources(),linked=linkedSource(),focus=new Set([pinnedSource,linked].filter(Boolean));
   const routes=state.phase==='battle'&&forecastDay===state.day?battleRoutes(state):plannedRoutes;
@@ -1215,6 +1241,15 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     const z=['build','long'].includes(tool)?(city3D.roofAt(productionId(hover,state),hx+.5,hy+.5)??0)+.03:.03;
     const corners=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(([x,y])=>point(x,y,z));
     if(corners.every(p=>!p.hidden)){ctx.save();ctx.beginPath();ctx.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));ctx.closePath();ctx.fillStyle=operationValid?'#92ffd42b':'#ff77662b';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=operationValid?'#b9f0d1':'#ff9a8c';ctx.stroke();ctx.restore();}
+    const center=point(x+w/2,y+h/2,z);
+    if(!center.hidden&&weaponSelected){const ground=point(hx+.5,hy+.5,.025);ctx.save();ctx.strokeStyle='#d3eed7b0';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(ground.x,ground.y);ctx.lineTo(center.x,center.y);ctx.stroke();ctx.restore();}
+    if(site&&['production','housing'].includes(tool)&&operationValid){const q=economyBuildQuote(state,hover,tool);badge(tool==='housing'?`+${q.residents} 人`:`+${q.income} 金币/晚`,center.x,center.y-17,'#bff5ce');}
+  }
+  // 自由/斜视建设也给出同一笔真实结果，反馈随世界位置投影，不把画面回正。
+  if(placementFx){
+    const f=placementFx,t=Math.min(1,(performance.now()-f.start)/750),[x,y]=xy(f.id),z=city3D.roofAt(productionId(f.id,state),x+f.size/2,y+(f.height??f.size)/2)+.04;
+    const path=polygon(x,y,f.size,f.height??f.size,z),p=point(x+f.size/2,y+(f.height??f.size)/2,z);
+    ctx.save();ctx.globalAlpha=1-t;if(path){ctx.strokeStyle=f.color;ctx.lineWidth=2;ctx.stroke(path);}ctx.restore();badge(f.text,p.x,p.y-20-(reducedMotion.matches?0:t*18),f.color,1-t);
   }
   updateCameraLabels(camera.cell,view.controlState.params);updateMapInfo(view,viewport.dataset.detail,potentials,linked);
 }

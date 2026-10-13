@@ -138,8 +138,10 @@ export function createCity3D(onReady){
     enemiesFrame(){return ready?enemyCanvas:null;},
     roofAt(id,x,y){
       const entry=entries.get(id);if(!entry)return 0;
+      // 楼体不变时屋顶采样不随镜头改变，复用射线结果以支持多个可建炮位标记。
+      entry.roofSamples??=new Map();const sample=x+':'+y;if(entry.roofSamples.has(sample))return entry.roofSamples.get(sample);
       entry.object.updateMatrixWorld(true);const ray=new THREE.Raycaster(new THREE.Vector3(x,entry.roof+1,y),new THREE.Vector3(0,-1,0));
-      return ray.intersectObject(entry.object,true)[0]?.point.y??entry.roof;
+      const height=ray.intersectObject(entry.object,true)[0]?.point.y??entry.roof;entry.roofSamples.set(sample,height);return height;
     },
     render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],dressing=[],plants=[],plantPreview=null,roadCells=[],fx}){
       if(!ready)return null;
