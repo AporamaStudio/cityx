@@ -1,9 +1,10 @@
 // 标签只消费已经过可见度筛选的显示帧；不查询敌源或隐藏敌人。
 export function enemyBadgeLayouts(frames,project,{width,height,cellMeters=20,occupied=[]}){
-  const boxes=[...occupied],result=[];
+  // 近裁面后的炮位会给出NaN坐标，不能让一个不可投影的障碍污染整组标签。
+  const boxes=occupied.filter(box=>box&&[box.x,box.y,box.w,box.h].every(Number.isFinite)),result=[];
   for(const frame of frames){
     if(!(frame.alpha>0))continue;
-    const anchor=project(frame.x+.5,frame.y+.5,2.1/cellMeters);if(anchor.hidden||!Number.isFinite(anchor.x)||anchor.x< -20||anchor.y< -20||anchor.x>width+20||anchor.y>height+20)continue;
+    const anchor=project(frame.x+.5,frame.y+.5,2.1/cellMeters);if(anchor.hidden||!Number.isFinite(anchor.x)||!Number.isFinite(anchor.y)||anchor.x< -20||anchor.y< -20||anchor.x>width+20||anchor.y>height+20)continue;
     const count=Math.max(1,frame.enemy.members??1),text=String(frame.enemy.hp),w=Math.max(24,text.length*7+12)+(count>1?String(count).length*5+15:0),h=20;
     const candidates=[[0,-15],[-w/2-5,-15],[w/2+5,-15],[0,-39],[-w/2-5,-39],[w/2+5,-39]];
     let best=null,score=Infinity;
@@ -12,7 +13,7 @@ export function enemyBadgeLayouts(frames,project,{width,height,cellMeters=20,occ
       const box={x:x-w/2,y:y-h/2,w,h},overlap=boxes.reduce((sum,b)=>sum+Math.max(0,Math.min(box.x+w,b.x+b.w)-Math.max(box.x,b.x))*Math.max(0,Math.min(box.y+h,b.y+b.h)-Math.max(box.y,b.y)),0);
       if(overlap<score){score=overlap;best={...box,anchor,frame,count,text};}if(overlap===0)break;
     }
-    boxes.push(best);result.push(best);
+    if(best){boxes.push(best);result.push(best);}
   }
   return result;
 }

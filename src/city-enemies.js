@@ -28,7 +28,7 @@ export function createZombieCrowds(parent,capacity=2048){
         shader.uniforms.cityEnemyNight=material.userData.cityEnemyNight;shader.fragmentShader='uniform float cityEnemyNight;\n'+shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\nfloat cityEnemyRim=pow(1.-abs(dot(normal,normalize(vViewPosition))),2.);totalEmissiveRadiance+=cityEnemyNight*(diffuseColor.rgb*.22+vec3(.38,.32,.25)*cityEnemyRim);');
       }
     };material.customProgramCacheKey=()=> 'cityx-zombie-instance';
-    const mesh=new THREE.InstancedMesh(geometry,material,capacity);mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);mesh.count=0;mesh.frustumCulled=false;mesh.castShadow=false;mesh.receiveShadow=false;mesh.userData.cityDecoration=true;group.add(mesh);parts[name]={mesh,opacity};
+    const mesh=new THREE.InstancedMesh(geometry,material,capacity);mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);mesh.count=0;mesh.frustumCulled=false;mesh.castShadow=false;mesh.receiveShadow=false;mesh.userData.cityDecoration=true;mesh.userData.previewGeometry=true;group.add(mesh);parts[name]={mesh,opacity};
   }
   function write(name,index,x,y,z,sx,sy,sz,rx,paint,alpha){
     local.position.set(x,y,z);local.rotation.set(rx,0,0);local.scale.set(sx,sy,sz);local.updateMatrix();dummy.matrix.multiplyMatrices(world.matrix,local.matrix);

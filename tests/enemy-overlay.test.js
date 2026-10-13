@@ -12,3 +12,8 @@ test('标签保留在视口内，视野外与近裁面后的实体不产生牌�
   assert.equal(enemyBadgeLayouts([frame(500,0)],(x,y)=>({x,y}),{width:400,height:200}).length,0);
   assert.equal(enemyBadgeLayouts([frame(50,50)],()=>({hidden:true,x:NaN,y:NaN}),{width:400,height:200}).length,0);
 });
+test('不可投影设施不污染标签避让，不将空结果交给绘制',()=>{
+  const layouts=enemyBadgeLayouts([frame(100,100)],(x,y)=>({x,y}),{width:400,height:200,occupied:[null,{x:NaN,y:0,w:16,h:16},{x:0,y:NaN,w:16,h:16}]});
+  assert.equal(layouts.length,1);assert.ok(Number.isFinite(layouts[0].x)&&Number.isFinite(layouts[0].y));
+  assert.equal(enemyBadgeLayouts([frame(100,100)],()=>({x:100,y:NaN}),{width:400,height:200}).length,0);
+});

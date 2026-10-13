@@ -11,3 +11,9 @@ export function limitPan(x,y,width,height,size,cell,bottom=0){
   };
   return {x:axis(x,width),y:axis(y,Math.max(1,height-bottom))};
 }
+
+// 观察相机只约束世界中心；俯视的“棋盘须铺满屏幕”限制会阻止城边街区居中。
+export function limitObservationPan(x,y,width,height,size,cell){
+  const clamp=value=>Math.max(-CAMERA_BORDER,Math.min(size+CAMERA_BORDER,value));
+  return {x:width/2-clamp((width/2-x)/cell)*cell,y:height/2-clamp((height/2-y)/cell)*cell};
+}

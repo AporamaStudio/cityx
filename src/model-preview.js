@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {createZombieCrowds} from './city-enemies.js?v=3';
+import {createZombieCrowds} from './city-enemies.js?v=6';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {addBuildingFoundation} from './city-building-style.js?v=1';
@@ -274,7 +274,7 @@ function setMode(next){
 function selectAsset(asset,show=true){
   selected=asset;
   if(singleVariants){effects.remove(singleVariants.normal);wreckDressing.delete(singleVariants.normal);previewCrowds.delete(singleVariants.normal);}
-  single.traverse(node=>{if(node.isMesh||node.isLine||node.isSprite){node.material.dispose();if(node.userData.previewGeometry)node.geometry.dispose();}});single.clear();
+  single.traverse(node=>{if(node.isMesh||node.isLine||node.isSprite){if(node.isInstancedMesh)node.dispose();node.material.dispose();if(node.userData.previewGeometry)node.geometry.dispose();}});single.clear();
   const width=asset.landmark||asset.id==='enemy-squad'?asset.width:Math.min(asset.width,4.8),normal=cloneModel(asset,width),ruined=isBuilding(asset)?ruinedModel(asset,width):null;
   single.add(normal);if(ruined)single.add(ruined);singleVariants={normal,ruined};
   $('vehicleColors').hidden=!['civil-car','damaged-car','burnt-car'].includes(asset.id);

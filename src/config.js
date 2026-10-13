@@ -4,7 +4,7 @@ export const DEFAULTS = {
   // 每格的现实边长，用于比例尺与3D实体尺度；战斗和建设仍按格计算。
   cellMeters: 20,
   // 近景最大格宽（CSS像素），改变镜头尺度，不提高画布像素比或模型面数。
-  mapMaxCellPx: 128,
+  mapMaxCellPx: 256,
   // 固定斜视与水平面的夹角（度）；自由手调角度独立，不随缩放改变。
   obliqueElevationDegrees: 45,
   // 只切换自由观察投影；俯视/固定斜视保持正交，透视FOV为垂直视野角。
