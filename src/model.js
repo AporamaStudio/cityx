@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES } from './config.js?v=80';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=81';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -539,8 +539,8 @@ export function changeWall(state, id, remove = false) {
 }
 
 // 参数先验证、再一次性应用；不静默删除超预算设施或落在新控制范围外的布局。
-export function validateParams(params, state, checkLayout = true) {
-  const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
+export function validateVisualParams(params){
+  const integer=(value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   if(!integer(params.obliqueElevationDegrees,25,80))return '斜视俯仰角须为 25–80 度整数（与水平面的夹角）。';
   if(typeof params.returnToTopOnAction!=='boolean')return '操作返回俯视须为开启或关闭。';
   if(!['orthographic','perspective'].includes(params.freeProjection))return '自由观察投影须为正交或透视。';
@@ -553,14 +553,24 @@ export function validateParams(params, state, checkLayout = true) {
   if(!['controlBorderInnerCells','controlBorderOuterCells'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=2))return '控制边缘内/外渐隐宽度须为 0–2 格，0 关闭，可使用小数。';
   if(!integer(params.controlBorderInnerOpacity,0,60)||!integer(params.controlBorderOuterOpacity,0,60))return '控制边缘内/外色带强度须为 0–60% 整数。';
   if(!Number.isFinite(params.controlBorderLinePx)||params.controlBorderLinePx<1||params.controlBorderLinePx>6)return '控制边缘主线粗细须为 1–6 像素，可使用小数。';
-  if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
   if(!integer(params.campWarningPercent,0,100))return '火光危急阈值须为 0–100% 整数，0 关闭持续警示。';
-  if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';
-  if(!integer(params.campS01,0,30)||!integer(params.outpostS01,0,30)||!integer(params.sourceRevealPadding,0,10))return 'S01 视野距离须为 0–30 格整数，敌源边缘揭示格数须为 0–10 整数。';
-  if(!['daySightMultiplier','nightSightMultiplier','eventSightMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=3))return '视野倍率须为 0–3，可使用小数。';
   if(!Number.isFinite(params.cloudSpeedMultiplier)||params.cloudSpeedMultiplier<0||params.cloudSpeedMultiplier>3)return '云层流速倍率须为 0–3，0 静止。';
   if(!integer(params.fogS12,1,20)||!integer(params.fogS23,1,20))return 'S12/S23 雾带距离须为 1–20 格整数。';
   if(!Number.isFinite(params.enemyFogFadeCells)||params.enemyFogFadeCells<0||params.enemyFogFadeCells>3)return '敌人进出雾过渡须为 0–3 格，0 关闭渐隐，可使用小数。';
+  if(!integer(params.incomeReportMs,0,15000))return '收入暂显时长须为0–15000毫秒整数，0关闭自动展示。';
+  if(!integer(params.resourceHoverMs,0,2000))return '资源详情悬停时长须为0–2000毫秒整数。';
+  if(!integer(params.resourceHoverTolerancePx,0,20))return '资源悬停位移容差须为0–20像素整数。';
+  if(!integer(params.nightIdleTransitionMs,0,3000))return '空闲夜末过渡时长须为0–3000毫秒整数，0关闭动画。';
+  return '';
+}
+
+export function validateParams(params, state, checkLayout = true) {
+  const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
+  const visualError=validateVisualParams(params);if(visualError)return visualError;
+  if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
+  if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';
+  if(!integer(params.campS01,0,30)||!integer(params.outpostS01,0,30)||!integer(params.sourceRevealPadding,0,10))return 'S01 视野距离须为 0–30 格整数，敌源边缘揭示格数须为 0–10 整数。';
+  if(!['daySightMultiplier','nightSightMultiplier','eventSightMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=3))return '视野倍率须为 0–3，可使用小数。';
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
   if(!integer(params.bankRestoreCost,1,1000)||!integer(params.bankWorkers,0,100)||!integer(params.bankCapacity,1,10000)||!['bankDepositPercent','bankLoanPercent'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=100))return '银行恢复费用1–1000、用工0–100、额度1–10000为整数；利率0–100%，可用小数。';
   if(!integer(params.outpostWorkers,0,100))return '每座瞭望塔用工须为0–100人整数。';
@@ -569,9 +579,6 @@ export function validateParams(params, state, checkLayout = true) {
   if(!integer(params.renovationCostPercent,1,100))return '修缮费用占新建价须为 1–100% 整数。';
   if(!integer(params.productionBaseArea,1,SIZE*SIZE)||!integer(params.productionDensityGrowthArea,1,SIZE*SIZE)||!Number.isFinite(params.productionSmallCostFloor)||params.productionSmallCostFloor<=0||params.productionSmallCostFloor>1||!Number.isFinite(params.productionMaxDensity)||params.productionMaxDensity<1||params.productionMaxDensity>10)return '经营曲线：基准/增长面积须为 1–3600，低面积成本倍率大于 0 且不超过 1，产出密度上限为 1–10。';
   if(!integer(params.stepMs,50,5000))return '移动节拍须为 50–5000 毫秒整数。';
-  if(!integer(params.incomeReportMs,0,15000))return '收入暂显时长须为0–15000毫秒整数，0关闭自动展示。';
-  if(!integer(params.resourceHoverMs,0,2000))return '资源详情悬停时长须为0–2000毫秒整数。';
-  if(!integer(params.resourceHoverTolerancePx,0,20))return '资源悬停位移容差须为0–20像素整数。';
   if(!integer(params.dayEndHoldMs,300,3000))return '结束白天长按时长须为300–3000毫秒整数。';
   if(!integer(params.outpostCost,1,1000)||!integer(params.outpostRadius,1,30)||!integer(params.campRepairCost,1,1000))return '瞭望塔价格 1–1000、半径 1–30；火光每 HP 修复单价 1–1000。';
   if(!Number.isFinite(params.nightTowerCostMultiplier)||params.nightTowerCostMultiplier<1||params.nightTowerCostMultiplier>10)return '夜间金币加急倍率须为1–10。';
@@ -585,7 +592,6 @@ export function validateParams(params, state, checkLayout = true) {
   if (!integer(params.killReward,0,1000)) return '每个敌人击杀奖励须为 0–1000 整数。';
   if(!integer(params.sourceCellHPMin,1,10000)||!integer(params.sourceCellHPMax,params.sourceCellHPMin,10000)||!integer(params.sourceRegenHP,0,10000)||!integer(params.nightTicks,1,500))return '源头每格HP下限须为1–10000，上限不得低于下限；每夜回复0–10000、每晚拍数1–500，均为整数。';
   if(!integer(params.nightCleanupSpeed,1,4))return '夜末清源速度倍率须为1–4整数，1关闭自动加速。';
-  if(!integer(params.nightIdleTransitionMs,0,3000))return '空闲夜末过渡时长须为0–3000毫秒整数，0关闭动画。';
   if(state.waves){const lastSpawn=Math.max(1,...state.waves.flat().map(s=>s.first+(s.count-1)*s.interval));if(params.nightTicks<lastSpawn)return `预设最后一批在第 ${lastSpawn} 拍出场，每晚拍数不能更短；请先调整出兵节拍。`;}
   const candidate={...state,params};
   if(checkLayout&&([...state.playerWalls].some(id=>!inGroundControl(candidate,id))||[...state.towers.keys()].some(id=>!inControl(candidate,id))||[...state.outposts.keys()].some(id=>!inGroundControl(candidate,id))||[...state.production.keys(),...state.housing.keys()].some(id=>!productionControlled(candidate,id))))return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
@@ -593,6 +599,22 @@ export function validateParams(params, state, checkLayout = true) {
   if (checkLayout && funds({...state,params}) < -bankFinance({...state,params}).capacity-1e-9) return '按新价格计算，现有布局超出预算（含经营与瞭望塔）。请提高资金，或取消预览后拆除设施。';
   return '';
 }
+// 两份实验草稿只提交自己的参数；失败完全不改状态，视觉可以在战斗中应用。
+export function applyExperimentParams(state,draft,scope){
+  if(!['visual','gameplay'].includes(scope))return '请选择玩法或视觉实验。';
+  if(scope==='gameplay'&&state.phase!=='build')return '玩法参数只能在白天应用。';
+  const params=structuredClone(state.params);
+  for(const key of Object.keys(params))if(VISUAL_PARAM_KEYS.includes(key)===(scope==='visual'))params[key]=structuredClone(draft[key]);
+  const error=scope==='visual'?validateVisualParams(params):validateParams(params,state);if(error)return error;
+  const old=state.params;state.params=params;
+  if(scope==='visual')return '';
+  // 调整上限不免费修复，也不复活已破坏墙；价格沿用现有实验估价规则。
+  state.hp=Math.min(state.hp,params.campHP);
+  for(const body of state.wallHealth.values()){body.hp=Math.min(body.hp,params.wallHP);body.max=params.wallHP;}
+  if(old.sourceCellHPMin!==params.sourceCellHPMin||old.sourceCellHPMax!==params.sourceCellHPMax)syncSourceHealth(state);
+  rebuildTerrain(state);recordBorrowing(state,0);clearRepaidDebt(state);return '';
+}
+
 // 配置失败时保留原地图和布局，避免静默丢失试玩结果。
 export function validateSources(sources, state) {
   if ((!sources.length&&!state.enemySources?.size) || sources.length > 12) return '源头数量应为 1–12（固定据点清除后允许无来袭）。';

@@ -66,6 +66,9 @@ export const DEFAULTS = {
 };
 
 
+// 视觉实验独立应用的白名单；不能借此修改战斗、经济或控制参数。
+export const VISUAL_PARAM_KEYS = ['cellMeters', 'mapMaxCellPx', 'obliqueElevationDegrees', 'freeProjection', 'freePerspectiveFovDegrees', 'returnToTopOnAction', 'streetLightBudget', 'fireNumbersMinCellPx', 'mapMidZoomPercent', 'mapNearZoomPercent', 'controlBorderInnerCells', 'controlBorderOuterCells', 'controlBorderInnerOpacity', 'controlBorderOuterOpacity', 'controlBorderLinePx', 'cloudSpeedMultiplier', 'fogS12', 'fogS23', 'enemyFogFadeCells', 'campWarningPercent', 'nightIdleTransitionMs', 'incomeReportMs', 'resourceHoverMs', 'resourceHoverTolerancePx'];
+
 // 十五晚实验：前五晚保留原节奏，后十晚逐步增加强度；参数仍须真人试玩。
 const OPENING_WAVES = [
   [{x:5,y:3,hp:6,count:3,first:1,interval:12}, {x:25,y:3,hp:6,count:3,first:7,interval:12}],

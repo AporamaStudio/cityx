@@ -13,8 +13,8 @@ import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=3';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=9';
 import {createGameAudio} from './audio.js?v=10';
-import { SIZE, DEFAULTS } from './config.js?v=80';
-import { bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=95';
+import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=81';
+import {applyExperimentParams,validateVisualParams, bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=96';
 import {generateCityMap} from './city-map.js?v=9';
 import {readMapSettings} from './map-settings.js?v=1';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -341,10 +341,13 @@ const mapFogEnabled=()=>$('showFog').checked&&!sourceEditing();
 const visibleCell=id=>!mapFogEnabled()||isExplored(state,id);
 const currentlyVisible=id=>!mapFogEnabled()||sight.has(id);
 function clipSight(){if(!mapFogEnabled())return;ctx.beginPath();for(const id of sight){const [x,y]=xy(id);ctx.rect(x,y,1,1);}ctx.clip();}
-const paramsDirty = () => JSON.stringify(readParams()) !== JSON.stringify(state.params);
+// 两区草稿独立：未应用的视觉只预演显示，不阻止建设或开战。
+const paramsDirty = (scope='gameplay') => JSON.stringify(readParams(scope)) !== JSON.stringify(state.params);
 function previewParams() {
-  const draft = readParams();
-  return state.phase === 'build' && !validateParams(draft,state,false) ? draft : state.params;
+  const game=readParams('gameplay'),visual=readParams('visual');
+  const params=state.phase==='build'&&!validateParams(game,state,false)?game:structuredClone(state.params);
+  if(!validateVisualParams(visual))for(const key of VISUAL_PARAM_KEYS)params[key]=visual[key];
+  return params;
 }
 
 
@@ -1316,12 +1319,14 @@ function update() {
   $('repair').disabled=!repairAvailable;
   blockedActionReasons.set('repair',!build?'防守中不能修复':state.day<2?'次日才能修复':!repairTargets.length?'没有受损设施':!repairAvailable?repairError(state,repairTargets[0]):'');
   $('repair').title=repairAvailable?'悬停受损目标预览费用与恢复量':'';
-  for(const id of ['applyParams','cancelParams','defaults'])$(id).disabled=!build||state.day!==1;
+  for(const id of ['applyParams','cancelParams','defaults'])$(id).disabled=!build;
+  for(const id of ['applyVisualParams','cancelVisualParams','visualDefaults'])$(id).disabled=false;
   for(const id of ['apply','addSource','addWave','applySourceMap','cancelSourceConfig','sourceDefaults']){$(id).disabled=false;$(id).setAttribute('aria-disabled',String(!build));}
   document.querySelectorAll('#sources input, #sources select, #mapSources input, #mapSources select, #sourceNight').forEach(el=>el.disabled=!build);
   document.querySelectorAll('[data-config-action]').forEach(el=>el.setAttribute('aria-disabled',String(!build)));
   $('sourceConfigStatus').textContent=sourceConfigurationDirty()?'存在未应用修改。':'当前配置已应用。';
-  document.querySelectorAll('[data-param]').forEach(el=>el.disabled=!build||state.day!==1);
+  document.querySelectorAll('#params [data-param]').forEach(el=>el.disabled=!build);
+  document.querySelectorAll('#visualParams [data-param]').forEach(el=>el.disabled=false);
   // 成败与收入由结算画面、收入卡承担；实时事件沿用右侧战场记录。
   if(['won','lost'].includes(state.phase))$('toolInfo').textContent='';
   updateForecast();
@@ -1504,10 +1509,11 @@ function resetSourceEditors(){
 $('sourceNight').onchange=()=>{sourceDrafts[editingNight-1]=readSources();editingNight=Number($('sourceNight').value);$('forecastDay').value=String(editingNight-1);sourceEditor(sourceDrafts[editingNight-1]);update();};
 $('settings').addEventListener('toggle',()=>{if(!$('settings').open)editorSourcePreview=null;else $('forecastDay').value=String(editingNight-1);mapView=null;updateForecast();draw();});
 // 小型参数面板：仅编辑当前实验，默认值仍保留在 config.js。
-function paramsEditor(params) {
-  $('params').replaceChildren();$('visualParams').replaceChildren();
-  // 只改变参数归类；两区仍由同一草稿读取、校验和应用，不遗漏或重复控件。
+function paramsEditor(params,scope='all') {
+  if(scope!=='visual')$('params').replaceChildren();if(scope!=='gameplay')$('visualParams').replaceChildren();
+  // 两区沿用同一控件生成方式，应用/取消/默认只重画自己的草稿。
   function fields(title, values, prefix, specs, target='params') {
+    if(scope!=='all'&&(target==='visualParams')!==(scope==='visual'))return;
     const container=$(target),h=document.createElement('h3');h.textContent=title;container.append(h);
     const row=document.createElement('div');row.className='fields';
     for(const [name,label,min,max] of specs){
@@ -1517,7 +1523,7 @@ function paramsEditor(params) {
       if(choices)for(const [value,text] of choices){const option=document.createElement('option');option.value=value;option.textContent=text;input.append(option);}
       else{input.type='number';input.min=min;input.max=max;input.step=['productionIncomePerCell','productionSmallCostFloor','productionMaxDensity','bankDepositPercent','bankLoanPercent','enemyFogFadeCells','controlBorderInnerCells','controlBorderOuterCells','controlBorderLinePx'].includes(name)||name.endsWith('Multiplier')?0.1:1;}
       input.value=String(values[name]);input.dataset.param=prefix+name;input.setAttribute('aria-label',`${title} ${label}`);
-      input.addEventListener('input',refreshParams);wrap.append(input);row.append(wrap);
+      input.addEventListener('input',()=>refreshParams(target==='visualParams'?'visual':'gameplay'));wrap.append(input);row.append(wrap);
     }
     container.append(row);
   }
@@ -1542,18 +1548,21 @@ function paramsEditor(params) {
   fields('云层',params,'',[['cloudSpeedMultiplier','流速倍率（0静止）',0,3],['fogS12','S12 薄雾→中雾距离（格）',1,20],['fogS23','S23 中雾→浓雾距离（格）',1,20],['enemyFogFadeCells','敌人进出雾过渡（格）',0,3]],'visualParams');
   fields('界面反馈',params,'',[['campWarningPercent','火光危急阈值%',0,100],['nightIdleTransitionMs','空闲夜末过渡时长（毫秒）',0,3000],['incomeReportMs','收入暂显时长（毫秒，0关闭）',0,15000],['resourceHoverMs','资源详情悬停时长（毫秒）',0,2000],['resourceHoverTolerancePx','资源悬停位移容差（像素）',0,20]],'visualParams');
 }
-function readParams() {
+function readParams(scope='all') {
   const result=structuredClone(state.params);
-  for(const input of document.querySelectorAll('[data-param]')){
+  const selector=scope==='visual'?'#visualParams [data-param]':scope==='gameplay'?'#params [data-param]':'[data-param]';
+  for(const input of document.querySelectorAll(selector)){
     const parts=input.dataset.param.split('.'), name=parts.at(-1);
     const value=name==='returnToTopOnAction'?input.value==='true':['shape','freeProjection'].includes(name)?input.value:input.value.trim()===''?NaN:Number(input.value);
     if(parts.length===1)result[name]=value;else result.weapons[parts[0]][name]=value;
   }
   return result;
 }
-function refreshParams(){
-  const error=validateParams(readParams(),state);
-  $('paramStatus').textContent=paramsDirty()?'正在预览未应用参数，建设与开战前请应用。':'当前参数已应用。';
+function refreshParams(scope='all'){
+  const gameError=validateParams(readParams('gameplay'),state),visualError=validateVisualParams(readParams('visual'));
+  $('paramStatus').textContent=paramsDirty()?'玩法有未应用修改，建设与开战前请应用。':'当前玩法已应用。';
+  $('visualParamStatus').textContent=paramsDirty('visual')?'正在预览未应用视觉参数。':'当前视觉已应用。';
+  const error=scope==='visual'?visualError:scope==='gameplay'?gameError:gameError||visualError;
   if(error)showTopNotice(error,false);
   if(zoom>limitZoom(zoom,base,previewParams().mapMaxCellPx))changeZoom(1);
   update();
@@ -1573,7 +1582,10 @@ function clearPlayback() {
 }
 function reset(keep=true){
   if(keep&&!preparation)return;
+  const visual=state.params;
   state=keep?restoreNight(preparation):restartCampaign(state);
+  // 重试回滚战斗与收支，独立应用的视觉设置继续保留。
+  if(keep)for(const key of VISUAL_PARAM_KEYS)state.params[key]=visual[key];
   if(!keep)preparation=null;
   clearPlayback();$('firstNightNotice').hidden=true;$('forecastDay').value=String(state.day-1);
   resetSourceEditors();paramsEditor(state.params);refreshParams();
@@ -1623,7 +1635,7 @@ $('applyTest').onclick=()=>{
   const error=applyTestScenario(state,Number($('testDay').value),Number($('testGold').value),Number($('testPeople').value));
   if(error){showTopNotice(error);return;}
   preparation=null;clearPlayback();$('firstNightNotice').hidden=true;hover=null;tool='wall';$('forecastDay').value=String(state.day-1);
-  resetSourceEditors();paramsEditor(state.params);refreshParams();
+  resetSourceEditors();refreshParams();
   notify(`已进入第 ${state.day} 天，保留布局。`);
 };
 $('retry').onclick=()=>reset();$('clear').onclick=()=>reset(false);
@@ -1647,18 +1659,19 @@ $('auditRoutes').onclick=()=>{
   $('routeAuditRows').replaceChildren(...rows);$('routeAudit').showModal();
 };
 $('closeRouteAudit').onclick=()=>$('routeAudit').close();
-$('applyParams').onclick=()=>{
-  if(state.phase!=='build'||state.day!==1)return;
-  const params=readParams(),error=validateParams(params,state);if(error){showTopNotice(error);return;}
-  state.params=structuredClone(params);state.hp=params.campHP;syncSourceHealth(state);
-  for(const body of state.wallHealth.values())body.hp=body.max=params.wallHP;
-  rebuildTerrain(state);revealControl(state);state.lastNight=null;preparation=null;clearPlayback();
-
-  mapSourceEditor(readMapSources());paramsEditor(state.params);refreshParams();notify('参数已应用，本轮重置。');
-};
+// 原地应用只提交本区参数，视觉不触碰HP、日期、播放或重试快照。
+function applyParamsScope(scope){
+  const error=applyExperimentParams(state,readParams(scope),scope);if(error){showTopNotice(error);return;}
+  if(scope==='gameplay')preparation=null;
+  paramsEditor(state.params,scope);refreshParams(scope);notify(scope==='visual'?'视觉已应用，保留当前场景。':'玩法已应用，保留当前进度。');
+}
+$('applyParams').onclick=()=>applyParamsScope('gameplay');
+$('applyVisualParams').onclick=()=>applyParamsScope('visual');
 $('showFog').onchange=()=>{hover=null;update();draw();};
-$('cancelParams').onclick=()=>{paramsEditor(state.params);refreshParams();};
-$('defaults').onclick=()=>{paramsEditor(DEFAULTS);refreshParams();notify('默认值已填入，应用后生效。');};
+for(const [scope,cancel,defaults] of [['gameplay','cancelParams','defaults'],['visual','cancelVisualParams','visualDefaults']]){
+  $(cancel).onclick=()=>{paramsEditor(state.params,scope);refreshParams(scope);};
+  $(defaults).onclick=()=>{paramsEditor(DEFAULTS,scope);refreshParams(scope);notify('本区默认值已填入，应用后生效。');};
+}
 $('apply').onclick=()=>{
   if(!configEditable())return;
   if(paramsDirty()){showTopNotice('请先应用或取消实验参数预览。');return;}
@@ -1937,7 +1950,7 @@ function nightStartAllowed(){
   if(!firstNightReady(state)){
     return rejectNightStart('请先建造一座炮塔');
   }
-  if(paramsDirty()){ $('experiments').open=true;return rejectNightStart('实验参数有未应用修改，请先应用或取消预览。'); }
+  if(paramsDirty()){ $('gameplayExperiments').open=true;return rejectNightStart('实验参数有未应用修改，请先应用或取消预览。'); }
   if(sourceConfigurationDirty()){ $('settings').open=true;return rejectNightStart('来袭配置有未应用修改，请先应用或取消。'); }
   const error=validateSources(state.sources,state);if(error)return rejectNightStart(error);
   return true;
