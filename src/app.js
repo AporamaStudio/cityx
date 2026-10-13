@@ -1,11 +1,11 @@
-import {createCity3D} from './city-3d.js?v=22';
+import {createCity3D} from './city-3d.js?v=23';
 import {operatingStreetLamps,ruinStreetProps} from './city-streets.js?v=2';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=4';
 import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
 import {createTowerOverlay} from './tower-overlay.js?v=18';
-import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=16';
+import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=17';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=2';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=8';
@@ -522,7 +522,7 @@ function paintMap() {
     if(!cityFrame||state.layout?.tiles[id]!=='road'){
       ctx.fillStyle = tool!==null&&(x + y) % 2 ? palette.groundA : palette.groundB;
       ctx.fillRect(x, y, 1, 1);
-      if(state.layout?.tiles[id]==='road')drawRoadTexture(ctx,state.layout,x,y,nightMix);
+      if(state.layout?.tiles[id]==='road')drawRoadTexture(ctx,state.layout,x,y,nightMix,controlState.params.cellMeters);
     }
     if(view.towers.cellSites[id]&&!state.blocked.has(id)){ctx.fillStyle=nightMix>.5?'#2c4841':'#77967b';ctx.fillRect(x,y,1,1);}
     if ($('heat').checked && power && currentlyVisible(id)) { ctx.fillStyle = `rgba(99,211,166,${Math.min(.6,.17 + power * .045)})`; ctx.fillRect(x, y, 1, 1); }

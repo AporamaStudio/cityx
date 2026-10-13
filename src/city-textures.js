@@ -5,8 +5,8 @@ const palettes={
   day:{road:'#343e47',edge:'#a3aaa4',lane:'#b3aa87',yard:'#697b70',ruin:'#877f6b',roof:'#b0a084',crack:'#454b46',factory:'#739697',factoryRoof:'#a4c2b9',home:'#af775c',homeWall:'#dfc6a0',window:'#425d64',grass:'#738b67'},
   night:{road:'#182936',edge:'#677d88',lane:'#969881',yard:'#263e3e',ruin:'#3c464a',roof:'#646967',crack:'#202d35',factory:'#335c61',factoryRoof:'#568485',home:'#655051',homeWall:'#918679',window:'#ffdf92',grass:'#294e40'},
 };
-function texture(id,w,h,paint){
-  if(!cache.has(id)){const c=document.createElement('canvas');c.width=w*PX;c.height=h*PX;const g=c.getContext('2d');g.scale(PX,PX);paint(g);cache.set(id,c);}
+function texture(id,w,h,paint,px=PX){
+  if(!cache.has(id)){const c=document.createElement('canvas');c.width=w*px;c.height=h*px;const g=c.getContext('2d');g.scale(px,px);paint(g);cache.set(id,c);}
   return cache.get(id);
 }
 function layers(ctx,x,y,w,h,mix,get){
@@ -114,26 +114,32 @@ export function roadMarkings(layout){
   roadGeometry.set(layout,marks);return marks;
 }
 // 沥青、连续浅色路缘、路口斑马线形成道路语言；交叉口内部不硬画中线。
-export function drawRoadTexture(ctx,layout,x,y,mix){
+export function drawRoadTexture(ctx,layout,x,y,mix,cellMeters=20){
   const {mask,axis,center,width,crossing}=roadMarkings(layout).get(y*layout.width+x);
-  layers(ctx,x,y,1,1,mix,time=>texture(`road:${mask}:${axis}:${center}:${width}:${crossing}:${time}`,1,1,g=>{
+  layers(ctx,x,y,1,1,mix,time=>texture(`road:${mask}:${axis}:${center}:${width}:${crossing}:${cellMeters}:${time}`,1,1,g=>{
     const p=palettes[time];g.fillStyle=p.road;g.fillRect(0,0,1,1);
     g.fillStyle=time==='day'?'#ffffff09':'#a9ccff08';
     for(let i=0;i<10;i++)g.fillRect((i*17%29)/32,(i*11%31)/32,.025,.025);
-    g.fillStyle=p.edge;
-    if(!(mask&1))g.fillRect(0,0,1,.08);if(!(mask&4))g.fillRect(0,.92,1,.08);
-    if(!(mask&8))g.fillRect(0,0,.08,1);if(!(mask&2))g.fillRect(.92,0,.08,1);
+    const curb=Math.min(.18,1.8/cellMeters);g.fillStyle=p.edge;
+    if(!(mask&1))g.fillRect(0,0,1,curb);if(!(mask&4))g.fillRect(0,1-curb,1,curb);
+    if(!(mask&8))g.fillRect(0,0,curb,1);if(!(mask&2))g.fillRect(1-curb,0,curb,1);
     if(!axis)return;
     const stripe=(cross,long,cw,len)=>axis==='v'?g.fillRect(cross,long,cw,len):g.fillRect(long,cross,len,cw);
+    // 约3.5m车道、15cm标线与50cm斑马条，宽路共用中心，不按每格放大。
+    const line=Math.min(.025,.15/cellMeters),lane=3.5/cellMeters;
     if(crossing){
-      g.fillStyle=time==='day'?'#aab5b4':'#7b929c';
-      for(let i=.19;i<.85;i+=.22)stripe(i,crossing<0?.17:.58,.12,.25);
+      g.fillStyle=time==='day'?'#bdc5bd':'#8198a2';
+      for(let i=.12;i<.9;i+=1/cellMeters)stripe(i,crossing<0?.10:.74,.5/cellMeters,.16);
     }else{
       g.fillStyle=p.lane;
-      if(width===1)stripe(center-.045,.18,.09,.64);
-      else for(const offset of [-.09,.09])stripe(center+offset-.03,0,.06,1);
+      for(const offset of [-.20,.20])stripe(center+offset/cellMeters-line/2,0,line,1);
+      g.fillStyle=time==='day'?'#cad1c5':'#879ca2';
+      const lanes=Math.min(3,Math.max(1,Math.floor((width*cellMeters-3.6)/7)));
+      for(let i=1;i<lanes;i++)for(const sign of [-1,1]){
+        const cross=center+sign*i*lane-line/2;stripe(cross,.08,line,.22);stripe(cross,.58,line,.22);
+      }
     }
-  }));
+  },64));
 }
 export function drawBlockTexture(ctx,p,kind,mix){
   const w=p.width??p.size,h=p.height??p.size,variant=(p.x*7+p.y*13)%4;

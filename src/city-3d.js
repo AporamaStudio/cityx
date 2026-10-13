@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {drawRoadTexture} from './city-textures.js?v=16';
+import {drawRoadTexture} from './city-textures.js?v=17';
 import {groundGlow} from './model-preview-effects.js?v=3';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=5';
 
@@ -154,12 +154,12 @@ export function createCity3D(onReady){
         if(entries.get(plot.id)?.signature!==signature){if(entries.has(plot.id))release(entries.get(plot.id));entries.set(plot.id,build(plot));}
         entries.get(plot.id).object.traverse(node=>{if(node.userData.cityRoofLights)node.visible=plot.powered&&night>0;if(node.isMesh){if(node.material.userData.cityPower)node.material.userData.cityPower.value=plot.powered?night:0;if(node.parent?.userData.cityRoofLights)node.material.opacity=plot.powered?night*(node.material.map?.28:1):0;}});
       }
-      if(layout&&roadLayout!==layout){
+      if(layout&&(roadLayout!==layout||terrain.userData.cellMeters!==cellMeters)){
         if(terrain){terrain.removeFromParent();terrain.geometry.dispose();terrain.material.map.dispose();terrain.material.dispose();}
-        const canvas=document.createElement('canvas');canvas.width=layout.width*16;canvas.height=layout.height*16;const ctx=canvas.getContext('2d');ctx.scale(16,16);ctx.fillStyle='#697b70';ctx.fillRect(0,0,layout.width,layout.height);
-        for(let y=0;y<layout.height;y++)for(let x=0;x<layout.width;x++)if(layout.tiles[y*layout.width+x]==='road')drawRoadTexture(ctx,layout,x,y,0);
+        const canvas=document.createElement('canvas');canvas.width=layout.width*32;canvas.height=layout.height*32;const ctx=canvas.getContext('2d');ctx.scale(32,32);ctx.fillStyle='#697b70';ctx.fillRect(0,0,layout.width,layout.height);
+        for(let y=0;y<layout.height;y++)for(let x=0;x<layout.width;x++)if(layout.tiles[y*layout.width+x]==='road')drawRoadTexture(ctx,layout,x,y,0,cellMeters);
         const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
-        terrain=new THREE.Mesh(new THREE.PlaneGeometry(layout.width,layout.height),new THREE.MeshStandardMaterial({map:texture,roughness:.95}));terrain.rotation.x=-Math.PI/2;terrain.position.set(layout.width/2,-.015,layout.height/2);terrain.receiveShadow=true;scene.add(terrain);roadLayout=layout;
+        terrain=new THREE.Mesh(new THREE.PlaneGeometry(layout.width,layout.height),new THREE.MeshStandardMaterial({map:texture,roughness:.95}));terrain.rotation.x=-Math.PI/2;terrain.position.set(layout.width/2,-.015,layout.height/2);terrain.receiveShadow=true;scene.add(terrain);terrain.userData.cellMeters=cellMeters;roadLayout=layout;
       }
       const nextStreets=cellMeters+JSON.stringify(lamps),streetLights=[];
       const rawStreet=models.get('street'),streetBounds=new THREE.Box3().setFromObject(rawStreet),streetScale=7.5/cellMeters/(streetBounds.max.y-streetBounds.min.y);
