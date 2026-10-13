@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {createRoadModel} from './city-road-model.js?v=1';
 import {createPreviewEffects,groundGlow} from './model-preview-effects.js?v=3';
 
 // 独立选型页：模型、灯光与状态仅用于看效果，不读取或修改原型游戏。
@@ -40,7 +41,7 @@ const assets=[
   ['civil-car','完好车辆','nature','civil-car',2.7,'约4.6m长/2.4m宽/1.85m高，与燃烧车共用车身和车轮布局；生成/移除与交通规则暂不接入。'],
   ['burnt-car','燃烧车辆','nature','burnt-car',2.7,'焦黑车身与少量火焰表现灾损，作为恢复前的局部视觉样件。']
 ].map(([id,name,category,file,width,description])=>({id,name,category,file,width,description,local:!file.includes('/'),paired:category==='building'&&file.includes('/'),landmark:['hospital','bank'].includes(id)}));
-const $=id=>document.getElementById(id),models=new Map(),district=new THREE.Group(),single=new THREE.Group();
+const $=id=>document.getElementById(id),models=new Map(),district=new THREE.Group(),single=new THREE.Group(),roads=new THREE.Group();
 let selected=assets[0],mode='district',night=false,restored=false,angle='angle',ready=false,singleState='intact',singleVariants=null,effects=null;
 const motionPreference=matchMedia('(prefers-reduced-motion: reduce)');let animated=!motionPreference.matches;
 const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-25,25,20,-20,.1,250);
@@ -56,12 +57,12 @@ sun.position.set(-16,28,12);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048
 Object.assign(sun.shadow.camera,{left:-38,right:38,top:38,bottom:-38,near:1,far:100});sun.shadow.bias=-.00025;sun.shadow.normalBias=.03;
 const fireLight=new THREE.PointLight('#ffb860',22,13,2);fireLight.position.set(4,2.2,0);
 const wreckLight=new THREE.PointLight('#ff9a49',9,6,2);wreckLight.position.set(-8,1.1,-.8);
-scene.add(sky,sun,fireLight,wreckLight,district,single);
+scene.add(sky,sun,fireLight,wreckLight,district,single,roads);
 effects=createPreviewEffects({isNight:()=>night,render:time=>{
   fireLight.intensity=22*(1+.12*Math.sin(time*8.7)+.05*Math.sin(time*13));
   wreckLight.intensity=9*(1+.16*Math.sin(time*9.1+2));renderer.render(scene,camera);
 }});
-const structures=[],streetlights=[],abandoned=[],civilDecor=[];
+const structures=[],streetlights=[],abandoned=[],civilDecor=[],roadLights=[],roadRuins=[],roadCivil=[];
 const palette={stone:'#c5c5b0',grass:'#a7b491',road:'#68736e',brick:'#7f9180'};
 function box(parent,x,y,z,w,h,d,color){
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color,roughness:.95}));
@@ -70,11 +71,11 @@ function box(parent,x,y,z,w,h,d,color){
 function render(){effects?.update();renderer.shadowMap.needsUpdate=true;renderer.render(scene,camera);}
 function resize(){
   const {width,height}=$('viewer').getBoundingClientRect();renderer.setSize(width,height,false);
-  const aspect=width/height,frame=mode==='district'?68:selected.landmark?selected.width*1.85:selected.id.startsWith('cannon-')?6.2:['campfire','burnt-car','streetlight'].includes(selected.id)?8:11,half=Math.max(frame*.34,frame/aspect/2);
+  const aspect=width/height,frame=mode==='roads'?96:mode==='district'?68:selected.landmark?selected.width*1.85:selected.id.startsWith('cannon-')?6.2:['campfire','burnt-car','streetlight'].includes(selected.id)?8:11,half=Math.max(frame*.34,frame/aspect/2);
   camera.left=-half*aspect;camera.right=half*aspect;camera.top=half;camera.bottom=-half;camera.updateProjectionMatrix();render();
 }
 function frame(){
-  const target=new THREE.Vector3(0,mode==='district'?1:(singleVariants?.normal.userData.previewModelHeight??3.4)/2,mode==='district'?-7:0),offset=angle==='top'?new THREE.Vector3(0,45,.01):new THREE.Vector3(32,34,40);
+  const target=new THREE.Vector3(0,mode!=='single'?1:(singleVariants?.normal.userData.previewModelHeight??3.4)/2,mode==='district'?-7:0),offset=angle==='top'?new THREE.Vector3(0,45,.01):new THREE.Vector3(32,34,40);
   controls.target.copy(target);camera.position.copy(target).add(offset);camera.zoom=1;camera.updateProjectionMatrix();controls.update();resize();
 }
 function cloneModel(asset,width=asset.width,roofLights=true,ruined=false){
@@ -197,6 +198,23 @@ function buildDistrict(){
   }
   updateRestore();
 }
+// 道路样景与主图共用米制构件；用1:2演示尺度，车辆/灯杆同步换算。
+function buildRoadPreview(){
+  const layout={width:8,height:8,tiles:Array(64).fill('block')};
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++)if(x===1||x===5||x===6||y===3||y===4)layout.tiles[y*8+x]='road';
+  const model=createRoadModel(layout,20);model.scale.setScalar(10);model.position.set(-40,0,-40);roads.add(model);
+  box(roads,0,-.12,0,80,.15,80,'#788673');
+  const place=(id,x,z,meters)=>{const obj=cloneModel(assets.find(a=>a.id===id),meters/2,false);obj.position.set(x,0,z);roads.add(obj);return obj;};
+  roadRuins.push(place('burnt-car',-23,13,4.6),place('trash',-25,21,2.4));
+  roadCivil.push(place('civil-car',-23,13,4.6),place('street-bench',-28,24,2.2),place('street-planter',-27,18,1.6));
+  for(const [x,z] of [[-29,-16],[-21,19],[11,-18],[29,21]]){
+    const source=models.get('streetlight'),bounds=new THREE.Box3().setFromObject(source),size=bounds.getSize(new THREE.Vector3());
+    const obj=place('streetlight',x,z,7.5*Math.max(size.x,size.z)/size.y);obj.rotation.y=x<0?Math.PI/2:-Math.PI/2;
+    const light=new THREE.PointLight('#ffd08a',10,12,2);light.position.set(x,3.75,z);roads.add(light);
+    const pool=groundGlow(9,14,'#ffca72',.32);pool.position.set(x,.13,z);roads.add(pool);roadLights.push({obj,light,pool});
+  }
+  updateRestore();
+}
 function updateRestore(){
   for(const s of structures){
     const damaged=!restored&&s.front&&['house','shop','apartment','hospital','bank'].includes(s.id);s.obj.visible=!damaged;s.ruins.visible=damaged;
@@ -205,6 +223,8 @@ function updateRestore(){
   }
   for(const lamp of streetlights){setPower(lamp.obj,restored);lamp.light.visible=lamp.pool.visible=night&&restored;}
   for(const prop of abandoned)prop.visible=!restored;for(const prop of civilDecor){prop.visible=restored;setPower(prop,true);}
+  for(const entry of roadLights){setPower(entry.obj,restored);entry.light.visible=entry.pool.visible=night&&restored;}
+  roadRuins.forEach(obj=>obj.visible=!restored);roadCivil.forEach(obj=>obj.visible=restored);
   wreckLight.visible=mode==='district'&&!restored;
   updateSingleState();
   $('restore').textContent=restored?'查看恢复前':'查看恢复后';render();
@@ -219,11 +239,11 @@ function updateSingleState(){
   if(mode==='single')$('sceneSubtitle').textContent=isBuilding(selected)?({intact:'完好 · 尚未运营',ruined:'原建筑局部塌损 · 占地与门窗保留',operating:'恢复运营 · 窗户与屋顶亮灯'})[singleState]:(selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0');
 }
 function setMode(next){
-  mode=next;district.visible=mode==='district';single.visible=mode==='single';$('district').classList.toggle('active',mode==='district');$('single').classList.toggle('active',mode==='single');$('restore').hidden=mode!=='district';
-  $('sceneTitle').textContent=mode==='district'?'一片恢复中的城区':selected.name;
-  $('sceneSubtitle').textContent=mode==='district'?'住宅 · 经营建筑 · 前线设施':selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0';
+  mode=next;$('modelSelection').hidden=mode==='roads';$('roadDetails').hidden=mode!=='roads';district.visible=mode==='district';single.visible=mode==='single';roads.visible=mode==='roads';$('roads').classList.toggle('active',mode==='roads');$('district').classList.toggle('active',mode==='district');$('single').classList.toggle('active',mode==='single');$('restore').hidden=mode==='single';
+  $('sceneTitle').textContent=mode==='roads'?'20米街道 × 40米主路':mode==='district'?'一片恢复中的城区':selected.name;
+  $('sceneSubtitle').textContent=mode==='roads'?'同一米制构件 · 路口连接 · 昼夜与运营对比':mode==='district'?'住宅 · 经营建筑 · 前线设施':selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0';
   fireLight.visible=night&&mode==='district';wreckLight.visible=mode==='district'&&!restored;updateSingleState();frame();
-  $('fireShot').hidden=mode!=='district'&&!selected.id.startsWith('cannon-');
+  $('fireShot').hidden=mode==='roads'||mode!=='district'&&!selected.id.startsWith('cannon-');
 }
 function selectAsset(asset,show=true){
   selected=asset;
@@ -254,6 +274,7 @@ function setLight(){
   sun.color.set(night?'#b9cfff':'#fff1cd');sun.intensity=night?.9:3.2;fireLight.visible=night&&mode==='district';
   $('light').textContent=night?'切换白天':'切换夜晚';updateRestore();render();
 }
+$('roads').addEventListener('click',()=>{if(ready)setMode('roads');});
 $('district').addEventListener('click',()=>{if(ready)setMode('district');});$('single').addEventListener('click',()=>{if(ready)setMode('single');});
 for(const id of ['angle','top'])$(id).addEventListener('click',()=>{angle=id;for(const other of ['angle','top'])$(other).classList.toggle('active',other===id);frame();});
 $('light').addEventListener('click',()=>{night=!night;setLight();});$('restore').addEventListener('click',()=>{restored=!restored;updateRestore();});$('reset').addEventListener('click',frame);
@@ -274,7 +295,7 @@ try{
     const url=root+(asset.local?'generated/':'kenney/')+file+'.glb?v=5';const gltf=await loader.loadAsync(url);models.set(id,gltf.scene);
     loaded++;$('loading').textContent=`正在装载模型… ${loaded}/${files.length}`;
   }));
-  ready=true;buildDistrict();selectAsset(selected,false);catalog();setMode('district');syncMotion();$('loading').hidden=true;$('loadStatus').textContent=`${assets.length} 个模型已就绪`;
+  ready=true;buildDistrict();buildRoadPreview();selectAsset(selected,false);catalog();setMode('district');syncMotion();$('loading').hidden=true;$('loadStatus').textContent=`${assets.length} 个模型已就绪`;
 }catch(error){
   $('loading').textContent='模型装载失败，请刷新后重试。';$('loadStatus').textContent='装载失败';console.error(error);
 }

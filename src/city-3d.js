@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {drawRoadTexture} from './city-textures.js?v=17';
+import {createRoadModel} from './city-road-model.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=3';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=5';
 import {createCityObservation} from './city-observation.js?v=3';
@@ -82,6 +82,7 @@ export function createCity3D(onReady){
   sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-64,right:64,top:64,bottom:-64,near:1,far:180});sun.shadow.bias=-.00025;sun.shadow.normalBias=.03;
   const buildings=new THREE.Group(),facilities=new THREE.Group(),enemies=new THREE.Group();scene.add(buildings,facilities,enemies);
   const streets=new THREE.Group();scene.add(streets);let terrain=null,roadLayout=null,streetKey='',lastShadow='';
+  let roads=new THREE.Group(),roadKey='';scene.add(roads);
   const localLights=[];
   const effects=createCityEffects(scene),effectCanvas=document.createElement('canvas');
   const cityCanvas=document.createElement('canvas'),facilityCanvas=document.createElement('canvas'),enemyCanvas=document.createElement('canvas');
@@ -120,7 +121,7 @@ export function createCity3D(onReady){
   return {
     isReady(){return ready;},
     observationPick(x,y,width,height){return ready?observation.pick(x,y,width,height):null;},
-    observationFrame(options){if(!ready)return null;if(terrain)terrain.visible=false;return observation.render({...options,objects:[buildings,facilities,streets],enemies,effects:effects.group});},
+    observationFrame(options){if(!ready)return null;if(terrain)terrain.visible=false;return observation.render({...options,objects:[buildings,facilities,streets,roads],enemies,effects:effects.group});},
     has(id){return ready&&entries.has(id);},
     hasFacility(id){return ready&&props.has(id);},
     facilityTopAt(id){const entry=props.get(id);return entry?entry.object.position.y+entry.height*entry.object.scale.y:0;},
@@ -132,7 +133,7 @@ export function createCity3D(onReady){
       entry.object.updateMatrixWorld(true);const ray=new THREE.Raycaster(new THREE.Vector3(x,entry.roof+1,y),new THREE.Vector3(0,-1,0));
       return ray.intersectObject(entry.object,true)[0]?.point.y??entry.roof;
     },
-    render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],dressing=[],fx}){
+    render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],dressing=[],roadCells=[],fx}){
       if(!ready)return null;
       const active=new Set(plots.map(p=>p.id));
       for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
@@ -144,9 +145,13 @@ export function createCity3D(onReady){
       if(layout&&(roadLayout!==layout||terrain.userData.cellMeters!==cellMeters)){
         if(terrain){terrain.removeFromParent();terrain.geometry.dispose();terrain.material.map.dispose();terrain.material.dispose();}
         const canvas=document.createElement('canvas');canvas.width=layout.width*32;canvas.height=layout.height*32;const ctx=canvas.getContext('2d');ctx.scale(32,32);ctx.fillStyle='#697b70';ctx.fillRect(0,0,layout.width,layout.height);
-        for(let y=0;y<layout.height;y++)for(let x=0;x<layout.width;x++)if(layout.tiles[y*layout.width+x]==='road')drawRoadTexture(ctx,layout,x,y,0,cellMeters);
+        for(let y=0;y<layout.height;y++)for(let x=0;x<layout.width;x++)if(layout.tiles[y*layout.width+x]==='road'){ctx.fillStyle='#475057';ctx.fillRect(x,y,1,1);}
         const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
         terrain=new THREE.Mesh(new THREE.PlaneGeometry(layout.width,layout.height),new THREE.MeshStandardMaterial({map:texture,roughness:.95}));terrain.rotation.x=-Math.PI/2;terrain.position.set(layout.width/2,-.015,layout.height/2);terrain.receiveShadow=true;scene.add(terrain);terrain.userData.cellMeters=cellMeters;roadLayout=layout;
+      }
+      const nextRoads=cellMeters+':'+roadCells.join(',');
+      if(roads.userData.layout!==layout||nextRoads!==roadKey){
+        release({object:roads});const visibleRoads=new Set(roadCells);roads=createRoadModel(layout,cellMeters,id=>visibleRoads.has(id));roads.userData.layout=layout;scene.add(roads);roadKey=nextRoads;
       }
       const nextStreets=cellMeters+JSON.stringify([lamps,dressing]),streetLights=[];
       const rawStreet=models.get('street'),streetBounds=new THREE.Box3().setFromObject(rawStreet),streetScale=7.5/cellMeters/(streetBounds.max.y-streetBounds.min.y);
@@ -186,7 +191,7 @@ export function createCity3D(onReady){
       effects.updateLights(lightItems,fx.time,night,visible);
       // 静态云纹/悬停刷新复用城市画面；扫光与火光读取同一动效时间重画承光层。
       const shapes=plots.map(p=>`${p.id}:${entries.get(p.id).signature}`).join('|');
-      const signature=shapes+plots.map(p=>p.powered?'1':'0').join('')+streetKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightBudget}:${fx.observer??false}:${fx.time}`;
+      const signature=shapes+plots.map(p=>p.powered?'1':'0').join('')+streetKey+roadKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightBudget}:${fx.observer??false}:${fx.time}`;
       if(signature!==lastFrame){
         const dimensions=`${width}:${height}`;if(pixels!==dimensions){renderer.setSize(width,height,false);pixels=dimensions;}
         camera.left=-panX/cell;camera.right=(width-panX)/cell;camera.top=panY/cell;camera.bottom=-(height-panY)/cell;camera.updateProjectionMatrix();
@@ -194,7 +199,7 @@ export function createCity3D(onReady){
         sun.color.set('#fff1cd').lerp(new THREE.Color('#b9cfff'),night);sun.intensity=3.2-night*2.3;
         const shadowKey=shapes+streetKey;if(shadowKey!==lastShadow){renderer.shadowMap.needsUpdate=true;lastShadow=shadowKey;}
         // 斜视只准备同一批对象，由观察相机统一画；不再拷贝四张不会显示的俯视层。
-        if(!fx.observer){buildings.visible=true;facilities.visible=false;enemies.visible=false;streets.visible=true;effects.group.visible=false;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);}lastFrame=signature;
+        if(!fx.observer){buildings.visible=true;facilities.visible=false;enemies.visible=false;streets.visible=true;roads.visible=true;effects.group.visible=false;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);}lastFrame=signature;
       }
       return cityCanvas;
     },
@@ -221,7 +226,7 @@ export function createCity3D(onReady){
       if(signature!==lastProps){
         effects.updateTransitions(fx.transitions??[],fx.time);effects.updateShots(fx.shots,props,fx.time,fx.cell);
         if(!fx.observer){
-          buildings.visible=false;facilities.visible=true;enemies.visible=false;streets.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
+          buildings.visible=false;facilities.visible=true;enemies.visible=false;streets.visible=false;roads.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
           facilities.visible=false;enemies.visible=true;renderer.render(scene,camera);capture(enemyCanvas);enemies.visible=false;
           effects.group.visible=true;renderer.render(scene,camera);capture(effectCanvas);
         }

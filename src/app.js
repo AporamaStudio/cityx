@@ -1,12 +1,12 @@
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView} from './city-view.js?v=2';
-import {createCity3D} from './city-3d.js?v=28';
+import {createCity3D} from './city-3d.js?v=29';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps} from './city-streets.js?v=3';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=4';
 import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
 import {createTowerOverlay} from './tower-overlay.js?v=18';
-import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=17';
+import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=18';
 import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=3';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=8';
@@ -545,7 +545,7 @@ function paintMap() {
   const fx={time:effectTime,cell:size,observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
-  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,fx});
+  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,roadCells:state.layout.tiles.flatMap((type,id)=>type==='road'&&visibleCell(id)?[id]:[]),fx});
   // 道路承接真实点光与太阳阴影；在热力、格线和云雾下面一次性裁剪绘制。
   if(cityFrame){ctx.save();ctx.beginPath();for(let y=bounds.top;y<bounds.bottom;y++)for(let x=bounds.left;x<bounds.right;x++)if(visibleCell(key(x,y))&&state.layout?.tiles[key(x,y)]==='road')ctx.rect(x,y,1,1);ctx.clip();ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
   const eligibleCells=weaponPlacementReady?view.towers.eligible(weaponType()):new Set();
@@ -687,6 +687,7 @@ function paintMap() {
   const brighten=(color,amount)=>`rgb(${[1,3,5].map(i=>{const value=parseInt(color.slice(i,i+2),16);return Math.round(value+(255-value)*amount);}).join(',')})`;
   ctx.save();clipSight();
   // 复用已锁定路径，关联路线最后描画；临时显线不修改开关或揭开迷雾。
+  const routeUnit=Math.min(size,48)/size; // 放大近景只增加地图细节，路线线宽和箭头不无限变粗。
   const strokeRoute=(path,index)=>{
     const offset=(index%3-1)*.12;
     ctx.beginPath();path.forEach((id,i)=>{const [x,y]=xy(id);if(!i)ctx.moveTo(x+.5+offset,y+.5);else ctx.lineTo(x+.5+offset,y+.5);});ctx.stroke();
@@ -695,31 +696,31 @@ function paintMap() {
     const offset=(index%3-1)*.12;
     for(let i=1;i<path.length-1;i+=spacing){
       const [x,y]=xy(path[i]),[nx,ny]=xy(path[i+1]);
-      ctx.save();ctx.translate(x+.5+offset,y+.5);ctx.rotate(Math.atan2(ny-y,nx-x));ctx.beginPath();ctx.moveTo(-.15,-.16);ctx.lineTo(.1,0);ctx.lineTo(-.15,.16);ctx.stroke();ctx.restore();
+      ctx.save();ctx.translate(x+.5+offset,y+.5);ctx.rotate(Math.atan2(ny-y,nx-x));ctx.beginPath();ctx.moveTo(-.15*routeUnit,-.16*routeUnit);ctx.lineTo(.1*routeUnit,0);ctx.lineTo(-.15*routeUnit,.16*routeUnit);ctx.stroke();ctx.restore();
     }
   };
   if ($('routes').checked || wallEdit || postGhost) displayedRoutes.forEach(route => {
     if(focusActive&&linkedRoute(route))return;
     const {path,index,future}=route;
     ctx.setLineDash(future?[.45,.3]:[]);
-    ctx.strokeStyle='#392328';ctx.globalAlpha=(future?.35:.8)*(focusActive?.3:1);ctx.lineWidth=Math.max(future?.13:.18,2/size);strokeRoute(path,index);
-    ctx.strokeStyle=routeColor(index);ctx.globalAlpha=(future?.35:.8)*(focusActive?.3:1);ctx.lineWidth=future?.065:.10;
+    ctx.strokeStyle='#392328';ctx.globalAlpha=(future?.35:.8)*(focusActive?.3:1);ctx.lineWidth=Math.max((future?.13:.18)*routeUnit,2/size);strokeRoute(path,index);
+    ctx.strokeStyle=routeColor(index);ctx.globalAlpha=(future?.35:.8)*(focusActive?.3:1);ctx.lineWidth=(future?.065:.10)*routeUnit;
     strokeRoute(path,index);routeArrows(path,index,4);
   });
   for(const route of focusedRoutes){
     const {path,index,future}=route,id=linked&&linkedRoute(route,linked)?linked:pinnedSource;
     const color=routeColor(routeSources.findIndex(source=>sourceIdentity(source)===id));
     ctx.setLineDash(future?[.5,.32]:[]);ctx.lineJoin='round';ctx.lineCap='round';
-    ctx.globalAlpha=.95;ctx.strokeStyle='#172029';ctx.lineWidth=Math.max(.32,5/size);strokeRoute(path,index);
-    ctx.strokeStyle=brighten(color,.18);ctx.lineWidth=Math.max(.16,2.5/size);strokeRoute(path,index);
-    ctx.setLineDash([]);ctx.strokeStyle=brighten(color,.35);ctx.lineWidth=Math.max(.10,1.5/size);routeArrows(path,index,6);
+    ctx.globalAlpha=.95;ctx.strokeStyle='#172029';ctx.lineWidth=Math.max(.32*routeUnit,5/size);strokeRoute(path,index);
+    ctx.strokeStyle=brighten(color,.18);ctx.lineWidth=Math.max(.16*routeUnit,2.5/size);strokeRoute(path,index);
+    ctx.setLineDash([]);ctx.strokeStyle=brighten(color,.35);ctx.lineWidth=Math.max(.10*routeUnit,1.5/size);routeArrows(path,index,6);
   }
   for(const potential of potentials){
     // 潜在方向用更长、更疏的虚线；仍受同一S0/S1裁剪，不揭雾、不预告日期。
     ctx.setLineDash([.75,.5]);ctx.lineCap='butt';ctx.lineJoin='round';ctx.globalAlpha=.7;
-    ctx.strokeStyle='#392328';ctx.lineWidth=Math.max(.24,3.5/size);strokeRoute(potential.path,potential.index);
-    ctx.strokeStyle=brighten(enemyRouteColor(potential.index),.12);ctx.lineWidth=Math.max(.11,1.6/size);strokeRoute(potential.path,potential.index);
-    ctx.setLineDash([]);ctx.globalAlpha=.6;ctx.strokeStyle=brighten(enemyRouteColor(potential.index),.25);ctx.lineWidth=Math.max(.08,1.2/size);routeArrows(potential.path,potential.index,6);
+    ctx.strokeStyle='#392328';ctx.lineWidth=Math.max(.24*routeUnit,3.5/size);strokeRoute(potential.path,potential.index);
+    ctx.strokeStyle=brighten(enemyRouteColor(potential.index),.12);ctx.lineWidth=Math.max(.11*routeUnit,1.6/size);strokeRoute(potential.path,potential.index);
+    ctx.setLineDash([]);ctx.globalAlpha=.6;ctx.strokeStyle=brighten(enemyRouteColor(potential.index),.25);ctx.lineWidth=Math.max(.08*routeUnit,1.2/size);routeArrows(potential.path,potential.index,6);
   }
   ctx.restore();
   if (tool !== null && hover !== null && (state.phase === 'build' || weaponHover) && (!productionSite(hover,state)||weaponHover||postHover)) {
@@ -1085,7 +1086,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     drawCitySurroundings(g,state.layout,nightMix,null,fogColor(nightMix));
     for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
       const id=key(x,y),known=visibleCell(id);g.fillStyle=known?palette.groundB:state.layout.tiles[id]==='road'?palette.unknownRoad:palette.unknownGround;g.fillRect(x,y,1,1);
-      if(known&&state.layout.tiles[id]==='road')drawRoadTexture(g,state.layout,x,y,0,view.controlState.params.cellMeters);
+      if(known&&state.layout.tiles[id]==='road'){g.fillStyle='#475057';g.fillRect(x,y,1,1);}
       if($('heat').checked&&currentlyVisible(id)&&fire.get(id)){g.fillStyle=`rgba(99,211,166,${Math.min(.6,.17+fire.get(id)*.045)})`;g.fillRect(x,y,1,1);}
     }
     const detailed=new Set(plots.map(p=>p.id));

@@ -1,5 +1,7 @@
 // 轻量程序贴图：日/夜各生成一套并缓存，纹理只表达材质，不参与通行或受击规则。
 import {fogColor} from './fog.js?v=18';
+import {roadMarkings,roadCellParts} from './city-roads.js?v=1';
+export {roadMarkings} from './city-roads.js?v=1';
 const cache=new Map(),PX=32;
 const palettes={
   day:{road:'#343e47',edge:'#a3aaa4',lane:'#b3aa87',yard:'#697b70',ruin:'#877f6b',roof:'#b0a084',crack:'#454b46',factory:'#739697',factoryRoof:'#a4c2b9',home:'#af775c',homeWall:'#dfc6a0',window:'#425d64',grass:'#738b67'},
@@ -14,7 +16,7 @@ function layers(ctx,x,y,w,h,mix,get){
   if(mix>0){ctx.save();ctx.globalAlpha=mix;ctx.drawImage(get('night'),x,y,w,h);ctx.restore();}
 }
 // 按实际横断面计算中心；宽路的中线位于整条道路中央，不按每个格子分别居中。
-const roadGeometry=new WeakMap();
+
 const surroundings=new WeakMap(),SURROUNDING_BORDER=8;
 
 // 外围只是固定景物：接续边缘道路，楼群不带格线、灯光、收益或交互数据。
@@ -95,51 +97,15 @@ export function drawCitySurroundings(ctx,layout,mix,explored,backdrop){
   ctx.strokeRect(0,0,w,h);ctx.restore();
 }
 
-export function roadMarkings(layout){
-  if(roadGeometry.has(layout))return roadGeometry.get(layout);
-  const {width:w,height:h,tiles}=layout,marks=new Map();
-  const road=(x,y)=>x>=0&&y>=0&&x<w&&y<h&&tiles[y*w+x]==='road';
-  const span=(x,y,dx,dy)=>{let lo=0,hi=0;while(road(x+(lo-1)*dx,y+(lo-1)*dy))lo--;while(road(x+(hi+1)*dx,y+(hi+1)*dy))hi++;return {lo,hi,size:hi-lo+1};};
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(road(x,y)){
-    const across=span(x,y,1,0),along=span(x,y,0,1);
-    const vertical=across.size<=3&&along.size>3,horizontal=along.size<=3&&across.size>3;
-    const section=vertical?across:horizontal?along:null;
-    let crossing=0;
-    if(section)for(const sign of [-1,1]){
-      const nx=x+(horizontal?sign:0),ny=y+(vertical?sign:0);
-      if(road(nx,ny)&&span(nx,ny,vertical?1:0,vertical?0:1).size>section.size+1)crossing=sign;
-    }
-    marks.set(y*w+x,{mask:(road(x,y-1)?1:0)|(road(x+1,y)?2:0)|(road(x,y+1)?4:0)|(road(x-1,y)?8:0),axis:vertical?'v':horizontal?'h':'',center:section?(section.lo+section.hi+1)/2:0,width:section?.size??0,crossing});
-  }
-  roadGeometry.set(layout,marks);return marks;
-}
 // 沥青、连续浅色路缘、路口斑马线形成道路语言；交叉口内部不硬画中线。
 export function drawRoadTexture(ctx,layout,x,y,mix,cellMeters=20){
-  const {mask,axis,center,width,crossing}=roadMarkings(layout).get(y*layout.width+x);
-  layers(ctx,x,y,1,1,mix,time=>texture(`road:${mask}:${axis}:${center}:${width}:${crossing}:${cellMeters}:${time}`,1,1,g=>{
-    const p=palettes[time];g.fillStyle=p.road;g.fillRect(0,0,1,1);
-    g.fillStyle=time==='day'?'#ffffff09':'#a9ccff08';
-    for(let i=0;i<10;i++)g.fillRect((i*17%29)/32,(i*11%31)/32,.025,.025);
-    const curb=Math.min(.18,1.8/cellMeters);g.fillStyle=p.edge;
-    if(!(mask&1))g.fillRect(0,0,1,curb);if(!(mask&4))g.fillRect(0,1-curb,1,curb);
-    if(!(mask&8))g.fillRect(0,0,curb,1);if(!(mask&2))g.fillRect(1-curb,0,curb,1);
-    if(!axis)return;
-    const stripe=(cross,long,cw,len)=>axis==='v'?g.fillRect(cross,long,cw,len):g.fillRect(long,cross,len,cw);
-    // 约3.5m车道、15cm标线与50cm斑马条，宽路共用中心，不按每格放大。
-    const line=Math.min(.025,.15/cellMeters),lane=3.5/cellMeters;
-    if(crossing){
-      g.fillStyle=time==='day'?'#bdc5bd':'#8198a2';
-      for(let i=.12;i<.9;i+=1/cellMeters)stripe(i,crossing<0?.10:.74,.5/cellMeters,.16);
-    }else{
-      g.fillStyle=p.lane;
-      for(const offset of [-.20,.20])stripe(center+offset/cellMeters-line/2,0,line,1);
-      g.fillStyle=time==='day'?'#cad1c5':'#879ca2';
-      const lanes=Math.min(3,Math.max(1,Math.floor((width*cellMeters-3.6)/7)));
-      for(let i=1;i<lanes;i++)for(const sign of [-1,1]){
-        const cross=center+sign*i*lane-line/2;stripe(cross,.08,line,.22);stripe(cross,.58,line,.22);
-      }
+  layers(ctx,x,y,1,1,mix,time=>texture(`road-v2:${cellMeters}:${time}:${JSON.stringify(roadMarkings(layout).get(y*layout.width+x))}`,1,1,g=>{
+    for(const part of roadCellParts(layout,x,y,cellMeters)){
+      g.fillStyle=part.color;
+      g.fillRect(part.x-x,part.y-y,part.w,part.h);
     }
-  },64));
+    if(time==='night'){g.fillStyle='#12304977';g.fillRect(0,0,1,1);}
+  },128));
 }
 export function drawBlockTexture(ctx,p,kind,mix){
   const w=p.width??p.size,h=p.height??p.size,variant=(p.x*7+p.y*13)%4;
