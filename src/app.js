@@ -1,5 +1,5 @@
-import {createCity3D} from './city-3d.js?v=19';
-import {operatingStreetLamps} from './city-streets.js?v=1';
+import {createCity3D} from './city-3d.js?v=20';
+import {operatingStreetLamps,ruinStreetProps} from './city-streets.js?v=2';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=4';
 import {createVisibility} from './visibility.js?v=6';
@@ -561,7 +561,8 @@ function paintMap() {
   const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,campWidth,campWidth,{dead:state.hp<=0});
   const campPlot=state.sites.find(p=>p.role==='camp');if(campPlot)prop('camp-plaza','plaza',campPlot.x+(campPlot.width??campPlot.size)/2,campPlot.y+(campPlot.height??campPlot.size)/2,campPlot.width??campPlot.size,campPlot.height??campPlot.size);
   for(const source of displayedEnemySources()){const w=source.width??1,h=source.height??1;prop('source:'+sourceIdentity(source),source.hp===0?'sourceRuined':'source',(source.bx??source.x)+w/2,(source.by??source.y)+h/2,w*.72,h*.72,{dead:source.hp===0,roof:city3D?.baseAt(source.site)??0});}
-  facilityItems.push(...wrecks);
+  const debris=ruinStreetProps(cityPlots,{layout:state.layout,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
+  facilityItems.push(...wrecks,...debris);
   for(const frame of enemyFrames)if(frame.alpha>0)prop(frame.id,'enemy',frame.x+.5,frame.y+.5,2.85/controlState.params.cellMeters,1.9/controlState.params.cellMeters,{alpha:frame.alpha,visualScale:frame.scale,angle:frame.angle,fogAlpha:frame.fogAlpha,fogColor:fogColor(nightMix)});
   const facilityFrame=city3D?.renderFacilities(facilityItems,nightMix,fx);
   // 3D对象分层显示：先按原权限筛选，再在原绘制位置裁剪，不挡住路线和HP。
@@ -608,7 +609,7 @@ function paintMap() {
     // 街区标签在屏幕空间绘制，缩小棋盘时仍保持可读。
   }
   for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)){const [x,y]=xy(id);if(facilityFrame)drawCityFacility('wall:'+id,x,y);}
-  for(const wreck of wrecks)drawCityFacility(wreck.id,wreck.x-.5,wreck.y-.5);
+  for(const wreck of [...wrecks,...debris])drawCityFacility(wreck.id,Math.floor(wreck.x),Math.floor(wreck.y));
   const effectFrame=city3D?.effectsFrame();if(effectFrame){ctx.save();clipSight();ctx.drawImage(effectFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
   if(mapFogEnabled())drawFog(ctx,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom);
   // 内侧明显、外侧轻薄，单独一段边界也能辨认方向；缓存色带放在战术信息下方。

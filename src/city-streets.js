@@ -16,3 +16,16 @@ export function operatingStreetLamps(plots,{layout,controlled,visible,occupied,c
   }
   return lamps;
 }
+
+// 每个已知废墟最多一处小街景，靠路缘且不占设施；恢复时随原地块状态消失。
+export function ruinStreetProps(plots,{layout,visible,occupied,cellMeters}){
+  const props=[];
+  for(const p of plots)if(p.status==='ruin'){
+    const candidates=[[p.x-1,p.y+p.h-1,-1,0],[p.x+p.w,p.y,1,0],[p.x,p.y-1,0,-1],[p.x+p.w-1,p.y+p.h,0,1]];
+    const c=candidates.find(([x,y])=>x>=0&&y>=0&&x<layout.width&&y<layout.height&&layout.tiles[y*layout.width+x]==='road'&&visible(y*layout.width+x)&&!occupied.has(y*layout.width+x));
+    if(!c)continue;
+    const [x,y,dx,dy]=c,asset=p.id%2?'trash':'rubble',w=(asset==='trash'?2.4:4.5)/cellMeters,h=(asset==='trash'?1.8:3)/cellMeters;
+    props.push({id:'debris:'+p.id,asset,x:x+(dx?dx<0?.82:.18:.5),y:y+(dy?dy<0?.82:.18:.5),w,h});
+  }
+  return props;
+}

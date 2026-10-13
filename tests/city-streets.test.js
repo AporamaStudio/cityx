@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {operatingStreetLamps} from '../src/city-streets.js';
+import {operatingStreetLamps,ruinStreetProps} from '../src/city-streets.js';
 
 test('运营路灯靠路缘且灯臂朝道路，隐藏、未控、被占道路不生成灯',()=>{
   const layout={width:10,height:10,tiles:Array(100).fill('road')},plot={id:22,x:2,y:2,w:2,h:2,powered:true},controlled=new Set(Array.from({length:100},(_,i)=>i)),occupied=new Set();
@@ -19,4 +19,14 @@ test('运营路灯靠路缘且灯臂朝道路，隐藏、未控、被占道路�
   assert.deepEqual(operatingStreetLamps([plot],{...input,controlled:new Set()}),[]);
   assert.deepEqual(operatingStreetLamps([plot],{...input,occupied:controlled}),[]);
   assert.deepEqual({layout,plot,controlled,occupied},before);
+});
+
+test('废墟街景随恢复消失，隐藏道路或设施占用不生成，尺寸读取米制比例',()=>{
+  const layout={width:10,height:10,tiles:Array(100).fill('road')},plot={id:22,x:2,y:2,w:2,h:2,status:'ruin'};
+  const options={layout,visible:()=>true,occupied:new Set(),cellMeters:20},a=ruinStreetProps([plot],options);
+  assert.equal(a.length,1);assert.equal(a[0].w,.225);assert.ok(a[0].x<2);assert.ok(a[0].x-Math.floor(a[0].x)>.7);
+  assert.deepEqual(ruinStreetProps([{...plot,status:'building'}],options),[]);
+  assert.deepEqual(ruinStreetProps([plot],{...options,visible:()=>false}),[]);
+  assert.deepEqual(ruinStreetProps([plot],{...options,occupied:new Set(Array.from({length:100},(_,i)=>i))}),[]);
+  assert.equal(ruinStreetProps([plot],{...options,cellMeters:40})[0].w,a[0].w/2);
 });
