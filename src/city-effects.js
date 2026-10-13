@@ -71,7 +71,7 @@ export function createCityEffects(scene){
         }
       }
     },
-    updateShots(items,hitItems,props,time,cell,cellMeters=20,night=0){
+    updateShots(items,hitItems,props,time,cell,cellMeters=20,night=0,pixelsAt=null){
       const active=new Set(items.map(item=>item.id));
       for(const [id,entry] of shots)if(!props.has('tower:'+id)){dispose(entry.group);shots.delete(id);}else if(!active.has(id)){entry.group.visible=false;entry.at=null;}
       for(const item of items){
@@ -82,14 +82,16 @@ export function createCityEffects(scene){
           entry.side=Math.round(item.at*1000)+item.id;const start=muzzlePoint(body.motion.muzzles,entry.side);if(!start){entry.group.visible=false;continue;}
           entry.at=item.at;entry.start=start;entry.end=targetPoint(item,props,start,cellMeters);
         }
-        entry.update(entry.start,entry.end,age,{unitsPerMeter:1/cellMeters,pixelsPerUnit:cell,alpha:item.alpha,night,muzzle:muzzlePoint(body.motion.muzzles,entry.side)??entry.start});
+        const pixels=pixelsAt?.(entry.start.x,entry.start.z,entry.start.y)??cell;
+        entry.update(entry.start,entry.end,age,{unitsPerMeter:1/cellMeters,pixelsPerUnit:pixels,alpha:pixels>0?item.alpha:0,night,muzzle:muzzlePoint(body.motion.muzzles,entry.side)??entry.start});
       }
       const hitIds=new Set(hitItems.map(hit=>hit.id));for(const [id,entry] of impacts)if(!hitIds.has(id)){dispose(entry.group);impacts.delete(id);}
       for(const hit of hitItems){
         if(!impacts.has(hit.id))impacts.set(hit.id,createImpactVFX(group));const entry=impacts.get(hit.id);
         if(entry.at!==hit.at){entry.at=hit.at;const shot=items.find(item=>hit.sourceId&&item.sourceId===hit.sourceId);entry.point=shot&&shots.get(shot.id)?.end?.clone()||targetPoint(hit,props,null,cellMeters);}
         const delay=SHOT_STYLES[hit.type]?.flight??.14;
-        entry.update(entry.point,time-hit.at-delay,{unitsPerMeter:1/cellMeters,pixelsPerUnit:cell,alpha:hit.alpha});
+        const pixels=pixelsAt?.(entry.point.x,entry.point.z,entry.point.y)??cell;
+        entry.update(entry.point,time-hit.at-delay,{unitsPerMeter:1/cellMeters,pixelsPerUnit:pixels,alpha:pixels>0?hit.alpha:0});
       }
     },
   };

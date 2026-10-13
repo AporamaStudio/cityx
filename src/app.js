@@ -1,7 +1,7 @@
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=1';
-import {projectView,groundAt,panView,observationView,viewBounds,orbitView} from './city-view.js?v=2';
-import {createCity3D} from './city-3d.js?v=36';
+import {projectView,groundAt,panView,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=3';
+import {createCity3D} from './city-3d.js?v=37';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=5';
@@ -13,8 +13,8 @@ import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=3';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=9';
 import {createGameAudio} from './audio.js?v=10';
-import { SIZE, DEFAULTS } from './config.js?v=77';
-import { bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=93';
+import { SIZE, DEFAULTS } from './config.js?v=79';
+import { bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=94';
 import {generateCityMap} from './city-map.js?v=9';
 import {readMapSettings} from './map-settings.js?v=1';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -85,13 +85,14 @@ let state = createCampaign(DEFAULTS,undefined,cityLayout), tool = 'wall', hover 
 let sourceDrafts=[],editingNight=1,editorSourcePreview=null;
 const blockedActionReasons=new Map();
 let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0, cameraBottom=0;
-let viewMode='top',viewYaw=Math.PI/4,viewElevation=55*Math.PI/180;
+let viewMode='top',viewYaw=Math.PI/4,viewElevation=DEFAULTS.obliqueElevationDegrees*Math.PI/180;
 const observationGround=document.createElement('canvas'),observationMist=document.createElement('canvas');
 let observationGroundKey='';
-const cameraView=()=>{const view={width,height,panX,panY,cell:base*zoom,zoom,yaw:viewMode==='top'?0:viewYaw,elevation:viewMode==='top'?Math.PI/2:viewElevation};return viewMode==='top'?view:observationView(view,SIZE);};
+const cameraView=()=>{const view={width,height,panX,panY,cell:base*zoom,zoom,projection:viewMode==='free'?previewParams().freeProjection:'orthographic',fov:previewParams().freePerspectiveFovDegrees,yaw:viewMode==='top'?0:viewYaw,elevation:viewMode==='top'?Math.PI/2:viewMode==='oblique'?previewParams().obliqueElevationDegrees*Math.PI/180:viewElevation};return viewMode==='top'?view:observationView(view,SIZE);};
 function setViewMode(mode){
   if(mode!=='top'&&!city3D?.isReady()){showTopNotice('3D模型仍在加载，请稍后。');return;}
-  viewMode=mode;$('orbitControls').hidden=mode!=='free';if(mode==='oblique'){viewYaw=Math.PI/4;viewElevation=55*Math.PI/180;}
+  if(viewMode==='oblique')viewElevation=previewParams().obliqueElevationDegrees*Math.PI/180;
+  viewMode=mode;$('orbitControls').hidden=mode!=='free';if(mode==='oblique'){viewYaw=Math.PI/4;viewElevation=previewParams().obliqueElevationDegrees*Math.PI/180;}
   for(const button of document.querySelectorAll('[data-city-view]')){const selected=button.dataset.cityView===mode;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));}
   canvas.setAttribute('aria-label',mode==='top'?'60乘60防守棋盘，单击布置，拖动平移':mode==='free'?'自由观察，拖动平移，Shift拖动或方向键旋转；建设返回俯视':'城市斜视观察，拖动平移；建设操作返回俯视');
   tool=null;hover=null;dragging=null;mapPointerSource=null;update();
@@ -370,7 +371,7 @@ function changeZoom(factor, x = width / 2, y = (height-cameraBottom) / 2) {
 }
 function cellAt(event) {
   const rect=canvas.getBoundingClientRect(),point=(viewMode!=='top'?city3D?.observationPick(event.clientX-rect.left,event.clientY-rect.top,width,height):null)??groundAt(event.clientX-rect.left,event.clientY-rect.top,cameraView()),x=Math.floor(point.x),y=Math.floor(point.y);
-  return inside(x, y)&&visibleCell(key(x,y)) ? key(x, y) : null;
+  return !point.sky&&inside(x, y)&&visibleCell(key(x,y)) ? key(x, y) : null;
 }
 
 // 先绘制地形和覆盖，再叠加路线、设施、敌群，确保信息优先级清晰。
@@ -422,6 +423,7 @@ function mapDisplay(){
 // 只更新听音位置，开火事件、音色和时序不变；斜视以实际屋顶投影判断屏内外。
 function cannonSoundView(id){
   const [x,y]=xy(id),cell=base*zoom,p=projectView(x+.5,y+.5,viewMode==='top'?0:city3D?.roofAt(productionId(id,state),x+.5,y+.5)??0,cameraView());
+  if(p.hidden)return null;
   return shotSoundView(id,{panX:p.x-(x+.5)*cell,panY:p.y-(y+.5)*cell,cell,width,height,zoom});
 }
 function paintMap() {
@@ -544,7 +546,8 @@ function paintMap() {
   const vehicles=streetVehicles(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys()]),lamps:streetLamps,cellMeters:controlState.params.cellMeters}),wrecks=vehicles.filter(car=>car.asset==='wreck');
   cityTransitions=cityTransitions.filter(event=>effectTime-event.at<.8&&currentlyVisible(event.cell));
   const streetDressing=[...operatingStreetProps(streetLamps,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys(),...vehicles.map(p=>key(Math.floor(p.x),Math.floor(p.y)))]),cellMeters:controlState.params.cellMeters}),...vehicles.filter(car=>car.asset!=='wreck')];
-  const fx={time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
+  const effectView=cameraView();
+  const fx={cameraKey:JSON.stringify(effectView),time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),pixelsAt:(x,y,z)=>viewPixelScale(x,y,z,effectView),observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
   const emptyPlots=[...view.towers.plots].filter(([,p])=>p.content.status==='empty').map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,kind:p.site.kind,role:p.site.role,status:p.content.status}));
@@ -1129,20 +1132,21 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   for(const id of focus)if(forecastDay===state.day&&!routeSources.some(s=>sourceIdentity(s)===id)){
     view.potentialRoutes??=new Map();if(!view.potentialRoutes.has(id))view.potentialRoutes.set(id,potentialSourceRoute(state,id));const p=view.potentialRoutes.get(id);if(p)potentials.push({...p,potential:true});
   }
-  const sightClip=new Path2D();if(mapFogEnabled())for(const id of sight){const [x,y]=xy(id),corners=[[x,y],[x+1,y],[x+1,y+1],[x,y+1]].map(([x,y])=>point(x,y,.04));sightClip.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>sightClip.lineTo(p.x,p.y));sightClip.closePath();}
+  const sightClip=new Path2D();if(mapFogEnabled())for(const id of sight){const [x,y]=xy(id),corners=[[x,y],[x+1,y],[x+1,y+1],[x,y+1]].map(([x,y])=>point(x,y,.04));if(corners.some(p=>p.hidden))continue;sightClip.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>sightClip.lineTo(p.x,p.y));sightClip.closePath();}
   for(const route of [...routes,...potentials]){
     const index=route.sources?.[0]??route.index??0,source=route.potential?displayedEnemySources().find(s=>s.id===route.sourceId):routeSources[index],focused=route.potential||focus.has(source&&sourceIdentity(source));if(!$('routes').checked&&!focused)continue;
     const color=enemyRouteColor(source?.index??(sourceNumber(source)>=0?sourceNumber(source):index)),lineWidth=focused?4:2.8,spacing=focused?42:56;
     ctx.save();if(mapFogEnabled())ctx.clip(sightClip);ctx.lineCap='round';ctx.lineJoin='round';let walked=0,nextArrow=spacing*.5;
     // 深色衬边托住敌方色线；箭头按屏幕距离排布，斜视/远景仍可辨方向。
     for(let i=1;i<route.path.length;i++){
-      const [x,y]=xy(route.path[i-1]),[nx,ny]=xy(route.path[i]),a=point(x+.5,y+.5,.04),b=point(nx+.5,ny+.5,.04),length=Math.hypot(b.x-a.x,b.y-a.y);
+      const [x,y]=xy(route.path[i-1]),[nx,ny]=xy(route.path[i]),a=point(x+.5,y+.5,.04),b=point(nx+.5,ny+.5,.04);if(a.hidden||b.hidden)continue;const length=Math.hypot(b.x-a.x,b.y-a.y);
       const alpha=mapFogEnabled()?view.visibility.enemyAlpha((x+nx)/2+.5,(y+ny)/2+.5):1,start=walked;walked+=length;
       ctx.globalAlpha=alpha*(focus.size && !focused ? .48 : 1);ctx.setLineDash(route.potential||route.future?[14,10]:[]);ctx.lineDashOffset=-start;
       if(alpha>0)for(const [stroke,width] of [['#211c25',lineWidth+3],[color,lineWidth]]){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.beginPath();segment(a,b);ctx.stroke();}
       while(nextArrow<=walked&&length>0){
         const t=(nextArrow-start)/length;nextArrow+=spacing;if(t<0)continue;
-        const arrowAlpha=mapFogEnabled()?view.visibility.enemyAlpha(x+.5+(nx-x)*t,y+.5+(ny-y)*t):1;if(arrowAlpha<=0)continue;
+        const scaleA=viewPixelScale(x+.5,y+.5,.04,camera),scaleB=viewPixelScale(nx+.5,ny+.5,.04,camera),worldT=t*scaleA/((1-t)*scaleB+t*scaleA);
+        const arrowAlpha=mapFogEnabled()?view.visibility.enemyAlpha(x+.5+(nx-x)*worldT,y+.5+(ny-y)*worldT):1;if(arrowAlpha<=0)continue;
         const angle=Math.atan2(b.y-a.y,b.x-a.x),tip={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},size=focused?9:7;
         ctx.save();ctx.globalAlpha=arrowAlpha*(focus.size && !focused ? .48 : 1);ctx.setLineDash([]);ctx.translate(tip.x,tip.y);ctx.rotate(angle);
         ctx.beginPath();ctx.moveTo(size*.5,0);ctx.lineTo(-size*.6,-size*.5);ctx.lineTo(-size*.3,0);ctx.lineTo(-size*.6,size*.5);ctx.closePath();
@@ -1150,27 +1154,27 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
       }
     }ctx.restore();
   }
-  const border=new Path2D();for(const [x,y,nx,ny] of view.boundary){const a=point(x,y,.02),b=point(nx,ny,.02);border.moveTo(a.x,a.y);border.lineTo(b.x,b.y);}
+  const border=new Path2D();for(const [x,y,nx,ny] of view.boundary){const a=point(x,y,.02),b=point(nx,ny,.02);if(a.hidden||b.hidden)continue;border.moveTo(a.x,a.y);border.lineTo(b.x,b.y);}
   drawControlBorderLine(ctx,border,1,view.controlState.params,nightMix);
   const badge=(text,x,y,color='#f3d398',alpha=1)=>{
-    if(x< -30||y< -30||x>width+30||y>height+30)return;
+    if(!Number.isFinite(x)||!Number.isFinite(y)||x< -30||y< -30||x>width+30||y>height+30)return;
     ctx.save();ctx.globalAlpha=alpha;ctx.font='600 11px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';const w=Math.max(16,ctx.measureText(text).width+8);ctx.fillStyle='#172630ed';ctx.fillRect(x-w/2,y-8,w,16);ctx.fillStyle=color;ctx.fillText(text,x,y);ctx.restore();
   };
   for(const item of items)if(['near','far','watch','camp'].includes(item.asset)){
-    const p=point(item.x,item.y,city3D.facilityTopAt(item.id)+.03);ctx.save();ctx.fillStyle=nightMix>.5?'#182a35f2':'#e8e9ddf2';ctx.strokeStyle='#819999';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(p.x-7,p.y-7,14,14,3);ctx.fill();ctx.stroke();
+    const p=point(item.x,item.y,city3D.facilityTopAt(item.id)+.03);if(p.hidden)continue;ctx.save();ctx.fillStyle=nightMix>.5?'#182a35f2':'#e8e9ddf2';ctx.strokeStyle='#819999';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(p.x-7,p.y-7,14,14,3);ctx.fill();ctx.stroke();
     if(item.asset==='camp')drawCampfire(ctx,p.x-6,p.y-6,12,state.hp>0);else drawFacility(item.asset==='watch'?'watch':item.asset,p.x-6,p.y-6,12);
     const shot=fx.shots.find(shot=>'tower:'+shot.id===item.id),pulse=zoom*100<view.controlState.params.mapMidZoomPercent&&shot?shotEnvelope(effectTime-shot.at,shot.type).flash:0;
     if(pulse>0){ctx.strokeStyle=`rgba(255,230,178,${pulse})`;ctx.lineWidth=2;ctx.stroke();}ctx.restore();
   }
   for(const plot of plots)if(plot.status==='building'&&['production','housing'].includes(plot.type)){
-    const icon=view.towers.plots.get(plot.id).iconCell;if(icon===null)continue;const [x,y]=xy(icon),p=point(x+.5,y+.5,city3D.roofAt(plot.id,x+.5,y+.5)+.03);ctx.save();ctx.fillStyle='#1c3037df';ctx.fillRect(p.x-6,p.y-6,12,12);drawFacility(plot.type,p.x-5,p.y-5,10);ctx.restore();
+    const icon=view.towers.plots.get(plot.id).iconCell;if(icon===null)continue;const [x,y]=xy(icon),p=point(x+.5,y+.5,city3D.roofAt(plot.id,x+.5,y+.5)+.03);if(p.hidden)continue;ctx.save();ctx.fillStyle='#1c3037df';ctx.fillRect(p.x-6,p.y-6,12,12);drawFacility(plot.type,p.x-5,p.y-5,10);ctx.restore();
   }
-  for(const plot of plots.filter(p=>p.type==='bank')){const p=point(plot.x+plot.w/2,plot.y+plot.h/2,city3D.roofAt(plot.id,plot.x+plot.w/2,plot.y+plot.h/2)+.03);badge(plot.status==='ruin'?'银行废墟':plot.powered?'银行 · 运营':'银行 · 停业',p.x,p.y);drawFacility('bank',p.x-8,p.y-27,16);}
+  for(const plot of plots.filter(p=>p.type==='bank')){const p=point(plot.x+plot.w/2,plot.y+plot.h/2,city3D.roofAt(plot.id,plot.x+plot.w/2,plot.y+plot.h/2)+.03);if(p.hidden)continue;badge(plot.status==='ruin'?'银行废墟':plot.powered?'银行 · 运营':'银行 · 停业',p.x,p.y);drawFacility('bank',p.x-8,p.y-27,16);}
   const routeCells=new Set(routes.flatMap(route=>route.path)),enemyCells=new Set(enemies.map(frame=>frame.enemy.id));
-  if($('heat').checked&&size>=view.controlState.params.fireNumbersMinCellPx)for(const [id,power] of fire)if(routeCells.has(id)&&currentlyVisible(id)&&!enemyCells.has(id)){const [x,y]=xy(id),p=point(x+.5,y+.5,.02);ctx.font='600 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=3;ctx.strokeStyle='#172630';ctx.strokeText(power,p.x,p.y);ctx.fillStyle='#d2ebda';ctx.fillText(power,p.x,p.y);}
+  if($('heat').checked&&size>=view.controlState.params.fireNumbersMinCellPx)for(const [id,power] of fire)if(routeCells.has(id)&&currentlyVisible(id)&&!enemyCells.has(id)){const [x,y]=xy(id),p=point(x+.5,y+.5,.02);if(p.hidden)continue;ctx.font='600 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=3;ctx.strokeStyle='#172630';ctx.strokeText(power,p.x,p.y);ctx.fillStyle='#d2ebda';ctx.fillText(power,p.x,p.y);}
   for(const [id,body] of state.wallHealth)if(currentlyVisible(id)&&body.hp>0&&body.hp<body.max){const [x,y]=xy(id),p=point(x+.5,y+.5,.15);badge(`${body.hp}`,p.x,p.y-8);}
   for(const source of displayedEnemySources()){
-    const w=source.width??1,h=source.height??1,p=point((source.bx??source.x)+w/2,(source.by??source.y)+h/2,(city3D.baseAt(source.site)??0)+.5);
+    const w=source.width??1,h=source.height??1,p=point((source.bx??source.x)+w/2,(source.by??source.y)+h/2,(city3D.baseAt(source.site)??0)+.5);if(p.hidden)continue;
     const alpha=source.active||focus.has(sourceIdentity(source))?1:.72;
     ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=source.hp===0?'#9ac8ad':source.active?'#ff574b':'#b07e78';ctx.lineWidth=source.active?2:1.2;ctx.setLineDash(source.active?[]:[6,4]);if(source.active){ctx.shadowColor='#ff3c31';ctx.shadowBlur=7;}ctx.beginPath();const sx=source.bx??source.x,sy=source.by??source.y;[[sx,sy],[sx+w,sy],[sx+w,sy+h],[sx,sy+h]].map(([x,y])=>point(x,y,.03)).forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.stroke();ctx.restore();
     badge(source.hp>0?String(source.index+1):'×',p.x,p.y,source.hp>0?'#ffb3a0':'#b9d8c1',alpha);
@@ -1178,7 +1182,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     if(focus.has(sourceIdentity(source)))drawSourcePin(ctx,p.x+8,p.y-15,11);
   }
   // 实体和HP沿用同一位置/alpha；牌子悬在人物上方，不被墙、雾或楼顶挡住。
-  for(const frame of enemies)if(frame.alpha>0){const p=point(frame.x+.5,frame.y+.5,.11);badge(String(frame.enemy.hp),p.x,p.y-10,'#ffada5',frame.alpha);ctx.save();ctx.globalAlpha=frame.alpha;ctx.fillStyle='#572d34';ctx.fillRect(p.x-6,p.y-4,12,2);ctx.fillStyle='#ffedb6';ctx.fillRect(p.x-6,p.y-4,12*Math.max(0,Math.min(1,frame.barHP/frame.enemy.max)),2);ctx.restore();}
+  for(const frame of enemies)if(frame.alpha>0){const p=point(frame.x+.5,frame.y+.5,.11);if(p.hidden)continue;badge(String(frame.enemy.hp),p.x,p.y-10,'#ffada5',frame.alpha);ctx.save();ctx.globalAlpha=frame.alpha;ctx.fillStyle='#572d34';ctx.fillRect(p.x-6,p.y-4,12,2);ctx.fillStyle='#ffedb6';ctx.fillRect(p.x-6,p.y-4,12*Math.max(0,Math.min(1,frame.barHP/frame.enemy.max)),2);ctx.restore();}
   updateCameraLabels(camera.cell,view.controlState.params);updateMapInfo(view,viewport.dataset.detail,potentials,linked);
 }
 
@@ -1493,8 +1497,9 @@ function paramsEditor(params) {
     const row=document.createElement('div');row.className='fields';
     for(const [name,label,min,max] of specs){
       const wrap=document.createElement('label');wrap.textContent=label;
-      const input=document.createElement(name==='shape'?'select':'input');
-      if(name==='shape')for(const [value,text] of [['square','方形'],['diamond','菱形']]){const option=document.createElement('option');option.value=value;option.textContent=text;input.append(option);}
+      const choices=name==='shape'?[['square','方形'],['diamond','菱形']]:name==='freeProjection'?[['orthographic','正交'],['perspective','透视']]:null;
+      const input=document.createElement(choices?'select':'input');
+      if(choices)for(const [value,text] of choices){const option=document.createElement('option');option.value=value;option.textContent=text;input.append(option);}
       else{input.type='number';input.min=min;input.max=max;input.step=['productionIncomePerCell','productionSmallCostFloor','productionMaxDensity','bankDepositPercent','bankLoanPercent','enemyFogFadeCells','controlBorderInnerCells','controlBorderOuterCells','controlBorderLinePx'].includes(name)||name.endsWith('Multiplier')?0.1:1;}
       input.value=values[name];input.dataset.param=prefix+name;input.setAttribute('aria-label',`${title} ${label}`);
       input.addEventListener('input',refreshParams);wrap.append(input);row.append(wrap);
@@ -1515,6 +1520,7 @@ function paramsEditor(params) {
   for(const type of ['A','B'])fields(`武器 ${type}`,params.weapons[type],type+'.',[['shape','范围形状'],['range','半径',1,8],['power','每拍火力',1,99],['cost','价格',1,1000]]);
   fields('城市照明',params,'',[['streetLightBudget','真实路灯预算（盏，0关闭）',0,64]],'visualParams');
   fields('地图比例尺',params,'',[['cellMeters','每格距离（米）',1,1000],['mapMaxCellPx','最大格宽（像素）',48,256]],'visualParams');
+  fields('观察镜头',params,'',[['obliqueElevationDegrees','斜视俯仰角（度）',25,80],['freeProjection','自由投影'],['freePerspectiveFovDegrees','透视FOV（度）',20,60]],'visualParams');
   fields('地图信息密度',params,'',[['mapMidZoomPercent','进入中景（%）',100,1000],['mapNearZoomPercent','进入近景（%）',100,1000]],'visualParams');
   fields('控制边缘',params,'',[['controlBorderInnerCells','内侧渐隐（格，0关闭）',0,2],['controlBorderOuterCells','外侧渐隐（格，0关闭）',0,2],['controlBorderInnerOpacity','内侧色带强度%',0,60],['controlBorderOuterOpacity','外侧色带强度%',0,60],['controlBorderLinePx','主线粗细（像素）',1,6]],'visualParams');
   fields('火力显示',params,'',[['fireNumbersMinCellPx','数字最小格宽（像素，0始终显示）',0,48]],'visualParams');
@@ -1525,7 +1531,7 @@ function readParams() {
   const result=structuredClone(state.params);
   for(const input of document.querySelectorAll('[data-param]')){
     const parts=input.dataset.param.split('.'), name=parts.at(-1);
-    const value=name==='shape'?input.value:input.value.trim()===''?NaN:Number(input.value);
+    const value=['shape','freeProjection'].includes(name)?input.value:input.value.trim()===''?NaN:Number(input.value);
     if(parts.length===1)result[name]=value;else result.weapons[parts[0]][name]=value;
   }
   return result;
@@ -1738,7 +1744,7 @@ canvas.addEventListener('pointermove',e=>{
   if(dragging){
     if(Math.hypot(e.clientX-dragging.startX,e.clientY-dragging.startY)>4)dragging.moved=true;
     if(dragging.rotate)rotateView(-(e.clientX-dragging.x)*.008,-(e.clientY-dragging.y)*.006);
-    else if(dragging.moved||dragging.panOnly){const delta=panView(e.clientX-dragging.x,e.clientY-dragging.y,cameraView());panX+=delta.x*base*zoom/cameraView().cell;panY+=delta.y*base*zoom/cameraView().cell;constrainCamera();}
+    else if(dragging.moved||dragging.panOnly){const delta=panView(e.clientX-dragging.x,e.clientY-dragging.y,cameraView(),e.clientX-canvas.getBoundingClientRect().left,e.clientY-canvas.getBoundingClientRect().top);panX+=delta.x*base*zoom/cameraView().cell;panY+=delta.y*base*zoom/cameraView().cell;constrainCamera();}
     dragging.x=e.clientX;dragging.y=e.clientY;
   }
   hover=dragging?.rotate?null:cellAt(e);updateMapSourceHover();draw();
@@ -1835,7 +1841,7 @@ for(const button of document.querySelectorAll('[data-speed]'))button.onclick=()=
 function showCoins(id, amount) {
   if(reducedMotion.matches||!currentlyVisible(id))return;
   const [x,y]=xy(id), rect=canvas.getBoundingClientRect(), target=$('budget').getBoundingClientRect();
-  const point=projectView(x+.5,y+.5,.1,cameraView()),sx=rect.left+point.x,sy=rect.top+point.y;
+  const point=projectView(x+.5,y+.5,.1,cameraView());if(point.hidden)return;const sx=rect.left+point.x,sy=rect.top+point.y;
   const coin=document.createElement('span');coin.className='coin-drop';coin.textContent=`● +${amount}`;coin.setAttribute('aria-hidden','true');
   coin.style.left=`${sx}px`;coin.style.top=`${sy}px`;document.body.append(coin);
   const dx=target.left+target.width/2-sx, dy=target.top+target.height/2-sy;

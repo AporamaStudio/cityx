@@ -5,6 +5,10 @@ export const DEFAULTS = {
   cellMeters: 20,
   // 近景最大格宽（CSS像素），改变镜头尺度，不提高画布像素比或模型面数。
   mapMaxCellPx: 128,
+  // 固定斜视与水平面的夹角（度）；自由手调角度独立，不随缩放改变。
+  obliqueElevationDegrees: 45,
+  // 只切换自由观察投影；俯视/固定斜视保持正交，透视FOV为垂直视野角。
+  freeProjection: 'orthographic', freePerspectiveFovDegrees: 40,
   // 真实路灯固定光源池；超出预算仍保留灯罩和地面暖光，0关闭路灯真实光源。
   streetLightBudget: 24,
   // 精确火力只在路线格上显示；每格屏幕尺寸小于此值时收起数字，0关闭缩放门槛。

@@ -1,9 +1,11 @@
 import * as THREE from 'three';
-import {viewCenter} from './city-view.js?v=2';
+import {viewCenter,viewDistance} from './city-view.js?v=3';
 
 // 原城市对象共用观察相机，不复制游戏状态；雾纹按世界XZ覆盖楼顶和地面。
 export function createCityObservation(scene,renderer){
-  const camera=new THREE.OrthographicCamera(),canvas=document.createElement('canvas');
+  const orthographic=new THREE.OrthographicCamera(),perspective=new THREE.PerspectiveCamera();
+  let camera=orthographic;
+  const canvas=document.createElement('canvas');
   let pickObjects=[],lastGroundVersion=null;
   const groundTexture=new THREE.CanvasTexture(document.createElement('canvas'));groundTexture.colorSpace=THREE.SRGBColorSpace;groundTexture.generateMipmaps=false;groundTexture.minFilter=THREE.LinearFilter;
   const fogTexture=new THREE.CanvasTexture(document.createElement('canvas'));fogTexture.flipY=false;fogTexture.generateMipmaps=false;fogTexture.minFilter=THREE.LinearFilter;
@@ -26,8 +28,10 @@ export function createCityObservation(scene,renderer){
     render({ground,groundVersion,mist,view,background,objects,enemies,effects}){
       pickObjects=[...objects,floor];
       if(groundTexture.image!==ground||lastGroundVersion!==groundVersion){groundTexture.image=ground;groundTexture.needsUpdate=true;lastGroundVersion=groundVersion;}fogTexture.image=mist;fogTexture.needsUpdate=true;
-      const {width,height,cell,yaw,elevation}=view,center=viewCenter(view),distance=100;
-      camera.left=-width/(2*cell);camera.right=width/(2*cell);camera.top=height/(2*cell);camera.bottom=-height/(2*cell);camera.near=.1;camera.far=300;
+      const {width,height,cell,yaw,elevation}=view,center=viewCenter(view),distance=viewDistance(view);
+      camera=view.projection==='perspective'?perspective:orthographic;
+      if(camera===perspective){camera.fov=view.fov;camera.aspect=width/height;camera.near=distance*.05;camera.far=distance+300;}
+      else{camera.left=-width/(2*cell);camera.right=width/(2*cell);camera.top=height/(2*cell);camera.bottom=-height/(2*cell);camera.near=.1;camera.far=300;}
       camera.position.set(center.x+Math.sin(yaw)*Math.cos(elevation)*distance,Math.sin(elevation)*distance,center.y+Math.cos(yaw)*Math.cos(elevation)*distance);camera.up.set(0,1,0);camera.lookAt(center.x,0,center.y);camera.updateProjectionMatrix();
       floor.visible=true;for(const object of [floor,...objects,effects]){object.visible=true;bind(object);}fog.enabled.value=1;
       // 敌人已按原插值中心渐隐；单独在雾上绘制，避免楼体遮住本应可见的敌群。
