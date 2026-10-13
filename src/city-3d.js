@@ -8,6 +8,7 @@ import {PLANT_MODELS} from './city-vegetation.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=8';
 import {createCityObservation} from './city-observation.js?v=5';
+import {createZombieCrowds} from './city-enemies.js?v=1';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',enemy:'generated/enemy-squad',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
@@ -92,6 +93,7 @@ export function createCity3D(onReady){
   const effects=createCityEffects(scene),effectCanvas=document.createElement('canvas');
   const cityCanvas=document.createElement('canvas'),facilityCanvas=document.createElement('canvas'),enemyCanvas=document.createElement('canvas');
   const models=new Map(),entries=new Map(),props=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',lastProps='',pixels='';
+  const zombieCrowds=createZombieCrowds(enemies);
   const observation=createCityObservation(scene,renderer);
   function capture(canvas){if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(renderer.domElement,0,0);return canvas;}
   Promise.all(Object.entries(files).map(async ([name,file])=>{models.set(name,(await loader.loadAsync(resource(file))).scene);})).then(()=>{ready=true;onReady();}).catch(error=>console.error('城市模型装载失败，保留原地图。',error));
@@ -230,8 +232,10 @@ export function createCity3D(onReady){
     },
     renderFacilities(items,night,fx){
       if(!ready)return null;
+      zombieCrowds.update(items.filter(item=>item.asset==='enemy'),fx);
       const active=new Set(items.map(p=>p.id));for(const [id,entry] of props)if(!active.has(id)){release(entry);props.delete(id);}
       for(const item of items){
+        if(item.asset==='enemy')continue;
         const shape=`${item.asset}:${item.w}:${item.h}:${item.connections??''}:${item.cellMeters??''}:${item.dead??false}:${item.color??''}`;
         if(props.get(item.id)?.signature!==shape){
           if(props.has(item.id))release(props.get(item.id));

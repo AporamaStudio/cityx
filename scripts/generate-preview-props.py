@@ -202,18 +202,18 @@ def camp_plaza():
 
 
 def enemy_squad():
-    # 三个人形只构成统一敌群符号；不是新增兵种/单位，实际成员数仍读主游戏。
-    m=Model()
-    for x,z in [(-1,.7),(1,.7),(0,-.8)]:
-        for dx in (-.13,.13):
-            m.box((x+dx,.06,z-.08),(.19,.12,.34),'#384140')
-            m.box((x+dx,.45,z),(.16,.78,.17),'#4d5048')
-        m.box((x,.93,z),(.46,.25,.29),'#66564c')
-        m.box((x,1.30,z),(.55,.60,.30),'#a55b53')
-        for dx in (-.36,.36):m.box((x+dx,1.23,z-.02),(.13,.60,.15),'#884e48')
-        m.cylinder((x,1.63,z),.065,.11,'#b2a292',sides=5)
-        m.box((x,1.82,z),(.32,.33,.31),'#b2a292')
-    m.save('enemy-squad', {'units':'meters','visualOnly':True})
+    # 八个不同衣色的僵尸作为静态导出；主游戏共用实例人物并添加步态，不逐人结算。
+    m=Model(); clothes=['#726b58','#7a5350','#536370','#696354']
+    for i in range(8):
+        x=(i%4-1.5)*1.2+math.sin(i*2.8)*.18;z=(i//4-.5)*1.15+math.cos(i*3.1)*.18
+        h=1.65+(i%4)*.06;shirt=clothes[i%4]
+        for dx in (-.10,.10):
+            m.beam((x+dx,.08,z),(x+dx,.82*h/1.8,z),.13,'#444c4b')
+        m.cylinder((x,1.12*h/1.8,z-.05),.19,.57*h/1.8,shirt,top=.15,sides=5)
+        for dx in (-.235,.235):m.beam((x+dx,1.4*h/1.8,z-.07),(x+dx,1*h/1.8,z-.36),.12,shirt)
+        m.cylinder((x,1.56*h/1.8,z-.16),.16,.31,'#b3b39b',sides=5)
+        m.cylinder((x,1.7*h/1.8,z-.16),.165,.09,'#48483f',top=.12,sides=5)
+    m.save('enemy-squad', {'units':'meters','visualOnly':True,'figures':8})
 
 
 def entrances():
@@ -340,7 +340,9 @@ def vegetation():
 
 
 if __name__ == '__main__':
-    if '--vegetation' in sys.argv:
+    if '--enemies' in sys.argv:
+        enemy_squad();print('已生成八人米制僵尸群体样件')
+    elif '--vegetation' in sys.argv:
         vegetation();print('已生成6个米制树木/灌丛样件')
     elif '--entrances' in sys.argv:
         entrances();print('已生成4个配套墙门/文明入口样件')
