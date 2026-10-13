@@ -11,14 +11,15 @@ test('全图尺度在桌面和窄屏容纳地图及外围，较短方向居中',
     assert.ok(Math.abs(pan.y+30*cell-(h-bottom)/2)<.001);
   }
 });
-test('缩放不能小于全图或把单格放大超过48像素',()=>{
+test('缩放不能小于全图或把单格放大超过配置格宽',()=>{
   for(const base of [2,6,10,20]){
     assert.equal(limitZoom(.01,base),1);
-    assert.equal(limitZoom(999,base)*base,48);
+    assert.equal(limitZoom(999,base)*base,128);
+    for(const cap of [48,96,256])assert.equal(limitZoom(999,base,cap)*base,cap);
   }
 });
 test('放大拖动到四角仍保留城市，最外格可以完整出现在操作区',()=>{
-  const w=698,h=584,cell=48,bottom=0;
+  const w=698,h=584,cell=128,bottom=0;
   const left=limitPan(9999,9999,w,h,60,cell),right=limitPan(-9999,-9999,w,h,60,cell);
   assert.ok(left.x>=0&&left.y>=0);
   assert.ok(left.x+cell<w&&left.y+cell<h-bottom);

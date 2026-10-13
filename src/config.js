@@ -3,6 +3,8 @@ export const SIZE = 60;
 export const DEFAULTS = {
   // 每格的现实边长，用于比例尺与3D实体尺度；战斗和建设仍按格计算。
   cellMeters: 20,
+  // 近景最大格宽（CSS像素），改变镜头尺度，不提高画布像素比或模型面数。
+  mapMaxCellPx: 128,
   // 真实路灯固定光源池；超出预算仍保留灯罩和地面暖光，0关闭路灯真实光源。
   streetLightBudget: 24,
   // 精确火力只在路线格上显示；每格屏幕尺寸小于此值时收起数字，0关闭缩放门槛。

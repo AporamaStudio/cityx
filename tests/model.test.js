@@ -345,6 +345,8 @@ test('当天全返，旧投入按可配置比例向下取整',()=>{
 
 test('真实路灯预算可调但不改变游戏规则，非法数量拒绝',()=>{
   const state=createCampaign();
+  for(const cap of [48,128,256])assert.equal(validateParams({...state.params,mapMaxCellPx:cap},state,false),'');
+  for(const cap of [47,128.5,257])assert.match(validateParams({...state.params,mapMaxCellPx:cap},state,false),/最大格宽/);
   for(const budget of [0,24,64])assert.equal(validateParams({...state.params,streetLightBudget:budget},state,false),'');
   for(const budget of [-1,.5,65])assert.match(validateParams({...state.params,streetLightBudget:budget},state,false),/路灯预算/);
 });

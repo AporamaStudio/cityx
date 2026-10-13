@@ -7,12 +7,12 @@ import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
 import {createTowerOverlay} from './tower-overlay.js?v=18';
 import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=17';
-import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=2';
+import {cameraScale,limitZoom,limitPan} from './map-camera.js?v=3';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=8';
 import {createGameAudio} from './audio.js?v=10';
-import { SIZE, DEFAULTS } from './config.js?v=75';
-import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=91';
+import { SIZE, DEFAULTS } from './config.js?v=76';
+import { configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=92';
 import {generateCityMap} from './city-map.js?v=8';
 import {readMapSettings} from './map-settings.js';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -340,11 +340,11 @@ function resize(fit = false) {
   // 底栏已在画布外，镜头可完整使用viewport，不再预留一块隐藏的操作区。
   cameraBottom=0;
   base = cameraScale(width,height,SIZE,cameraBottom);
-  if (fit || !oldW) { const view=initialView(state);zoom=limitZoom(SIZE/30,base);panX=width/2-(view.x+15)*base*zoom;panY=(height-cameraBottom)/2-(view.y+15)*base*zoom-6; }
+  if (fit || !oldW) { const view=initialView(state);zoom=limitZoom(SIZE/30,base,previewParams().mapMaxCellPx);panX=width/2-(view.x+15)*base*zoom;panY=(height-cameraBottom)/2-(view.y+15)*base*zoom-6; }
   else {
     // 窗口变化时保留镜头中心与格子大小；全图状态继续适应新窗口。
     const centerX=(oldW/2-panX)/oldCell,centerY=((oldH-oldBottom)/2-panY)/oldCell;
-    zoom=limitZoom(zoom===1?1:oldCell/base,base);
+    zoom=limitZoom(zoom===1?1:oldCell/base,base,previewParams().mapMaxCellPx);
     panX=width/2-centerX*base*zoom;panY=(height-cameraBottom)/2-centerY*base*zoom;
   }
   constrainCamera();
@@ -354,7 +354,7 @@ function constrainCamera(){
   const pan=limitPan(panX,panY,width,height,SIZE,base*zoom,cameraBottom);panX=pan.x;panY=pan.y;
 }
 function changeZoom(factor, x = width / 2, y = (height-cameraBottom) / 2) {
-  const old = zoom,anchor=groundAt(x,y,cameraView());zoom = limitZoom(zoom * factor,base);
+  const old = zoom,anchor=groundAt(x,y,cameraView());zoom = limitZoom(zoom * factor,base,previewParams().mapMaxCellPx);
   if(viewMode==='top'){panX = x - (x - panX) * zoom / old; panY = y - (y - panY) * zoom / old;}
   else{const next=groundAt(x,y,cameraView());panX+=(next.x-anchor.x)*base*zoom;panY+=(next.y-anchor.y)*base*zoom;}
   constrainCamera();hover=null;updateMapSourceHover();
@@ -1450,7 +1450,7 @@ function paramsEditor(params) {
   fields('瞭望塔',params,'',[['outpostCost','造价',1,1000],['outpostWorkers','每座用工',0,100],['outpostRadius','半径',1,30],['outpostMinDistance','最小间距',1,30]]);
   for(const type of ['A','B'])fields(`武器 ${type}`,params.weapons[type],type+'.',[['shape','范围形状'],['range','半径',1,8],['power','每拍火力',1,99],['cost','价格',1,1000]]);
   fields('城市照明',params,'',[['streetLightBudget','真实路灯预算（盏，0关闭）',0,64]],'visualParams');
-  fields('地图比例尺',params,'',[['cellMeters','每格距离（米）',1,1000]],'visualParams');
+  fields('地图比例尺',params,'',[['cellMeters','每格距离（米）',1,1000],['mapMaxCellPx','最大格宽（像素）',48,256]],'visualParams');
   fields('地图信息密度',params,'',[['mapMidZoomPercent','进入中景（%）',100,1000],['mapNearZoomPercent','进入近景（%）',100,1000]],'visualParams');
   fields('控制边缘',params,'',[['controlBorderInnerCells','内侧渐隐（格，0关闭）',0,2],['controlBorderOuterCells','外侧渐隐（格，0关闭）',0,2],['controlBorderInnerOpacity','内侧色带强度%',0,60],['controlBorderOuterOpacity','外侧色带强度%',0,60],['controlBorderLinePx','主线粗细（像素）',1,6]],'visualParams');
   fields('火力显示',params,'',[['fireNumbersMinCellPx','数字最小格宽（像素，0始终显示）',0,48]],'visualParams');
@@ -1470,6 +1470,7 @@ function refreshParams(){
   const error=validateParams(readParams(),state);
   $('paramStatus').textContent=paramsDirty()?'正在预览未应用参数，建设与开战前请应用。':'当前参数已应用。';
   if(error)showTopNotice(error,false);
+  if(zoom>limitZoom(zoom,base,previewParams().mapMaxCellPx))changeZoom(1);
   update();
 }
 function clearPlayback() {
