@@ -29,7 +29,8 @@ export function createCityObservation(scene,renderer){
       const hit=ray.intersectObjects(pickObjects,true).find(hit=>!hit.object.material.transparent&&!hit.object.userData.cityDecoration);return hit?{x:hit.point.x,y:hit.point.z}:null;
     },
     render({ground,groundVersion,mist,view,background,objects,enemies,effects}){
-      pickObjects=[...objects,floor];
+      // 外围纯景物不参加鼠标射线，避免每次移动鼠标检测整片郊野几何。
+      pickObjects=[...objects.filter(object=>!object.userData.cityNoPick),floor];
       if(groundTexture.image!==ground||lastGroundVersion!==groundVersion){groundTexture.image=ground;groundTexture.needsUpdate=true;lastGroundVersion=groundVersion;}fogTexture.image=mist;fogTexture.needsUpdate=true;
       const {width,height,cell,yaw,elevation}=view,center=viewCenter(view),distance=viewDistance(view);
       camera=view.projection==='perspective'?perspective:orthographic;

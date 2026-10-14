@@ -5,12 +5,14 @@ import {createWaterMaterial} from './city-water.js?v=2';
 
 // 地图外共用同一太阳/环境光，远处向雾底色融合；无交互、真实灯或第二套游戏状态。
 export function createSurroundingModel(layout,models,cellMeters=20){
-  const root=new THREE.Group(),land=surroundingLandscape(layout),batches=new Map(),haze={value:new THREE.Color('#c4cfd0').convertLinearToSRGB()};root.userData.haze=haze;
+  const root=new THREE.Group(),land=surroundingLandscape(layout),batches=new Map(),center=new THREE.Vector3(),haze={value:new THREE.Color('#c4cfd0').convertLinearToSRGB()};root.userData.haze=haze;root.userData.cityNoPick=true;
   const add=(geometry,source,cast=false)=>{
     if(geometry.index){const plain=geometry.toNonIndexed();geometry.dispose();geometry=plain;}
-    const material=typeof source==='string'?{color:new THREE.Color(source)}:source,key=material.color.getHexString()+':'+(material.map?.uuid??'');
+    // 每240m分块；全局合批的大包围球会让近景仍提交整片离屏林地。
+    geometry.computeBoundingBox();geometry.boundingBox.getCenter(center);
+    const material=typeof source==='string'?{color:new THREE.Color(source)}:source,key=[Math.floor(center.x/12),Math.floor(center.z/12),material.color.getHexString(),material.map?.uuid??''].join(':');
     for(const name of Object.keys(geometry.attributes))if(!['position','normal',...(material.map?['uv']:[]),...(material.color.getHexString()==='528592'?['cityWaterDepth']:[])].includes(name))geometry.deleteAttribute(name);
-    if(!batches.has(key))batches.set(key,{geometries:[],color:material.color,map:material.map,cast});batches.get(key).geometries.push(geometry);
+    if(!batches.has(key))batches.set(key,{geometries:[],color:material.color,map:material.map,cast});const batch=batches.get(key);batch.geometries.push(geometry);batch.cast||=cast;
   };
   const quad=(a,b,c,d,color,depth=[0,1,0,1])=>{const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute([...a,...b,...c,...c,...b,...d],3));if(color==='#528592')geometry.setAttribute('cityWaterDepth',new THREE.Float32BufferAttribute([depth[0],depth[1],depth[2],depth[2],depth[1],depth[3]],1));geometry.computeVertexNormals();add(geometry,color);};
   const ground=(x,y)=>[x,.001+exteriorHeight(layout,land,x,y,cellMeters),y],step=2;

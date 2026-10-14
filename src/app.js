@@ -3,7 +3,7 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=1';
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=3';
-import {createCity3D} from './city-3d.js?v=53';
+import {createCity3D} from './city-3d.js?v=55';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -563,11 +563,12 @@ function paintMap() {
   fitResources();
 
   ctx.save(); ctx.translate(panX, panY); ctx.scale(size, size);
-  drawCloudBackdrop(ctx,nightMix,cloudTime,{left:-panX/size,top:-panY/size,right:(width-panX)/size,bottom:(height-panY)/size},duskMix);
-  // 外围只有无交互的楼群与道路轮廓，可与地图内的未知体量连续衔接。
-  drawCitySurroundings(ctx,cityLayout,nightMix,null,backdrop);
-  // 游玩时受探索遮罩约束；白天展开敌源编辑仅临时预览全图，不写探索记录。
-  ctx.fillStyle=palette.fog;ctx.fillRect(0,0,SIZE,SIZE);
+  // 观察画面稍后由3D重画，跳过最终会被覆盖的俯视云底/外围与格子铺色。
+  if(viewMode==='top'){
+    drawCloudBackdrop(ctx,nightMix,cloudTime,{left:-panX/size,top:-panY/size,right:(width-panX)/size,bottom:(height-panY)/size},duskMix);
+    drawCitySurroundings(ctx,cityLayout,nightMix,null,backdrop);
+    ctx.fillStyle=palette.fog;ctx.fillRect(0,0,SIZE,SIZE);
+  }
 
   // 只把原画面允许显示完整外观的地块交给3D；运营灯光不新增经营或安全判断。
   const impact=Math.min(1,impactAge/IMPACT_MS),enemyFrames=enemyDisplayFrames(state,motion?{...motion,duration:moveDuration()}:null,incoming,impact,reducedMotion.matches);
@@ -588,11 +589,12 @@ function paintMap() {
   const plants=emptyLandPlants(emptyPlots,{width:SIZE,cellMeters:controlState.params.cellMeters,visible:visibleCell,occupied:plantOccupied});
   const plantPreview=hover!==null&&['production','housing'].includes(tool)?productionId(hover,state):null;
   const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,plants,plantPreview,roadCells:state.layout.tiles.flatMap((type,id)=>type==='road'&&visibleCell(id)?[id]:[]),fx});
+  const eligibleCells=viewMode==='top'&&weaponPlacementReady?view.towers.eligible(weaponType()):new Set();
+  if(viewMode==='top'){
   // 真正的外围模型只画在行动地图外；未知城内继续受原信息遮罩约束。
   if(cityFrame){ctx.save();ctx.beginPath();ctx.rect(-panX/size,-panY/size,width/size,height/size);ctx.rect(0,0,SIZE,SIZE);ctx.clip('evenodd');ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
   // 道路承接真实点光与太阳阴影；在热力、格线和云雾下面一次性裁剪绘制。
   if(cityFrame){ctx.save();ctx.beginPath();for(let y=bounds.top;y<bounds.bottom;y++)for(let x=bounds.left;x<bounds.right;x++)if(visibleCell(key(x,y))&&state.layout?.tiles[key(x,y)]==='road')ctx.rect(x,y,1,1);ctx.clip();ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
-  const eligibleCells=weaponPlacementReady?view.towers.eligible(weaponType()):new Set();
   for (let y = bounds.top; y < bounds.bottom; y++) for (let x = bounds.left; x < bounds.right; x++) {
     const id = key(x, y), power = fire.get(id) || 0;
     if(!visibleCell(id)){
@@ -638,6 +640,7 @@ function paintMap() {
     for(const [id,p] of state.outposts){if(!currentlyVisible(id))continue;const [x,y]=xy(id),front=fx.sweeps.find(s=>s.id==='post:'+id)?.target;lamp(x+.5,y+.5,front?.9:.6,front?'#9bddf325':'#ffd99b20');}
     if(!cityFrame)for(const p of state.sites)if(currentlyVisible(key(p.x,p.y))&&state.production.has(key(p.x,p.y))&&productionActive(state,key(p.x,p.y)))lamp(p.x+(p.width??p.size)/2,p.y+(p.height??p.size)/2,Math.max(p.width??p.size,p.height??p.size),'#f4d68b33');
     ctx.restore();
+  }
   }
   const facilityItems=[];
   const prop=(id,asset,x,y,w=.86,h=.86,extra={})=>facilityItems.push({id,asset,x,y,w,h,roof:naturalGroundAt(state.layout,x,y,controlState.params.cellMeters),...extra});
