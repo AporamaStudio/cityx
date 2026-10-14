@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=87';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=88';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -545,6 +545,7 @@ export function validateVisualParams(params){
   if(typeof params.returnToTopOnAction!=='boolean')return '操作返回俯视须为开启或关闭。';
   if(!['orthographic','perspective'].includes(params.freeProjection))return '自由观察投影须为正交或透视。';
   if(!integer(params.freePerspectiveFovDegrees,20,60))return '透视垂直视野角须为 20–60 度整数。';
+  if(!integer(params.keyboardPanSpeedPx,0,1200))return 'WASD平移速度须为 0–1200 像素/秒整数，0关闭。';
   if(!integer(params.mapMaxCellPx,48,256))return '最大格宽须为 48–256 像素整数。';
   if(!integer(params.streetLightBudget,0,64))return '真实路灯预算须为 0–64 盏整数，0 保留灯具与暖光池。';
   if(!integer(params.enemyFiguresPerGroup,3,20))return '每敌群视觉人数须为 3–20 人整数，不改变实际敌群数量。';

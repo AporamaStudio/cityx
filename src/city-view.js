@@ -33,6 +33,13 @@ export function panView(dx,dy,view,x=view.width/2,y=view.height/2){
   }
   const v=dy/Math.sin(elevation);return {x:Math.cos(yaw)*dx+Math.sin(yaw)*v,y:-Math.sin(yaw)*dx+Math.cos(yaw)*v};
 }
+// 镜头向W/A/S/D移动，画面地物反向平移；斜向不加速，慢帧不产生大跳跃。
+export function keyboardPanStep(keys,elapsed,speed){
+  const x=Number(keys.has('KeyA'))-Number(keys.has('KeyD')),y=Number(keys.has('KeyW'))-Number(keys.has('KeyS'));
+  const length=Math.hypot(x,y);if(!length)return {x:0,y:0};
+  const travel=Math.max(0,Math.min(100,elapsed))/1000*speed;
+  return {x:x/length*travel,y:y/length*travel};
+}
 // 远景为旋转后的地图留出完整空间；正常倍率保留原像素尺度，回正保持世界中心。
 export function observationView(view,size=60){
   const {width,height,cell,yaw,elevation,zoom}=view,span=Math.abs(Math.cos(yaw))+Math.abs(Math.sin(yaw));

@@ -16,7 +16,7 @@ test('第7天视觉可独立应用，忽略玩法草稿并完整保留运行状�
 test('第7天玩法原地应用保留日期、损伤与视觉，降低上限不复活残墙',()=>{
   const state=setup(),id=key(14,25);assert.equal(changeWall(state,id),'');state.wallHealth.get(id).hp=3;state.hp=7;
   const beforeFunds=funds(state);assert.equal(applyExperimentParams(state,{...state.params,wallHP:24,campHP:60,killReward:4,freeProjection:'invalid'},'gameplay'),'');
-  assert.equal(state.day,7);assert.equal(state.hp,7);assert.deepEqual(state.wallHealth.get(id),{hp:3,max:24});assert.equal(funds(state),beforeFunds);assert.equal(state.params.freeProjection,'orthographic');
+  assert.equal(state.day,7);assert.equal(state.hp,7);assert.deepEqual(state.wallHealth.get(id),{hp:3,max:24});assert.equal(funds(state),beforeFunds);assert.equal(state.params.freeProjection,DEFAULTS.freeProjection);
   state.wallHealth.get(id).hp=0;assert.equal(applyExperimentParams(state,{...state.params,wallHP:2,campHP:5},'gameplay'),'');assert.equal(state.hp,5);assert.deepEqual(state.wallHealth.get(id),{hp:0,max:2});
 });
 

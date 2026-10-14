@@ -2,7 +2,7 @@ import {drawNaturalTerrain,naturalGroundAt} from './natural-terrain.js?v=6';
 import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback} from './enemy-overlay.js?v=6';
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=1';
-import {projectView,groundAt,panView,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=3';
+import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=4';
 import {createCity3D} from './city-3d.js?v=59';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
@@ -15,8 +15,8 @@ import {cameraScale,limitZoom,limitPan,limitObservationPan} from './map-camera.j
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=9';
 import {createGameAudio} from './audio.js?v=10';
-import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=87';
-import {applyExperimentParams,validateVisualParams, bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=103';
+import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=88';
+import {applyExperimentParams,validateVisualParams, bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=104';
 import {generateCityMap} from './city-map.js?v=14';
 import {readMapSettings} from './map-settings.js?v=2';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -103,7 +103,7 @@ function setViewMode(mode){
 function updateViewHelp(){
   const returnToTop=previewParams().returnToTopOnAction,action=returnToTop?'建设操作返回俯视':'单击建设，保持当前视角';
   $('viewActionGuide').textContent=returnToTop?'侧栏操作先回俯视，地图首击回俯视。':'三种视角均可直接建设。';
-  canvas.setAttribute('aria-label',viewMode==='top'?'60乘60防守棋盘，单击布置，拖动平移':viewMode==='free'?`自由观察，拖动平移，Shift拖动或方向键旋转；${action}`:`城市斜视，拖动平移；${action}`);
+  canvas.setAttribute('aria-label',viewMode==='top'?'60乘60防守棋盘，单击布置，拖动或WASD平移':viewMode==='free'?`自由观察，拖动或WASD平移，Shift拖动或方向键旋转；${action}`:`城市斜视，拖动或WASD平移；${action}`);
   document.querySelector('[data-city-view="oblique"]').title=`固定斜视；${action}`;
   document.querySelector('[data-city-view="free"]').title=`自由观察；Shift拖动/中键拖动或方向键旋转；${action}`;
 }
@@ -118,6 +118,27 @@ canvas.addEventListener('keydown',event=>{
   const moves={ArrowLeft:[-Math.PI/12,0],ArrowRight:[Math.PI/12,0],ArrowUp:[0,Math.PI/18],ArrowDown:[0,-Math.PI/18]};
   if(viewMode==='free'&&moves[event.key]){event.preventDefault();rotateView(...moves[event.key]);}
 });
+const cameraKeys=new Set(),panCodes=new Set(['KeyW','KeyA','KeyS','KeyD']);
+const editingCameraInput=element=>!!element?.closest?.('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]');
+// 键盘只记录按住状态，显示帧消费；不依赖系统按键重复，也不抢输入框或浏览器快捷键。
+document.addEventListener('keydown',event=>{
+  if(event.ctrlKey||event.metaKey||event.altKey||event.isComposing||editingCameraInput(event.target))return cameraKeys.clear();
+  if(!panCodes.has(event.code)||$('defeat').open||$('victory').open)return;
+  event.preventDefault();cameraKeys.add(event.code);
+});
+document.addEventListener('keyup',event=>cameraKeys.delete(event.code));
+document.addEventListener('focusin',event=>{if(editingCameraInput(event.target))cameraKeys.clear();});
+window.addEventListener('blur',()=>cameraKeys.clear());
+document.addEventListener('visibilitychange',()=>{if(document.hidden)cameraKeys.clear();});
+function moveKeyboardCamera(elapsed){
+  if(!cameraKeys.size)return;
+  if(document.hidden||editingCameraInput(document.activeElement)||$('defeat').open||$('victory').open)return cameraKeys.clear();
+  if(dragging)return;
+  const step=keyboardPanStep(cameraKeys,elapsed,previewParams().keyboardPanSpeedPx);if(!step.x&&!step.y)return;
+  const camera=cameraView(),delta=panView(step.x,step.y,camera),oldX=panX,oldY=panY;
+  panX+=delta.x*base*zoom/camera.cell;panY+=delta.y*base*zoom/camera.cell;constrainCamera();
+  if(panX!==oldX||panY!==oldY){pointerPending=true;draw();}
+}
 // 开关开启时左右栏操作先回俯视；关闭保留观察姿态，不吞掉原按钮或输入操作。
 const returnForSidebar=event=>{if(viewMode!=='top'&&event.target.closest('aside')&&previewParams().returnToTopOnAction)setViewMode('top');};
 document.addEventListener('pointerdown',returnForSidebar,{capture:true});
@@ -1658,6 +1679,7 @@ function paramsEditor(params,scope='all') {
   fields('城市照明',params,'',[['streetLightBudget','真实路灯预算（盏，0关闭）',0,64]],'visualParams');
   fields('地图比例尺',params,'',[['cellMeters','每格距离（米）',1,1000],['mapMaxCellPx','最大格宽（像素）',48,256]],'visualParams');
   fields('观察镜头',params,'',[['obliqueElevationDegrees','斜视俯仰角（度）',25,80],['freeProjection','自由投影'],['returnToTopOnAction','操作返回俯视'],['freePerspectiveFovDegrees','透视FOV（度）',20,60]],'visualParams');
+  fields('键盘镜头',params,'',[['keyboardPanSpeedPx','WASD速度（像素/秒，0关闭）',0,1200]],'visualParams');
   fields('地图信息密度',params,'',[['mapMidZoomPercent','进入中景（%）',100,1000],['mapNearZoomPercent','进入近景（%）',100,1000]],'visualParams');
   fields('控制边缘',params,'',[['controlBorderInnerCells','内侧渐隐（格，0关闭）',0,2],['controlBorderOuterCells','外侧渐隐（格，0关闭）',0,2],['controlBorderInnerOpacity','内侧色带强度%',0,60],['controlBorderOuterOpacity','外侧色带强度%',0,60],['controlBorderLinePx','主线粗细（像素）',1,6]],'visualParams');
   fields('火力显示',params,'',[['fireNumbersMinCellPx','数字最小格宽（像素，0始终显示）',0,48]],'visualParams');
@@ -2189,6 +2211,7 @@ $('step').onclick=()=>{if(nightOutro||state.phase!=='battle'||!paused)return;if(
 function frame(now){
   const measured=previewParams().showRenderStats,frameStart=measured?performance.now():0;
   const elapsed=Math.min(now-last,100);last=now;
+  moveKeyboardCamera(elapsed);
   if(dayEndHold&&!document.hidden){const progress=Math.min(1,(now-dayEndHold.at)/dayEndHold.duration);showDayEndCharge(progress);if(progress>=1)finishDayEnd();}
   if(dayEndReturn){
     const t=Math.min(1,(now-dayEndReturn.at)/220),ease=t*t*(3-2*t);

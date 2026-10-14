@@ -8,6 +8,11 @@ test('云层流速只接受有限的0–3倍率，静止及小数合法',()=>{
  for(const cloudSpeedMultiplier of [0,.5,1,3])assert.equal(validateParams({...s.params,cloudSpeedMultiplier},s,false),'');
  for(const cloudSpeedMultiplier of [-1,3.1,NaN,Infinity])assert.match(validateParams({...s.params,cloudSpeedMultiplier},s,false),/云层流速/);
 });
+test('键盘平移速度校验0–1200整数，不改变实时视野',()=>{
+ const s=createState(),before=visionField(s);assert.equal(s.params.freeProjection,'perspective');assert.equal(s.params.returnToTopOnAction,false);
+ for(const keyboardPanSpeedPx of [0,480,1200]){const params={...s.params,keyboardPanSpeedPx};assert.equal(validateParams(params,s,false),'');assert.deepEqual(visionField({...s,params}),before);}
+ for(const keyboardPanSpeedPx of [-1,1201,1.5,NaN,Infinity])assert.match(validateParams({...s.params,keyboardPanSpeedPx},s,false),/WASD/);
+});
 test('外围雾参数校验有限整数范围，不改变游戏视野',()=>{
  const s=createState(),before=visionField(s);
  for(const [name,min,max] of [['exteriorFogTransitionPercent',5,50],['exteriorFogClearPercent',0,60],['exteriorFogFarOpacity',70,100]]){

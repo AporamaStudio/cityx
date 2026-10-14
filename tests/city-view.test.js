@@ -1,6 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {projectView,groundAt,panView,viewCenter,observationView,orbitView} from '../src/city-view.js';
+import {projectView,groundAt,panView,keyboardPanStep,viewCenter,observationView,orbitView} from '../src/city-view.js';
+
+test('WASD按真实时间平移，相反方向抵消，斜向不更快，慢帧有上限',()=>{
+  const one=keyboardPanStep(new Set(['KeyW']),50,480),two=keyboardPanStep(new Set(['KeyW','KeyD']),50,480);
+  assert.deepEqual(one,{x:0,y:24});assert.ok(Math.abs(Math.hypot(two.x,two.y)-24)<1e-9);assert.ok(two.x<0&&two.y>0);
+  assert.deepEqual(keyboardPanStep(new Set(['KeyW','KeyS','KeyA','KeyD']),50,480),{x:0,y:0});
+  const short=keyboardPanStep(new Set(['KeyW']),25,480);assert.equal(short.y*2,one.y);
+  assert.equal(keyboardPanStep(new Set(['KeyW']),1000,480).y,48);assert.equal(keyboardPanStep(new Set(['KeyW']),50,0).y,0);
+});
+
+test('旋转及两种投影下，WASD仍沿画面方向移动而非固定世界轴',()=>{
+  for(const projection of ['orthographic','perspective'])for(const yaw of [0,Math.PI/4,-Math.PI/2]){
+    const view={width:702,height:582,panX:-200,panY:-450,cell:24,yaw,elevation:Math.PI/4,projection,fov:40},center=viewCenter(view);
+    const step=keyboardPanStep(new Set(['KeyD']),16,480),delta=panView(step.x,step.y,view);
+    const moved=projectView(center.x,center.y,0,{...view,panX:view.panX+delta.x,panY:view.panY+delta.y});
+    assert.ok(moved.x<view.width/2);assert.ok(Math.abs(moved.y-view.height/2)<1e-8);
+  }
+});
 
 test('俯视与斜视坐标往返保持原观察中心，屋顶投影只改显示高度',()=>{
   for(const yaw of [0,Math.PI/4,-Math.PI/2,Math.PI])for(const elevation of [Math.PI/2,Math.PI/3,Math.PI/6]){

@@ -8,7 +8,9 @@ export const DEFAULTS = {
   // 固定斜视与水平面的夹角（度）；自由手调角度独立，不随缩放改变。
   obliqueElevationDegrees: 45,
   // 只切换自由观察投影；俯视/固定斜视保持正交，透视FOV为垂直视野角。
-  freeProjection: 'orthographic', freePerspectiveFovDegrees: 40,
+  freeProjection: 'perspective', freePerspectiveFovDegrees: 40,
+  // WASD按画面方向平移；按真实时间与CSS像素计速，0关闭，不随战斗倍速变化。
+  keyboardPanSpeedPx: 480,
   // 自由/斜视建设默认保持镜头；开启可恢复操作回俯视的比较方式。
   returnToTopOnAction: false,
   // 真实路灯固定光源池；超出预算仍保留灯罩和地面暖光，0关闭路灯真实光源。
@@ -73,7 +75,7 @@ export const DEFAULTS = {
 
 
 // 视觉实验独立应用的白名单；不能借此修改战斗、经济或控制参数。
-export const VISUAL_PARAM_KEYS = ['cellMeters', 'mapMaxCellPx', 'obliqueElevationDegrees', 'freeProjection', 'freePerspectiveFovDegrees', 'returnToTopOnAction', 'streetLightBudget', 'enemyFiguresPerGroup', 'showRenderStats', 'fireNumbersMinCellPx', 'mapMidZoomPercent', 'mapNearZoomPercent', 'controlBorderInnerCells', 'controlBorderOuterCells', 'controlBorderInnerOpacity', 'controlBorderOuterOpacity', 'controlBorderLinePx', 'cloudSpeedMultiplier', 'fogS12', 'fogS23', 'exteriorFogTransitionPercent', 'exteriorFogClearPercent', 'exteriorFogFarOpacity', 'enemyFogFadeCells', 'campWarningPercent', 'nightIdleTransitionMs', 'incomeReportMs', 'resourceHoverMs', 'resourceHoverTolerancePx'];
+export const VISUAL_PARAM_KEYS = ['cellMeters', 'mapMaxCellPx', 'obliqueElevationDegrees', 'freeProjection', 'freePerspectiveFovDegrees', 'keyboardPanSpeedPx', 'returnToTopOnAction', 'streetLightBudget', 'enemyFiguresPerGroup', 'showRenderStats', 'fireNumbersMinCellPx', 'mapMidZoomPercent', 'mapNearZoomPercent', 'controlBorderInnerCells', 'controlBorderOuterCells', 'controlBorderInnerOpacity', 'controlBorderOuterOpacity', 'controlBorderLinePx', 'cloudSpeedMultiplier', 'fogS12', 'fogS23', 'exteriorFogTransitionPercent', 'exteriorFogClearPercent', 'exteriorFogFarOpacity', 'enemyFogFadeCells', 'campWarningPercent', 'nightIdleTransitionMs', 'incomeReportMs', 'resourceHoverMs', 'resourceHoverTolerancePx'];
 
 // 十五晚实验：前五晚保留原节奏，后十晚逐步增加强度；参数仍须真人试玩。
 const OPENING_WAVES = [

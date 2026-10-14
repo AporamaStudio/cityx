@@ -4,7 +4,7 @@
 
 ## 目标与协作边界
 
-CityX 的可抛弃新原型。使用原生JavaScript、Canvas与Three.js，60×60逻辑格子；俯视、固定斜视与自由视角共用建设和防守。旧 Godot 项目仅作历史参考。游戏开发背景见 `/Users/yhan/.codex/memories/game_development_background.md`，协作原则见 `AGENTS.md`。
+CityX 的可抛弃新原型。使用原生JavaScript、Canvas与Three.js，60×60逻辑格子；俯视、固定斜视与自由视角共用建设和防守。自由视角默认透视、操作返回俯视默认关闭，三种视角均支持WASD平移；配置与操作见[视角细则](docs/todo.md#视角操作细则2026-10-13已接入回正现可配置)。旧 Godot 项目仅作历史参考。游戏开发背景见 `/Users/yhan/.codex/memories/game_development_background.md`，协作原则见 `AGENTS.md`。
 
 长期方向：非即时建设／经营／扩张 + 可暂停即时防守，只有两个操作阶段。重视放置后的即时反馈，目标完整游戏日现实3～5分钟，夜间主要防守约60～90秒；保留城市收复和安全区扩张，由空间需求与敌人压力推动扩张。允许成熟机制与删换方案，不追求刻意创新。
 
