@@ -1,3 +1,4 @@
+import {createRenderMeter} from './render-meter.js?v=1';
 import {drawNaturalTerrain,naturalGroundAt} from './natural-terrain.js?v=6';
 import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback} from './enemy-overlay.js?v=6';
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
@@ -430,13 +431,19 @@ function cellAt(event) {
 // 先绘制地形和覆盖，再叠加路线、设施、敌群，确保信息优先级清晰。
 let drawPending=false,mapView=null,borderLegendKey=null,observationBuildTargets=[],observationTargetsKey='';
 const towerOverlayCache=createTowerOverlayCache();
-let renderSamples=[],lastStatsAt=0,lastStatsView='';
-// 调试面板记录显示回调及绘制的CPU耗时；连续转镜头不清空窗口，不强制等待GPU。
+const renderMeter=createRenderMeter();let lastStatsView='';
+// 只在统计开启时记录；HUD显示实际地图重绘率，完整提交数留在悬停说明。
 function recordRenderStats(cpu,stats,total){
-  const panel=$('renderStats'),view=[viewMode,state.phase,previewParams().freeProjection].join(':');if(view!==lastStatsView){lastStatsView=view;renderSamples=[];lastStatsAt=0;}panel.hidden=false;renderSamples.push({cpu,total});if(renderSamples.length>60)renderSamples.shift();
-  if(performance.now()-lastStatsAt<1000)return;lastStatsAt=performance.now();
-  const mean=renderSamples.reduce((sum,v)=>sum+v.total,0)/renderSamples.length,drawMean=renderSamples.reduce((sum,v)=>sum+v.cpu,0)/renderSamples.length,sorted=renderSamples.map(v=>v.total).sort((a,b)=>a-b),p95=sorted[Math.floor((sorted.length-1)*.95)];
-  panel.textContent=stats?`更新绘制 ${mean.toFixed(1)}ms（P95 ${p95.toFixed(1)}ms） · 绘制 ${drawMean.toFixed(1)}ms · 提交 ${stats.calls} · ${(stats.triangles/1000).toFixed(0)}k面 · 人物 ${stats.figures}/${stats.capacity}`:'3D不可用，保留原地图。';
+  const panel=$('renderStats'),view=[viewMode,state.phase,previewParams().freeProjection].join(':');
+  if(view!==lastStatsView){lastStatsView=view;renderMeter.reset();}
+  panel.hidden=false;
+  const continuous=!!(cameraKeys.size||dragging?.moved||motion&&(!paused||motion.singleStep)||state.phase==='battle'&&!paused&&combatShots.some(shot=>effectTime-shot.at<.2));
+  const values=renderMeter.push(performance.now(),cpu,total,continuous);if(!values)return;
+  panel.dataset.load=values.load;panel.dataset.drawMs=values.drawMs.toFixed(2);panel.dataset.fps=values.fps.toFixed(1);
+  panel.querySelector('span').textContent=`绘制 ${values.drawMs.toFixed(1)}ms · ${Math.round(values.fps)} FPS`;
+  const level={low:'低',medium:'中',high:'高'}[values.load];
+  panel.setAttribute('aria-label',`${level}负载，绘制${values.drawMs.toFixed(1)}毫秒，地图重绘${Math.round(values.fps)}帧每秒`);
+  panel.title=`${level}负载（CPU及连续交互帧率估计，非GPU利用率）。FPS是实际地图重绘率，空闲按需更新。显示回调CPU ${values.cpuMs.toFixed(1)}ms；${stats?.calls??0}次提交，${Math.round((stats?.triangles??0)/1000)}k面，人物${stats?.figures??0}。`;
 }
 // 输入与动画可以同时要求刷新，但同一浏览器帧只重画一次。
 function draw(){drawPending=true;}
@@ -1364,7 +1371,7 @@ function updateNightProgress(){
 }
 function update() {
   // 所有建设、收支、参数、阶段和敌人移动更新都经此入口；镜头操作不失效缓存。
-  mapView=null;pointerPending=true;updateViewHelp();
+  mapView=null;pointerPending=true;$('step').setAttribute('aria-busy',String(!!motion));updateViewHelp();
   sound.setScene(state.phase,paused,!!nightOutro);
   sight=visionField(state);revealControl(state);
   fire = fireField({...state,params:previewParams()});
@@ -2253,7 +2260,7 @@ function frame(now){
   if(pointerPending){pointerPending=false;if(pointerSample&&!(dragging&&(dragging.moved||dragging.panOnly||dragging.rotate))){hover=cellAt(pointerSample);updateMapSourceHover();draw();}}
   if(drawPending){
     drawPending=false;const start=measured?performance.now():0;if(measured)city3D?.beginStats();paintMap();
-    if(measured)recordRenderStats(performance.now()-start,city3D?.renderStats(),performance.now()-frameStart);else $('renderStats').hidden=true;
+    if(measured)recordRenderStats(performance.now()-start,city3D?.renderStats(),performance.now()-frameStart);else{$('renderStats').hidden=true;renderMeter.reset();lastStatsView='';}
   }
   requestAnimationFrame(frame);
 }
