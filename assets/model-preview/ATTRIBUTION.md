@@ -98,3 +98,26 @@ Three.js **0.180.0**，MIT，来自官方npm包 `three`。仅保留预览所需�
 ### 新POI概念图（完好版2026-10-14；废弃版2026-10-15）
 
 `concepts/poi-2026-10-14/` 的三张完好概念板及三张同名 `-abandoned` 废弃概念板使用内置 `image_gen` 生成，不是Kenney素材或Blender实机渲染。每张包含四个POI；废弃版以对应完好版作为编辑参考，保留地块和建筑身份，增加局部结构损坏及失养、停用痕迹。完整提示词、原图文件名与对应POI记录在该目录的 `prompts.json` 和 `abandoned-prompts.json`。规划尺寸不是CAD测量或已定占格；图中的细节不自动构成玩法规则，不替代后续模型与渲染验证。
+
+## Blender市政厅品质样板（2026-10-14）
+
+用户确定首件为City Hall，先只放3D视觉实验，保真度优先，未接入主游戏。参考为项目生成的 `concepts/poi-2026-10-14/01-civic-life.png` 左上角；参考图是构图与风格目标，不是可量尺的施工图。样板园区120×140m，主体约66×33m、最高约22m；保留对称三段楼体、中央玻璃门厅、四坡长脊屋面、公共广场和喷泉，并补足侧面/背面、路缘、停车、车辆、树冠和家具。首先验证完好/恢复运营两态；用户已认可基础品质，破损模型仍暂不制作，废弃概念图不自动转为建模任务。
+
+### 制作pipeline
+
+- 生成入口：`scripts/build-cityhall-blender.py`。固定随机seed，原生米制网格，按物体保留中文命名和可编辑倒角/加权法线；直接网格生成，避免逐件调用操作器导致多次依赖图更新。建模校准常数属于艺术尺寸，不新增游戏config。
+- 源文件：`cityhall-quality/city-hall.blend`，包含分件源模型、修饰器、打包的原创纹理、白天灯光与参考角度相机。可直接打开继续人工修改；重新生成会按脚本重建，因此人工调整须另存版本或同步回脚本。脚本必须在新的后台场景执行，不作用于已打开的用户场景。
+- 发布给预览的模型：`cityhall-quality/city-hall.glb`。导出副本固化倒角、按材质合并；不破坏源文件分件。纹理随GLB内嵌，网页读取玻璃/灯具材质与根节点灯位元数据，冷色环境光和暖色运营照明分开。无新游戏对象、经济、控制、视野或碰撞数据。
+- 材质：原创混凝土、石材砌缝、广场铺装、草地纹理与法线位于 `cityhall-quality/textures/`，由脚本内numpy生成，无外部图片。UV依米制铺贴；金属屋面立缝、门窗凹凸与家具用实际几何。玻璃采用粗糙度/金属度与环境反射，当前不做完整室内。
+- 渲染：`cityhall-quality/renders/city-hall-day.png` 与 `city-hall-night.png` 为同一源模型的Cycles昼夜图。网页使用同一GLB、单一太阳阴影和独立预览反射环境，最终验收以网页多角度为准，离线图不代表网页逐像素一致。
+- 统计：`cityhall-quality/build-info.json`记录Blender版本、物体/材质/三角形数量、GLB字节及生成时间，不把生成时间当完整任务耗时，也不把文件大小当token使用量。
+
+在仓库根目录执行（本机已安装Blender5.2 LTS）：
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python scripts/build-cityhall-blender.py -- --render --samples 96 --size 1440
+```
+
+不加 `--render` 只重建源模型、纹理、GLB及统计；样本数与图宽只影响离线渲染。若需要只修改相机/材质后渲染，可直接在源文件中操作，不必重建场景。macOS受限沙箱内Blender可能在Metal初始化时崩溃，本机正常授权执行已通过；没有安装插件、下载外部模型或修改系统配置。
+
+预览入口 `model-preview.html?asset=city-hall`，或页内「市政厅样板」按钮；可旋转/缩放、俯视/斜视、昼夜和完好/运营切换，下载GLB与Blend，原模型场景继续保留。样板照明设置只用于此对象的观察，不导入主游戏。首件在 `codex/cityhall-quality-sample` 独立分支制作，2026-10-15普通合并到main并保留原始提交及分支；基础品质已获用户认可，正式版运行预算与其余POI仍需单独验证。

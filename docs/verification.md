@@ -1485,3 +1485,19 @@
 - 301项规则检查通过，新增本座贡献纯读取、两座利率叠加、边界实际贡献与停业保留固有额度；未增加纯SVG镜像测试。JS语法、diff与本地Pages构建通过。
 - 独立浏览器第3天200金币：瞭望塔与银行恢复后150，升级贷款优惠后125；三选一徽章有完整圆框，额度100→200带金币。运营悬停贷款10%→8%、额度100、用工1，实际一行高36px；拆瞭望塔后显示暂停、0/100且保留专精，重新建设后恢复。建炮进入夜晚并暂停，检查屋顶标牌、昼夜徽章与一行悬停；无error/warn。
 - 截图：`/private/tmp/cityx-bank-upgrade-bordered.png`、`/private/tmp/cityx-bank-bordered-active.png`、`/private/tmp/cityx-bank-bordered-stopped.png`、`/private/tmp/cityx-bank-bordered-night.png`。未运行Godot、提交、推送或发布；视觉辨识度仍待实际试玩反馈。
+
+### Blender市政厅品质样板（2026-10-14）
+
+- 制作时使用独立分支 `codex/cityhall-quality-sample`、工作目录 `/private/tmp/cityx-cityhall-quality`，以2d56e72为基线，未纳入主目录其他未提交的银行/资源修改，当时未合入main或发布。临时验证地址：`http://127.0.0.1:8123/model-preview.html?asset=city-hall`；8099原游戏继续保持。后续合并检查见下节。
+- 本机Blender5.2 LTS真实制作并导出；最终米制园区120×140m、楼体约66×33m、422548三角形、35材质，GLB29044452字节。源文件保留4509个分件、3749个修饰器和10张打包原创贴图；用Blender重新打开压缩源文件已确认分件、修饰器、贴图和METRIC单位。统计见build-info，不把后台生成秒数当完整制作时间。
+- Cycles同源昼夜渲染1440×1152、96样本；网页读取GLB材质、纹理与灯位，检查完好/运营、白天/夜晚、俯视、斜视、滚轮放大、背面自由旋转。对照检查修正长脊屋顶、前庭/树冠及中央背面玻璃遮挡，首轮PMREM模糊警告已修正，最终新标签无error/warn。
+- 旧街区、道路、郊野模式往返后市政厅可以正常重选；未制作破损版，废墟按钮明确禁用，未请求不存在的GLB。模型和Blend下载入口正常指向本地文件；运行灯光由运营状态控制，完好不自动亮灯。
+- 292项检查通过；最终资产变更后再次通过2项GLB/源文件回归；本地Pages构建成功。Web截图在cityhall-quality/renders/city-hall-web-day.png及city-hall-web-night.png。本轮未改主游戏模型、权限、经济、战斗或视野，index仅同步预览入口版本。
+- 此次制作时是首件保真度优先的品质样板，尚未由用户验收；用户随后已认可基础品质。室内、配套破损、其他POI及后续运行预算均未实施。
+
+### 市政厅品质样板合入main（2026-10-15）
+
+- 按用户要求采用普通非快进合并，保留 `a1a88e6` 原提交与 `codex/cityhall-quality-sample` 分支；没有压缩或改写已有提交。
+- 三份文档的追加冲突保留两侧内容；主页面冲突保留main的银行三选一、整数输入和玩家手册，仅将3D预览入口说明更新为v33。同步品质认可和合并状态，破损模型仍暂不制作。
+- 303项现有测试全部通过，本地Pages构建与diff空白检查通过。浏览器从8099直接打开 `model-preview.html?asset=city-hall`，48个模型就绪、市政厅园区正常绘制，GLB/Blend下载入口存在，无error/warn。
+- 仅接入独立3D视觉预览，未新增主地图市政厅玩法；此轮不重新生成Blender资产，不运行Godot或发布。

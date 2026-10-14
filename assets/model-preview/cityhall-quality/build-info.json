@@ -1,0 +1,13 @@
+{
+  "units": "meters",
+  "footprint": [
+    120,
+    140
+  ],
+  "materials": 35,
+  "sourceObjects": 4509,
+  "triangles": 422548,
+  "glbBytes": 29044452,
+  "elapsedSeconds": 24.7,
+  "blender": "5.2.0 LTS"
+}
