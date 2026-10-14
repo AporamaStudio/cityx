@@ -47,6 +47,10 @@ const facilityPaths={
   watch:'<path d="M9 29 12 13h8l3 16M11 21l11 8M21 21l-11 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M6 12h20v4H6zM5 9 16 2 27 9z" fill="currentColor"/><path d="M10 9v3m12-3v3" stroke="currentColor" stroke-width="2"/>'
 };
 export const FACILITY_COLORS={near:['#28654f','#a0e7c3'],far:['#575487','#d2c2fa'],wall:['#62634c','#d9d0af'],production:['#346970','#a1d9d7'],housing:['#89582d','#efc18c'],watch:['#245d73','#b3e8f2'],bank:['#78612a','#efda94'],bankCapacity:['#856426','#f1d486'],bankDeposit:['#326a4b','#a1e0b2'],bankLoan:['#3e6383','#b9d7f5']};
-export const FACILITY_SVGS=Object.fromEntries(Object.entries(facilityPaths).map(([name,path])=>[name,`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" class="facility-icon${['near','far'].includes(name)?' weapon-icon':''}" data-facility="${name}" style="--icon-day:${FACILITY_COLORS[name][0]};--icon-night:${FACILITY_COLORS[name][1]}" aria-hidden="true">${path}</svg>`]));
+export const FACILITY_SVGS=Object.fromEntries(Object.entries(facilityPaths).map(([name,path])=>{
+  // 专精是完整徽章：边框围住主体但留白，窗口和地图共用，不重复叠框。
+  const graphic=['bankCapacity','bankDeposit','bankLoan'].includes(name)?`<circle cx="16" cy="16" r="14.8" fill="currentColor" fill-opacity=".07" stroke="currentColor" stroke-width="1.4"/><g transform="translate(4.48 4.48) scale(.72)">${path}</g>`:path;
+  return [name,`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" class="facility-icon${['near','far'].includes(name)?' weapon-icon':''}" data-facility="${name}" style="--icon-day:${FACILITY_COLORS[name][0]};--icon-night:${FACILITY_COLORS[name][1]}" aria-hidden="true">${graphic}</svg>`];
+}));
 // 保留瞭望塔入口，形状与其它设施一样由共享图标表提供。
 export const WATCHTOWER_SVG=FACILITY_SVGS.watch;

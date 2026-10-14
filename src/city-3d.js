@@ -13,6 +13,7 @@ import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=11';
 import {createCityObservation} from './city-observation.js?v=12';
 import {createZombieCrowds} from './city-enemies.js?v=7';
+import {FACILITY_SVGS} from './icons.js?v=12';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
@@ -20,6 +21,24 @@ for(const name of ['farmland','wheatfield','wheatfield-abandoned','wheatfield-bu
 for(const [name,file] of Object.entries(PLANT_MODELS))files[name]='generated/'+file;
 for(const name of ['home','small','wide','factory','workshop'])files[name+'Ruined']=files[name]+'-ruined';
 const resource=file=>new URL('../assets/model-preview/'+file+'.glb?v=5',import.meta.url).href;
+
+let bankSignTexture;
+// 三种专精共用一块米制屋顶牌，复用银行图形；仅生成一次贴图，不重做建筑资产。
+function addBankUpgradeSign(object,w,h,cellMeters){
+  if(!bankSignTexture){
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=128;bankSignTexture=new THREE.CanvasTexture(canvas);bankSignTexture.colorSpace=THREE.SRGBColorSpace;
+    const image=new Image();image.onload=()=>{canvas.getContext('2d').drawImage(image,0,0,128,128);bankSignTexture.needsUpdate=true;};
+    image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(FACILITY_SVGS.bank.replaceAll('currentColor','#f2d59a'));
+  }
+  object.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(object),x=object.position.x+w*.25,z=object.position.z+h*.20;
+  const hit=new THREE.Raycaster(new THREE.Vector3(x,bounds.max.y+1,z),new THREE.Vector3(0,-1,0)).intersectObject(object,true)[0];
+  const sign=new THREE.Group(),width=18/cellMeters,depth=14/cellMeters,thickness=.8/cellMeters;
+  sign.position.copy(object.worldToLocal(new THREE.Vector3(x,(hit?.point.y??bounds.max.y)+thickness/2+.01,z)));
+  const frame=new THREE.Mesh(new THREE.BoxGeometry(width,thickness,depth),new THREE.MeshStandardMaterial({color:'#b29352',roughness:.6,metalness:.35}));frame.userData.ownGeometry=true;frame.castShadow=frame.receiveShadow=true;
+  const inset=new THREE.Mesh(new THREE.BoxGeometry(width*.9,thickness*.3,depth*.86),new THREE.MeshStandardMaterial({color:'#26383c',roughness:.8}));inset.position.y=thickness*.55;inset.userData.ownGeometry=true;
+  const face=new THREE.Mesh(new THREE.PlaneGeometry(depth*.70,depth*.70),new THREE.MeshStandardMaterial({map:bankSignTexture,transparent:true,emissive:'#f2ca83',emissiveMap:bankSignTexture,emissiveIntensity:0,roughness:.8}));face.rotation.x=-Math.PI/2;face.position.y=thickness*.72;face.userData.ownGeometry=true;face.userData.cityBankSign=true;
+  sign.add(frame,inset,face);object.add(sign);
+}
 
 function operatingLights(object){
   // 玻璃沿用同一色板发光，屋顶补少量暖灯，保证俯视也能辨认运营状态。
@@ -133,7 +152,8 @@ export function createCity3D(onReady){
     if(!landmark)mergePlot(object);
     if(status==='ruin'&&!landmark)ruinAppearance(object);
     if(status==='building')operatingLights(object);
-    return {object,signature:`${type}:${status}:${w}:${h}:${cellMeters}`,roof:new THREE.Box3().setFromObject(object).max.y};
+    if(type==='bank'&&status==='building'&&plot.upgrade)addBankUpgradeSign(object,w,h,cellMeters);
+    return {object,signature:`${type}:${status}:${w}:${h}:${cellMeters}:${plot.upgrade??''}`,roof:new THREE.Box3().setFromObject(object).max.y};
   }
   return {
     beginStats(){renderer.info.autoReset=false;renderer.info.reset();},
@@ -168,9 +188,9 @@ export function createCity3D(onReady){
       const active=new Set(plots.map(p=>p.id));
       for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
       for(const plot of plots){
-        const signature=`${plot.type}:${plot.status}:${plot.w}:${plot.h}:${plot.cellMeters}`;
+        const signature=`${plot.type}:${plot.status}:${plot.w}:${plot.h}:${plot.cellMeters}:${plot.upgrade??''}`;
         if(entries.get(plot.id)?.signature!==signature){if(entries.has(plot.id))release(entries.get(plot.id));entries.set(plot.id,build(plot));}
-        entries.get(plot.id).object.traverse(node=>{if(node.userData.cityRoofLights)node.visible=plot.powered&&night>0;if(node.isMesh){if(node.material.userData.cityPower)node.material.userData.cityPower.value=plot.powered?night:0;if(node.parent?.userData.cityRoofLights)node.material.opacity=plot.powered?night*(node.material.map?.28:1):0;}});
+        entries.get(plot.id).object.traverse(node=>{if(node.userData.cityRoofLights)node.visible=plot.powered&&night>0;if(node.isMesh){if(node.material.userData.cityPower)node.material.userData.cityPower.value=plot.powered?night:0;if(node.parent?.userData.cityRoofLights)node.material.opacity=plot.powered?night*(node.material.map?.28:1):0;if(node.userData.cityBankSign){node.material.emissiveIntensity=plot.powered?night*.45:0;node.material.opacity=plot.powered?1:.4;}}});
       }
       if(layout&&(roadLayout!==layout||terrain.userData.cellMeters!==cellMeters)){
         if(terrain){terrain.removeFromParent();terrain.geometry.dispose();terrain.material.map.dispose();terrain.material.dispose();}

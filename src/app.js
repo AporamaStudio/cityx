@@ -3,7 +3,7 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
 import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=4';
-import {createCity3D} from './city-3d.js?v=62';
+import {createCity3D} from './city-3d.js?v=63';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -13,10 +13,10 @@ import {createTowerOverlayCache} from './tower-overlay.js?v=20';
 import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=24';
 import {cameraScale,limitZoom,limitPan,limitObservationPan} from './map-camera.js?v=4';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
-import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=11';
+import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=12';
 import {createGameAudio} from './audio.js?v=10';
 import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=89';
-import {applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,bankCapacityFor,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=106';
+import {applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,bankContribution,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=107';
 import {generateCityMap} from './city-map.js?v=14';
 import {readMapSettings} from './map-settings.js?v=2';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -609,7 +609,7 @@ function paintMap() {
   const impact=Math.min(1,impactAge/IMPACT_MS),enemyFrames=enemyDisplayFrames(state,motion?{...motion,duration:moveDuration()}:null,incoming,impact,reducedMotion.matches);
   for(const frame of enemyFrames){frame.ground=naturalGroundAt(state.layout,frame.x+.5,frame.y+.5,controlState.params.cellMeters);frame.fogAlpha=mapFogEnabled()?view.visibility.enemyAlpha(frame.rawX+.5,frame.rawY+.5):1;frame.alpha*=frame.fogAlpha;if(frame.enemy.hp===0&&!currentlyVisible(frame.enemy.id))frame.alpha=0;}
   showLoanPreview(goldDelta);
-  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:['hospital','bank'].includes(p.site.role)?p.site.role:p.content.type,status:p.content.status,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id)||bankActive(state,id)),cellMeters:controlState.params.cellMeters}));
+  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:['hospital','bank'].includes(p.site.role)?p.site.role:p.content.type,status:p.content.status,upgrade:state.banks.get(id)?.upgrade??null,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id)||bankActive(state,id)),cellMeters:controlState.params.cellMeters}));
   const streetLamps=operatingStreetLamps(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
   const vehicles=streetVehicles(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys()]),lamps:streetLamps,cellMeters:controlState.params.cellMeters}),wrecks=vehicles.filter(car=>car.asset==='wreck');
   cityTransitions=cityTransitions.filter(event=>effectTime-event.at<.8&&currentlyVisible(event.cell));
@@ -1040,11 +1040,7 @@ function paintMap() {
     const overlay=view.towers.plots.get(id);
     if(p.role==='bank'){
       if(!cellsVisibleBank(p,overlay))continue;
-      const known=state.banks.has(id),operating=bankActive(state,id),focused=hoveredPlot===id,x=panX+(p.x+p.width/2)*size,y=panY+(p.y+p.height/2)*size;
-      ctx.save();ctx.font='700 12px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=4;ctx.strokeStyle='#142024';
-      const title=known?operating?`银行 · ${bankSpecialization(id)||'运营'}`:'银行 · 停业':'银行废墟';ctx.strokeText(title,x,y);ctx.fillStyle=operating?'#bff5ce':'#ffe5a8';ctx.fillText(title,x,y);drawFacility(bankUpgradeIcon(state.banks.get(id)?.upgrade),x-8,y-27,16);
-      if(focused||['bank','bankUpgrade'].includes(tool)){const finance=bankFinance(state),detail=known?`额度 ${operating?bankCapacityFor(state,id):0} · ${finance.depositPercent}% / ${finance.loanPercent}%`:`修复 ${state.params.bankRestoreCost} · 用工 ${state.params.bankWorkers} · 额度 ${state.params.bankCapacity}`;ctx.font='600 10px system-ui';ctx.strokeText(detail,x,y+16);ctx.fillText(detail,x,y+16);}
-      ctx.restore();continue;
+      drawBankMarker(id,panX+(p.x+p.width/2)*size,panY+(p.y+p.height/2)*size);continue;
     }
     if(weaponSelected&&p.role!=='hospital'&&!overlay.controlled)continue;
     // 敌人经过街区时优先显示敌群，避免标签盖住生命与血条。
@@ -1150,6 +1146,7 @@ function paintMap() {
 function cellsVisibleBank(p,overlay){return overlay.cells.every(visibleCell)&&overlay.cells.some(currentlyVisible);}
 function updateMapInfo(view,mapDetail,potentials=[],linked=null){
   const controlState=view.controlState,hoveredPlot=productionId(hover,state);
+  updateBankHover(view,hoveredPlot);
   const nextBorderLegendKey=[nightMix.toFixed(2),...['controlBorderInnerCells','controlBorderOuterCells','controlBorderInnerOpacity','controlBorderOuterOpacity','controlBorderLinePx'].map(name=>controlState.params[name])].join(':');
   if(borderLegendKey!==nextBorderLegendKey){
     borderLegendKey=nextBorderLegendKey;
@@ -1168,12 +1165,12 @@ function updateMapInfo(view,mapDetail,potentials=[],linked=null){
     if(source){type=source.hp>0?'感染据点':'感染据点残骸';w=source.width??1;h=source.height??1;}
     else if(p?.role==='camp')type='火光广场';
     else if(p?.role==='hospital')type='医院';
-    else if(p?.role==='bank')type=state.banks.has(hoveredPlot)?bankActive(state,hoveredPlot)?'银行 · 运营':'银行 · 停业':'银行废墟';
+    else if(p?.role==='bank')type=''; // 银行只在图标浮层展示本座信息，不重复文字状态。
     else if(state.outposts.has(hover)){type='瞭望塔';w=h=1;}
     else if(state.playerWalls.has(hover)){type='墙';w=h=1;}
     else if(content)type=content.status==='empty'?'空地':content.type==='housing'?(content.status==='ruin'?'住房废墟':'住房'):(content.status==='ruin'?'生产废墟':'生产建筑');
     else type=state.layout?.tiles[hover]==='road'?'道路':'自然地形';
-    $('cellInfo').textContent=w&&h?`${w}×${h} 地块 · ${type}`:type;
+    $('cellInfo').textContent=w&&h?`${w}×${h} 地块${type?' · '+type:''}`:type;
   }else $('cellInfo').textContent='';
   if(potentials.some(potential=>potential.sourceId===linked))$('cellInfo').textContent='潜在路线 · 今晚不出兵';
 }
@@ -1305,7 +1302,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   for(const plot of plots)if(plot.status==='building'&&['production','housing'].includes(plot.type)){
     const icon=view.towers.plots.get(plot.id).iconCell;if(icon===null)continue;const [x,y]=xy(icon),p=point(x+.5,y+.5,city3D.roofAt(plot.id,x+.5,y+.5)+.03);if(p.hidden)continue;ctx.save();ctx.fillStyle='#1c3037df';ctx.fillRect(p.x-6,p.y-6,12,12);drawFacility(plot.type,p.x-5,p.y-5,10);ctx.restore();
   }
-  for(const plot of plots.filter(p=>p.type==='bank')){const p=point(plot.x+plot.w/2,plot.y+plot.h/2,city3D.roofAt(plot.id,plot.x+plot.w/2,plot.y+plot.h/2)+.03);if(p.hidden)continue;badge(plot.status==='ruin'?'银行废墟':plot.powered?`银行 · ${bankSpecialization(plot.id)||'运营'}`:'银行 · 停业',p.x,p.y);drawFacility(bankUpgradeIcon(state.banks.get(plot.id)?.upgrade),p.x-8,p.y-27,16);}
+  for(const plot of plots.filter(p=>p.type==='bank')){const p=point(plot.x+plot.w/2,plot.y+plot.h/2,city3D.roofAt(plot.id,plot.x+plot.w/2,plot.y+plot.h/2)+.03);if(!p.hidden)drawBankMarker(plot.id,p.x,p.y);}
   const routeCells=new Set(routes.flatMap(route=>route.path)),enemyCells=new Set(enemies.map(frame=>frame.enemy.id));
   if($('heat').checked&&size>=view.controlState.params.fireNumbersMinCellPx)for(const [id,power] of fire)if(routeCells.has(id)&&currentlyVisible(id)&&!enemyCells.has(id)){const [x,y]=xy(id),p=point(x+.5,y+.5,.02);if(p.hidden)continue;ctx.font='600 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=3;ctx.strokeStyle='#172630';ctx.strokeText(power,p.x,p.y);ctx.fillStyle='#d2ebda';ctx.fillText(power,p.x,p.y);}
   for(const [id,body] of state.wallHealth)if(currentlyVisible(id)){
@@ -1482,8 +1479,40 @@ function update() {
   draw();
 }
 // 收入卡只读取已结束夜晚的快照，不把白天新投资混入昨夜结果。
-const bankSpecialization=id=>({capacity:'额度增强',deposit:'存息增强',loan:'贷息优惠'})[state.banks.get(id)?.upgrade]||'';
 const bankUpgradeIcon=kind=>({capacity:'bankCapacity',deposit:'bankDeposit',loan:'bankLoan'})[kind]||'bank';
+const bankPausedSVG='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3v10m6-10v10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>';
+// 远景标识只保留银行/专精图形；停业保留专精但弱化，并补暂停符号。
+function drawBankMarker(id,x,y){
+  const record=state.banks.get(id),active=!!bankActive(state,id),stopped=!!record&&!active,w=24+(record?.upgrade?22:0)+(stopped?18:0);
+  ctx.save();ctx.globalAlpha=active?1:.65;ctx.fillStyle=nightMix>.5?'#17262ce8':'#e9e7dce8';ctx.strokeStyle=active?'#a19160':'#879398';ctx.lineWidth=1;
+  ctx.beginPath();ctx.roundRect(x-w/2,y-13,w,26,4);ctx.fill();ctx.stroke();let left=x-w/2+4;
+  drawFacility('bank',left,y-8,16);left+=22;
+  if(record?.upgrade){drawFacility(bankUpgradeIcon(record.upgrade),left-1,y-10,20);left+=22;}
+  if(stopped){ctx.strokeStyle=nightMix>.5?'#c3cbd0':'#53676f';ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(left+1,y-5);ctx.lineTo(left+1,y+5);ctx.moveTo(left+7,y-5);ctx.lineTo(left+7,y+5);ctx.stroke();}
+  ctx.restore();
+}
+// 悬停仅显示本座实际贡献，优先一行；金币/用工/专精共用已有图标，离开立即收起。
+function updateBankHover(view,id){
+  const panel=$('bankHover'),site=hover===null?null:productionSite(hover,state),overlay=view.towers.plots.get(id);
+  if(site?.role!=='bank'||!overlay||!cellsVisibleBank(site,overlay)||$('bankUpgradeDialog').open||!pointerSample){panel.hidden=true;return;}
+  view.bankContributions??=new Map();if(!view.bankContributions.has(id))view.bankContributions.set(id,bankContribution(state,id));
+  const q=view.bankContributions.get(id),restored=state.banks.has(id),key=[id,q.active,q.kind,q.capacity,q.installed,q.before,q.after,state.params.bankRestoreCost,state.params.bankWorkers].join(':');
+  if(panel.dataset.content!==key){
+    panel.dataset.content=key;$('bankHoverType').innerHTML=FACILITY_SVGS[bankUpgradeIcon(q.kind)];
+    $('bankHoverStatus').hidden=restored&&q.active;$('bankHoverStatus').innerHTML=restored?bankPausedSVG:'废墟';
+    const capacity=restored?q.active?money(q.capacity):`${money(q.capacity)}/${money(q.installed)}`:signedMoney(-state.params.bankRestoreCost);
+    $('bankHoverCapacity').replaceChildren($('wall').querySelector('.price-coin').cloneNode(true),document.createTextNode(capacity));
+    $('bankHoverEffect').hidden=!restored||!q.active||!['deposit','loan'].includes(q.kind);
+    $('bankHoverEffect').textContent=`${Number(q.before.toFixed(2))}% → ${Number(q.after.toFixed(2))}%`;
+    $('bankHoverWorkers').innerHTML=WORKER_SVG+`<span>${state.params.bankWorkers}</span>`;$('bankHoverWorkers').hidden=!state.params.bankWorkers;
+    panel.classList.toggle('bank-stopped',restored&&!q.active);
+    const effect=!q.active?'加成暂停':['deposit','loan'].includes(q.kind)?`${q.kind==='deposit'?'存款':'贷款'}利率${q.before}%至${q.after}%`:'额度贡献';
+    panel.setAttribute('aria-label',restored?`银行${q.active?'运营':'停业'}；本座有效额度${q.capacity}，固有额度${q.installed}；${effect}；用工${state.params.bankWorkers}`:`银行废墟；恢复费用${state.params.bankRestoreCost}金币，用工${state.params.bankWorkers}`);
+  }
+  panel.hidden=false;const r=panel.getBoundingClientRect(),px=pointerSample.clientX,py=pointerSample.clientY;
+  panel.style.left=`${Math.max(8,Math.min(px+16+r.width<=innerWidth-8?px+16:px-r.width-16,innerWidth-r.width-8))}px`;
+  panel.style.top=`${Math.max(8,Math.min(py-r.height-14,innerHeight-r.height-8))}px`;
+}
 function openBankUpgrade(id){
   const error=bankUpgradeError(state,id);if(error){showTopNotice(error);return;}
   bankUpgradeTarget=productionId(id,state);bankUpgradeHover=null;cameraKeys.clear();
@@ -1492,7 +1521,9 @@ function openBankUpgrade(id){
   for(const button of document.querySelectorAll('[data-bank-upgrade]')){
     const kind=button.dataset.bankUpgrade,q=bankUpgradeQuote(state,bankUpgradeTarget,kind),error=bankUpgradeError(state,bankUpgradeTarget,kind);
     button.querySelector('.bank-upgrade-icon').innerHTML=FACILITY_SVGS[bankUpgradeIcon(kind)];
-    button.querySelector('.bank-upgrade-value').textContent=kind==='capacity'?`${money(q.before.capacity)} → ${money(q.after.capacity)}`:kind==='deposit'?`${q.before.depositPercent}% → ${q.after.depositPercent}%`:`${q.before.loanPercent}% → ${q.after.loanPercent}%`;
+    const value=button.querySelector('.bank-upgrade-value');value.replaceChildren();
+    if(kind==='capacity')value.append($('wall').querySelector('.price-coin').cloneNode(true));
+    const number=document.createElement('span');number.textContent=kind==='capacity'?`${money(q.before.capacity)} → ${money(q.after.capacity)}`:kind==='deposit'?`${q.before.depositPercent}% → ${q.after.depositPercent}%`:`${q.before.loanPercent}% → ${q.after.loanPercent}%`;value.append(number);
     button.disabled=!!error;button.title='';blockedActionReasons.set(button.id,error);
   }
   closeResourceDetails();$('bankUpgradeDialog').showModal();$('bankUpgradeCancel').focus();draw();

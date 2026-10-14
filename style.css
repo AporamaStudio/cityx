@@ -408,6 +408,15 @@ input[type=number]{background:var(--input);color:var(--text);border-color:var(--
 .bank-upgrade-choices button{display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px 12px;min-width:0}
 .bank-upgrade-icon{display:inline-flex;width:48px;height:48px;flex:none}
 .bank-upgrade-icon .facility-icon{width:48px;height:48px}.bank-upgrade-name{font-size:12px;font-weight:600}
-.bank-upgrade-value{font-size:18px;white-space:nowrap}
+.bank-upgrade-value{display:flex;align-items:center;justify-content:center;gap:5px;font-size:18px;white-space:nowrap}
+.bank-upgrade-value .price-coin{width:16px;height:16px;flex:none}
 #bankUpgradeCancel{display:block;min-width:110px;margin:20px auto 0}
 @media(max-width:540px){#bankUpgradeDialog{padding:16px}.bank-upgrade-choices{grid-template-columns:1fr}.bank-upgrade-choices button{gap:8px;padding:12px}.bank-upgrade-icon,.bank-upgrade-icon .facility-icon{width:40px;height:40px}}
+
+/* 银行信息靠近鼠标但留出空隙，不抢点击；图标表达专精，最多两行。 */
+.bank-hover{position:fixed;z-index:12;display:flex;align-items:center;flex-wrap:wrap;gap:6px 9px;max-width:calc(100vw - 16px);padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--tooltip);color:var(--text);box-shadow:0 4px 16px #0003;pointer-events:none;font-size:12px;font-weight:650;line-height:18px}
+.bank-hover[hidden],.bank-hover-item[hidden]{display:none}
+.bank-hover-item{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.bank-hover-item svg{width:16px;height:16px;flex:none}
+#bankHoverWorkers{color:var(--wallet-ink)}
+.bank-hover.bank-stopped .bank-hover-item{opacity:.6}

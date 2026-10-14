@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
 import {MAP_DEFAULTS} from '../src/map-settings.js';
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
-import {createCampaign,key,funds,population,bankFinance,bankActive,bankDiscovered,bankCapacityFor,pendingBanks,bankUpgradeQuote,bankUpgradeError,upgradeBank,bankError,restoreBank,canAfford,availableFunds,changeWall,repairFacility,repairQuote,buildTower,buildProduction,clearPlot,productionControlled,productionCells,applyTestScenario,settleEconomy,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,finishIdleNight,lockAttacks,validateParams,removeOutpost} from '../src/model.js';
+import {createCampaign,key,funds,population,bankFinance,bankContribution,bankActive,bankDiscovered,bankCapacityFor,pendingBanks,bankUpgradeQuote,bankUpgradeError,upgradeBank,bankError,restoreBank,canAfford,availableFunds,changeWall,repairFacility,repairQuote,buildTower,buildProduction,clearPlot,productionControlled,productionCells,applyTestScenario,settleEconomy,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,finishIdleNight,lockAttacks,validateParams,removeOutpost} from '../src/model.js';
 const first=key(12,23),second=key(18,23),plot=key(18,27);
 function setup(n=1,balance=100,params={}){
   const blocks=[{x:12,y:23,width:2,height:2,kind:'building',role:'bank',ruinType:'bank'},{x:18,y:23,width:2,height:2,kind:'building',role:'bank',ruinType:'bank'},{x:18,y:27,width:2,height:2,kind:'building',ruinType:'production'}];
@@ -150,4 +150,11 @@ test('专精与费用随重试恢复，重开清零；升级参数校验拒绝�
   while(s.phase==='battle')stepBattle(s);const retry=restoreNight(snap);assert.equal(funds(retry),75);assert.equal(retry.banks.get(first).upgrade,'deposit');assert.equal(bankFinance(retry).depositPercent,7);
   const fresh=restartCampaign(s);assert.equal(fresh.banks.size,0);assert.deepEqual(pendingBanks(fresh,true),[]);
   for(const changes of [{bankUpgradeCost:0},{bankUpgradeCapacityMultiplier:1.5},{bankUpgradeRatePoints:-1},{bankLoanMinPercent:11},{bankRateMaxPercent:4}])assert.match(validateParams({...DEFAULTS,...changes},fresh),/银行升级/);
+});
+
+test('本座贡献只读取状态，反映叠加利率、实际边界和停业后的固有额度',()=>{
+  const s=setup(2,500,{bankCapacity:100});assert.equal(upgradeBank(s,first,'deposit'),'');assert.equal(upgradeBank(s,second,'deposit'),'');
+  const before=structuredClone(s),q=bankContribution(s,first);assert.equal(q.before,7);assert.equal(q.after,9);assert.equal(q.capacity,100);assert.deepEqual(s,before);
+  s.params.controlRadius=1;const stopped=bankContribution(s,first);assert.equal(stopped.active,false);assert.equal(stopped.capacity,0);assert.equal(stopped.installed,100);assert.equal(stopped.kind,'deposit');
+  const capped=setup(1,500,{bankCapacity:100,bankRateMaxPercent:10,bankDepositPercent:9});assert.equal(upgradeBank(capped,first,'deposit'),'');assert.equal(bankContribution(capped,first).before,9);assert.equal(bankContribution(capped,first).after,10);
 });

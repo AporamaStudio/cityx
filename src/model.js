@@ -247,6 +247,14 @@ export function bankFinance(state,balance=funds(state)){
   return {active,capacity,debtCap,depositPercent,loanPercent,interest,credit:Math.max(0,capacity+Math.min(0,balance)),available:Math.max(0,balance+capacity)};
 }
 export const availableFunds=state=>bankFinance(state).available;
+// 本座贡献按移除该银行后的全局利率差计算，展示实际边界效果，不重复全局汇总。
+export function bankContribution(state,id){
+  const bank=bankAt(state,id),record=state.banks.get(bank),active=!!bankActive(state,bank),finance=bankFinance(state);
+  const without={...state,banks:new Map(state.banks)};without.banks.delete(bank);
+  const baseline=bankFinance(without),kind=record?.upgrade;
+  return {kind,active,installed:bankCapacityFor(state,id),capacity:active?bankCapacityFor(state,id):0,
+    before:kind==='deposit'?baseline.depositPercent:baseline.loanPercent,after:kind==='deposit'?finance.depositPercent:finance.loanPercent};
+}
 export const canAfford=(state,cost)=>Number.isFinite(cost)&&cost>=0&&(cost===0||funds(state)-cost>=-bankFinance(state).capacity-1e-9);
 // 每次主动借款记录该债务周期实际使用过的额度，停业不会让贷款变免息；还清后重新起算。
 function recordBorrowing(state,cost){
