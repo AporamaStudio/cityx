@@ -3,14 +3,14 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=1';
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=3';
-import {createCity3D} from './city-3d.js?v=48';
+import {createCity3D} from './city-3d.js?v=51';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
 import {createVisibility} from './visibility.js?v=6';
-import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=18';
+import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=19';
 import {createTowerOverlay} from './tower-overlay.js?v=19';
-import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=18';
+import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=20';
 import {cameraScale,limitZoom,limitPan,limitObservationPan} from './map-camera.js?v=4';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=9';
@@ -580,7 +580,7 @@ function paintMap() {
   const streetDressing=[...operatingStreetProps(streetLamps,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys(),...vehicles.map(p=>key(Math.floor(p.x),Math.floor(p.y)))]),cellMeters:controlState.params.cellMeters}),...vehicles.filter(car=>car.asset!=='wreck')];
   const effectView=cameraView();
   defenseHits=defenseHits.filter(hit=>effectTime-hit.at<.65&&currentlyVisible(hit.cell));
-  const fx={defenseHits:reducedMotion.matches||state.phase!=='battle'?[]:defenseHits.map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),night:nightMix,enemyFiguresPerGroup:controlState.params.enemyFiguresPerGroup,cameraKey:JSON.stringify(effectView),time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),pixelsAt:(x,y,z)=>viewPixelScale(x,y,z,effectView),observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
+  const fx={hazeColor:backdrop,defenseHits:reducedMotion.matches||state.phase!=='battle'?[]:defenseHits.map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),night:nightMix,enemyFiguresPerGroup:controlState.params.enemyFiguresPerGroup,cameraKey:JSON.stringify(effectView),time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),pixelsAt:(x,y,z)=>viewPixelScale(x,y,z,effectView),observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
   const emptyPlots=[...view.towers.plots].filter(([,p])=>p.content.status==='empty').map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,kind:p.site.kind,role:p.site.role,status:p.content.status}));
@@ -588,6 +588,8 @@ function paintMap() {
   const plants=emptyLandPlants(emptyPlots,{width:SIZE,cellMeters:controlState.params.cellMeters,visible:visibleCell,occupied:plantOccupied});
   const plantPreview=hover!==null&&['production','housing'].includes(tool)?productionId(hover,state):null;
   const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,plants,plantPreview,roadCells:state.layout.tiles.flatMap((type,id)=>type==='road'&&visibleCell(id)?[id]:[]),fx});
+  // 真正的外围模型只画在行动地图外；未知城内继续受原信息遮罩约束。
+  if(cityFrame){ctx.save();ctx.beginPath();ctx.rect(-panX/size,-panY/size,width/size,height/size);ctx.rect(0,0,SIZE,SIZE);ctx.clip('evenodd');ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
   // 道路承接真实点光与太阳阴影；在热力、格线和云雾下面一次性裁剪绘制。
   if(cityFrame){ctx.save();ctx.beginPath();for(let y=bounds.top;y<bounds.bottom;y++)for(let x=bounds.left;x<bounds.right;x++)if(visibleCell(key(x,y))&&state.layout?.tiles[key(x,y)]==='road')ctx.rect(x,y,1,1);ctx.clip();ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
   const eligibleCells=weaponPlacementReady?view.towers.eligible(weaponType()):new Set();

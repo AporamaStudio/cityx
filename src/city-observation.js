@@ -16,7 +16,9 @@ export function createCityObservation(scene,renderer){
     material.onBeforeCompile=shader=>{
       previous.call(material,shader);shader.uniforms.cityObserveFog=fog.texture;shader.uniforms.cityObserveActive=fog.enabled;shader.uniforms.cityObserveBounds=fog.bounds;
       shader.vertexShader='varying vec2 cityObserveXZ;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncityObserveXZ=(modelMatrix*vec4(transformed,1.)).xz;');
-      shader.fragmentShader='uniform sampler2D cityObserveFog;\nuniform float cityObserveActive;\nuniform vec4 cityObserveBounds;\nvarying vec2 cityObserveXZ;\n'+shader.fragmentShader.replace('#include <colorspace_fragment>','#include <colorspace_fragment>\nif(cityObserveActive>.5){vec2 uv=(cityObserveXZ-cityObserveBounds.xy)/cityObserveBounds.zw;vec4 mist=texture2D(cityObserveFog,clamp(uv,0.,1.));gl_FragColor.rgb=mix(gl_FragColor.rgb,mist.rgb,mist.a);float rim=min(min(uv.x,uv.y),min(1.-uv.x,1.-uv.y));gl_FragColor.a*=smoothstep(0.,.06,rim);}');
+      const blend=material.userData.cityExterior?'vec2 away=max(max(-cityObserveXZ,cityObserveXZ-(cityObserveBounds.zw+2.*cityObserveBounds.xy)),vec2(0.));vec2 edge=min(away,vec2(8.));mist.a*=exp(-max(0.,dot(away,away)-dot(edge,edge))/16.);gl_FragColor.rgb=mix(gl_FragColor.rgb,mist.rgb,mist.a);':'gl_FragColor.rgb=mix(gl_FragColor.rgb,mist.rgb,mist.a);float rim=min(min(uv.x,uv.y),min(1.-uv.x,1.-uv.y));gl_FragColor.a*=smoothstep(0.,.06,rim);';
+      const stage=material.userData.cityExterior?'#include <dithering_fragment>':'#include <colorspace_fragment>';
+      shader.fragmentShader='uniform sampler2D cityObserveFog;\nuniform float cityObserveActive;\nuniform vec4 cityObserveBounds;\nvarying vec2 cityObserveXZ;\n'+shader.fragmentShader.replace(stage,stage+'\nif(cityObserveActive>.5){vec2 uv=(cityObserveXZ-cityObserveBounds.xy)/cityObserveBounds.zw;vec4 mist=texture2D(cityObserveFog,clamp(uv,0.,1.));'+blend+'}');
     };
     material.customProgramCacheKey=()=>key+':cityx-observe-fog';material.needsUpdate=true;
   });}

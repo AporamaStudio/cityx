@@ -108,10 +108,12 @@ export function drawFog(ctx,visibility,explored,night,time,cloudTime=time,dusk=0
   if(!f.painted||f.until||f.strength!==strength){
     const g=f.mask.getContext('2d'),pixels=g.createImageData(f.n,f.n),vg=f.veil.getContext('2d'),veilPixels=vg.createImageData(f.n,f.n),ease=smooth(Math.max(0,t));
     for(let i=0;i<f.target.length;i++){
+      // 只在行动地图外衰减云层：延续边缘雾并柔和露出郊野，不能改变城内信息权限。
+      const x=(i%f.n+.5)/MASK_PX-f.border,y=(Math.floor(i/f.n)+.5)/MASK_PX-f.border,dx=Math.max(0,-x,x-f.size),dy=Math.max(0,-y,y-f.size),outer=Math.exp(-(dx*dx+dy*dy)/16);
       const alpha=f.from[i]+(f.target[i]-f.from[i])*ease;f.current[i]=alpha;
-      pixels.data[i*4+3]=Math.round(alpha*(strength+(1-strength)*alpha)*255);
+      pixels.data[i*4+3]=Math.round(alpha*(strength+(1-strength)*alpha)*outer*255);
       const density=f.veilFrom[i]+(f.veilTarget[i]-f.veilFrom[i])*ease;f.veilCurrent[i]=density;
-      veilPixels.data[i*4+3]=Math.round(density*255);
+      veilPixels.data[i*4+3]=Math.round(density*outer*255);
     }
     g.putImageData(pixels,0,0);vg.putImageData(veilPixels,0,0);f.color=null;f.strength=strength;f.painted=true;if(t===1)f.until=0;
   }
