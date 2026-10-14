@@ -5,7 +5,7 @@ import {addBuildingFoundation,buildingVariation} from './city-building-style.js?
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
 import {createRoadModel} from './city-road-model.js?v=3';
 import {createNaturalModel} from './city-natural-model.js?v=8';
-import {createSurroundingModel} from './city-surrounding-model.js?v=9';
+import {createSurroundingModel} from './city-surrounding-model.js?v=10';
 import {updateWater} from './city-water.js?v=2';
 import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {PLANT_MODELS} from './city-vegetation.js?v=2';

@@ -339,8 +339,64 @@ def vegetation():
         m.save(name,{'units':'meters','visualOnly':True,'foliage':True})
 
 
+def countryside():
+    # 乡村样件全部原生米制、按颜色合批；只验证景物，不含农业生产或独立灯光。
+    for wheat in (False, True):
+        m=Model();m.box((0,-.08,0),(20,.16,20),'#766448')
+        for row in range(18):
+            x=-8.5+row
+            m.box((x,.045,0),(.62,.09,18),'#8c7650' if row%2 else '#806c4a')
+            if not wheat:
+                continue
+            for col in range(18):
+                z=-8.5+col;h=.87+((row*7+col*13)%9)*.025
+                # 交叉薄叶与八面麦穗，近看有植株，远看仍可读成连续金色田垄。
+                for dx,dz in ((.15,0),(0,.15)):
+                    a=(x-dx,.08,z-dz);b=(x+dx,.08,z+dz);c=(x,h-.18,z)
+                    m.triangle([a,b,c],'#8d8e51');m.triangle([c,b,a],'#8d8e51')
+                color=['#c4af69','#d4bf79','#b6a264'][(row+col)%3]
+                m.cylinder((x,h-.08,z),.09,.32,color,top=.025,sides=4)
+        m.save('wheatfield' if wheat else 'farmland',{'units':'meters','visualOnly':True,'footprintMeters':[20,20],'cropHeightMeters':1.1 if wheat else 0})
+    for ruined in (False, True):
+        m=Model();wood='#8d6e53' if not ruined else '#777464';roof='#637269' if not ruined else '#616860';trim='#c0b49b' if not ruined else '#a09b85'
+        m.box((0,.12,0),(12,.24,18),'#807e6c')
+        for x in (-5.7,5.7):
+            m.box((x,2.35,0),(.3,4.3,17.4 if not ruined or x<0 else 10),wood)
+            for z in range(-8,9,2):m.box((x,2.4,z),(.37,4.35,.13),trim)
+        # 前后山墙保持同一轮廓；破损版沿同一侧缺屋顶和侧墙，不换成无关联瓦砾。
+        for z in (-8.65,8.65):
+            m.box((0,2.3,z),(11.5,4.2,.3),wood)
+            points=[(-5.85,4.4,z),(5.85,4.4,z),(0,7.4,z)]
+            m.triangle(points,wood);m.triangle(points[::-1],wood)
+        for sign in (-1,1):
+            segments=[(-9,9)] if not ruined or sign<0 else [(-9,-3),(4,9)]
+            for z0,z1 in segments:
+                a=(0,7.45,z0);b=(sign*6.15,4.3,z0);c=(sign*6.15,4.3,z1);d=(0,7.45,z1)
+                for tri in ((a,b,c),(a,c,d)):
+                    m.triangle(tri,roof);m.triangle(tri[::-1],roof)
+        m.beam((0,7.35,-9),(0,7.35,9),.22,trim)
+        m.box((0,1.8,8.85),(4.2,3.2,.12),'#514e43')
+        for x in (-2.2,2.2):m.box((x,1.85,8.98),(.18,3.6,.18),trim)
+        m.box((0,3.65,8.98),(4.6,.18,.18),trim)
+        m.beam((-1.85,.3,9.02),(1.85,3.35,9.02),.12,trim)
+        m.beam((1.85,.3,9.02),(-1.85,3.35,9.02),.12,trim)
+        for z in (-8.9,8.9):m.box((0,5.4,z),(1.1,.85,.1),'#424c49')
+        if ruined:
+            for z in (-3,0,3):m.beam((0,7.3,z),(5.8,4.35,z),.18,'#5b594a')
+            m.beam((5.8,4.3,-2),(4,.3,2),.27,wood)
+            for i in range(9):m.box((3.4+(i%3)*.7,.3+(i%2)*.18,-2+(i//3)*1.1),(1.2,.22,.7),roof)
+        m.save('barn-abandoned' if ruined else 'barn',{'units':'meters','visualOnly':True,'pairedWith':'barn' if ruined else 'barn-abandoned','footprintMeters':[12,18],'operating':False})
+    m=Model();m.box((0,.65,0),(2.4,1.3,1.4),'#bba46a')
+    for x in (-.65,.65):
+        m.box((x,1.31,0),(.055,.025,1.42),'#827e58')
+        for z in (-.71,.71):m.box((x,.65,z),(.055,1.32,.025),'#827e58')
+    m.save('hay-bale',{'units':'meters','visualOnly':True,'footprintMeters':[2.4,1.4]})
+
+
 if __name__ == '__main__':
-    if '--enemies' in sys.argv:
+    if '--countryside' in sys.argv:
+        countryside();print('已生成5个米制田野/谷仓样件，仅供视觉预览')
+    elif '--enemies' in sys.argv:
         enemy_squad();print('已生成十六人米制僵尸群体样件')
     elif '--vegetation' in sys.argv:
         vegetation();print('已生成6个米制树木/灌丛样件')
@@ -351,5 +407,5 @@ if __name__ == '__main__':
     elif '--street-furniture' in sys.argv:
         street_furniture();print('已生成3个米制长椅/花池/完好车辆样件')
     else:
-        tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad();entrances();street_furniture();damaged_car();vegetation()
-        print('已生成28个独立GLB样件，含配套门与三态车辆街景')
+        tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad();entrances();street_furniture();damaged_car();vegetation();countryside()
+        print('已生成33个独立GLB样件，含配套门与三态车辆街景')

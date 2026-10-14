@@ -3,7 +3,7 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
 import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=4';
-import {createCity3D} from './city-3d.js?v=60';
+import {createCity3D} from './city-3d.js?v=61';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';

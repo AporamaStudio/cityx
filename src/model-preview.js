@@ -50,9 +50,14 @@ const assets=[
   ['street-planter','文明花池','nature','street-planter',2.2,'约1.6m见方/1.5m高的小花池，和垃圾/瓦砾形成恢复前后对比。'],
   ['civil-car','完好车辆','nature','civil-car',2.7,'约4.6m长/2.4m宽/1.85m高；主图已修缮且受控街区旁静态停靠，五种低饱和车色，不增加交通。'],
   ['damaged-car','损坏车辆','nature','damaged-car',2.7,'与完好车同车身和轮位，车顶塌陷、破窗、断保险杠；没有火焰或烟，混合放在已知废墟旁。'],
+  ['farmland','耕地田垄','nature','farmland',4.8,'20×20m田块，保留田垄和田埂；仅作背景景物，不增加农业生产。'],
+  ['wheatfield','麦田','nature','wheatfield',4.8,'20×20m田块，麦穗约0.9–1.1m高，低饱和金色；昼夜共用几何，不自发光。'],
+  ['barn','完整谷仓','building','barn',4.8,'12×18m占地，屋脊约7.5m高；完整但未运营，与损坏谷仓共用占地、门和屋脊。'],
+  ['barn-abandoned','损坏谷仓','building','barn-abandoned',4.8,'同一谷仓局部缺屋顶/侧墙、裸露梁架与落瓦；没有运营灯，不把完整度当控制状态。'],
+  ['hay-bale','捆扎草垛','nature','hay-bale',3.2,'约2.4×1.4×1.3m的捆扎草垛，可少量置于田边；仅装饰，无资源或交互。'],
   ['burnt-car','燃烧车辆','nature','burnt-car',2.7,'焦黑车身与少量火焰表现灾损，作为恢复前的局部视觉样件。']
 ].map(([id,name,category,file,width,description])=>({id,name,category,file,width,description,local:!file.includes('/'),paired:category==='building'&&file.includes('/'),landmark:['hospital','bank'].includes(id)}));
-const $=id=>document.getElementById(id),models=new Map(),district=new THREE.Group(),single=new THREE.Group(),roads=new THREE.Group();
+const $=id=>document.getElementById(id),models=new Map(),district=new THREE.Group(),single=new THREE.Group(),roads=new THREE.Group(),rural=new THREE.Group();
 const wreckDressing=new Map(),previewCrowds=new Map();
 let vehiclePaint=VEHICLE_PALETTE[0];
 let selected=assets[0],mode='district',night=false,restored=false,angle='angle',ready=false,singleState='intact',singleVariants=null,effects=null;
@@ -70,13 +75,13 @@ sun.position.set(-16,28,12);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048
 Object.assign(sun.shadow.camera,{left:-38,right:38,top:38,bottom:-38,near:1,far:100});sun.shadow.bias=-.00025;sun.shadow.normalBias=.03;
 const fireLight=new THREE.PointLight('#ffb860',22,13,2);fireLight.position.set(4,2.2,0);
 const wreckLight=new THREE.PointLight('#ff9a49',9,6,2);wreckLight.position.set(-8,1.1,-.8);
-scene.add(sky,sun,fireLight,wreckLight,district,single,roads);
+scene.add(sky,sun,fireLight,wreckLight,district,single,roads,rural);
 effects=createPreviewEffects({isNight:()=>night,view:()=>({pixelsPerUnit:renderer.domElement.height/renderer.getPixelRatio()/(camera.top-camera.bottom)*camera.zoom}),render:time=>{
   for(const {crowd,item} of previewCrowds.values())crowd.update([item],{time,night:night?1:0,enemyFiguresPerGroup:16,reducedMotion:!animated});
   fireLight.intensity=22*(1+.12*Math.sin(time*8.7)+.05*Math.sin(time*13));
   wreckLight.intensity=9*(1+.16*Math.sin(time*9.1+2));for(const entry of wreckDressing.values())updateWreckDressing(entry,time,night,!animated);renderer.render(scene,camera);
 }});
-const structures=[],streetlights=[],abandoned=[],civilDecor=[],roadLights=[],roadRuins=[],roadCivil=[];
+const structures=[],streetlights=[],abandoned=[],civilDecor=[],roadLights=[],roadRuins=[],roadCivil=[],ruralBarns=[];
 const palette={stone:'#c5c5b0',grass:'#a7b491',road:'#68736e',brick:'#7f9180'};
 function box(parent,x,y,z,w,h,d,color){
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color,roughness:.95}));
@@ -85,7 +90,7 @@ function box(parent,x,y,z,w,h,d,color){
 function render(){effects?.update();renderer.shadowMap.needsUpdate=true;renderer.render(scene,camera);}
 function resize(){
   const {width,height}=$('viewer').getBoundingClientRect();renderer.setSize(width,height,false);
-  const aspect=width/height,frame=mode==='roads'?96:mode==='district'?68:selected.landmark?selected.width*1.85:selected.id.startsWith('cannon-')?6.2:['campfire','burnt-car','streetlight'].includes(selected.id)?8:11,half=Math.max(frame*.34,frame/aspect/2);
+  const aspect=width/height,frame=mode==='rural'?64:mode==='roads'?96:mode==='district'?68:selected.landmark?selected.width*1.85:selected.id.startsWith('cannon-')?6.2:['campfire','burnt-car','streetlight'].includes(selected.id)?8:11,half=Math.max(frame*.34,frame/aspect/2);
   camera.left=-half*aspect;camera.right=half*aspect;camera.top=half;camera.bottom=-half;camera.updateProjectionMatrix();render();
 }
 function frame(){
@@ -241,6 +246,21 @@ function buildRoadPreview(){
   }
   updateRestore();
 }
+// 与道路验证一致按1:2展示，20m田块为10单位；植物、谷仓和车辆同步换算。
+function buildRuralPreview(){
+  box(rural,0,-.16,0,48,.2,44,'#859475');
+  const place=(id,x,z,meters,rotation=0)=>{
+    const obj=cloneModel(assets.find(a=>a.id===id),meters/2,false);obj.position.set(x,0,z);obj.rotation.y=rotation;rural.add(obj);return obj;
+  };
+  // 留出田埂、横向农道与门前空地，田块不直接无缝拼成一张金色平面。
+  for(const x of [-17,-6,6,17])for(const z of [-13,-2])place(x<0?'wheatfield':'farmland',x,z,20);
+  box(rural,0,-.015,0,1.5,.04,42,'#aa9979');box(rural,0,-.01,5,44,.04,2.5,'#ad9e81');
+  const normal=place('barn',-10,13,18,Math.PI),damaged=place('barn-abandoned',-10,13,18,Math.PI);ruralBarns.push({normal,damaged});
+  for(const [x,z] of [[-3,12],[-3,14.3],[1,13]])place('hay-bale',x,z,2.4);
+  for(const [id,x,z,meters] of [['tree-broad',19,12,6.6],['tree-column',21,18,3.6],['tree-young',15,18,2.9],['bush-wild',12,18,2.2],['bush-round',18,8,2.7]])place(id,x,z,meters);
+  place('damaged-car',1,8,4.6,Math.PI/2);
+  updateRestore();
+}
 function updateRestore(){
   for(const s of structures){
     const damaged=!restored&&s.front&&['house','shop','apartment','hospital','bank'].includes(s.id);s.obj.visible=!damaged;s.ruins.visible=damaged;if(s.base){s.base.visible=!damaged;s.ruinBase.visible=damaged;}
@@ -251,9 +271,10 @@ function updateRestore(){
   for(const prop of abandoned)prop.visible=!restored;for(const prop of civilDecor){prop.visible=restored;setPower(prop,true);}
   for(const entry of roadLights){setPower(entry.obj,restored);entry.light.visible=entry.pool.visible=night&&restored;}
   roadRuins.forEach(obj=>obj.visible=!restored);roadCivil.forEach(obj=>obj.visible=restored);
+  for(const barn of ruralBarns){barn.normal.visible=restored;barn.damaged.visible=!restored;}
   wreckLight.visible=mode==='district'&&!restored;
   updateSingleState();
-  $('restore').textContent=restored?'查看恢复前':'查看恢复后';render();
+  $('restore').textContent=mode==='rural'?(restored?'查看损坏谷仓':'查看完整谷仓'):(restored?'查看恢复前':'查看恢复后');render();
 }
 function updateSingleState(){
   if(!singleVariants)return;
@@ -265,11 +286,11 @@ function updateSingleState(){
   if(mode==='single')$('sceneSubtitle').textContent=isBuilding(selected)?({intact:'完好 · 尚未运营',ruined:'原建筑局部塌损 · 占地与门窗保留',operating:'恢复运营 · 窗户与屋顶亮灯'})[singleState]:(selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0');
 }
 function setMode(next){
-  mode=next;$('modelSelection').hidden=mode==='roads';$('roadDetails').hidden=mode!=='roads';district.visible=mode==='district';single.visible=mode==='single';roads.visible=mode==='roads';$('roads').classList.toggle('active',mode==='roads');$('district').classList.toggle('active',mode==='district');$('single').classList.toggle('active',mode==='single');$('restore').hidden=mode==='single';
-  $('sceneTitle').textContent=mode==='roads'?'20米街道 × 40米主路':mode==='district'?'一片恢复中的城区':selected.name;
-  $('sceneSubtitle').textContent=mode==='roads'?'同一米制构件 · 路口连接 · 昼夜与运营对比':mode==='district'?'住宅 · 经营建筑 · 前线设施':selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0';
-  fireLight.visible=night&&mode==='district';wreckLight.visible=mode==='district'&&!restored;updateSingleState();frame();
-  $('fireShot').hidden=mode==='roads'||mode!=='district'&&!selected.id.startsWith('cannon-');
+  mode=next;$('modelSelection').hidden=['roads','rural'].includes(mode);$('ruralDetails').hidden=mode!=='rural';rural.visible=mode==='rural';$('rural').classList.toggle('active',mode==='rural');$('roadDetails').hidden=mode!=='roads';district.visible=mode==='district';single.visible=mode==='single';roads.visible=mode==='roads';$('roads').classList.toggle('active',mode==='roads');$('district').classList.toggle('active',mode==='district');$('single').classList.toggle('active',mode==='single');$('restore').hidden=mode==='single';
+  $('sceneTitle').textContent=mode==='rural'?'田野、麦田与谷仓':mode==='roads'?'20米街道 × 40米主路':mode==='district'?'一片恢复中的城区':selected.name;
+  $('sceneSubtitle').textContent=mode==='rural'?'20米田块 · 同尺度树木/车辆 · 完整不等于运营':mode==='roads'?'同一米制构件 · 路口连接 · 昼夜与运营对比':mode==='district'?'住宅 · 经营建筑 · 前线设施':selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0';
+  fireLight.visible=night&&mode==='district';wreckLight.visible=mode==='district'&&!restored;updateRestore();frame();
+  $('fireShot').hidden=['roads','rural'].includes(mode)||mode!=='district'&&!selected.id.startsWith('cannon-');
 }
 function selectAsset(asset,show=true){
   selected=asset;
@@ -290,7 +311,7 @@ function catalog(filter='all'){
   for(const a of assets.filter(a=>filter==='all'||a.category===filter)){
     const btn=document.createElement('button');btn.type='button';btn.className='asset';btn.dataset.id=a.id;
     if(!a.local){const img=document.createElement('img');img.src=root+'kenney/'+a.file+'.png';img.alt='';btn.append(img);}
-    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'tree-broad':'♣','tree-column':'♠','tree-young':'♧','bush-round':'●','bush-wild':'♒','tree-dead':'♱','hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','wall-gate':'▥','wall-gate-open':'Ⅱ','wall-gate-ruined':'⋈','courtyard-entry':'∩','camp-plaza':'▤','enemy-squad':'♟','enemy-source-ruined':'◇','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰','street-bench':'▰','street-planter':'♧','civil-car':'▱','damaged-car':'◩'})[a.id];btn.append(icon);}
+    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'farmland':'▤','wheatfield':'♒','barn':'⌂','barn-abandoned':'◩','hay-bale':'▰','tree-broad':'♣','tree-column':'♠','tree-young':'♧','bush-round':'●','bush-wild':'♒','tree-dead':'♱','hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','wall-gate':'▥','wall-gate-open':'Ⅱ','wall-gate-ruined':'⋈','courtyard-entry':'∩','camp-plaza':'▤','enemy-squad':'♟','enemy-source-ruined':'◇','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰','street-bench':'▰','street-planter':'♧','civil-car':'▱','damaged-car':'◩'})[a.id];btn.append(icon);}
     const label=document.createElement('span'),name=document.createElement('b'),origin=document.createElement('small');name.textContent=a.name;origin.textContent=a.local?'自制样件':'Kenney';label.append(name,origin);btn.append(label);
     btn.disabled=!ready;btn.classList.toggle('selected',a.id===selected.id);btn.addEventListener('click',()=>selectAsset(a));$('catalog').append(btn);
   }
@@ -301,6 +322,7 @@ function setLight(){
   sun.color.set(night?'#b9cfff':'#fff1cd');sun.intensity=night?.9:3.2;fireLight.visible=night&&mode==='district';
   $('light').textContent=night?'切换白天':'切换夜晚';updateRestore();render();
 }
+$('rural').addEventListener('click',()=>{if(ready)setMode('rural');});
 $('roads').addEventListener('click',()=>{if(ready)setMode('roads');});
 $('district').addEventListener('click',()=>{if(ready)setMode('district');});$('single').addEventListener('click',()=>{if(ready)setMode('single');});
 for(const id of ['angle','top'])$(id).addEventListener('click',()=>{angle=id;for(const other of ['angle','top'])$(other).classList.toggle('active',other===id);frame();});
@@ -325,7 +347,7 @@ try{
     const url=root+(asset.local?'generated/':'kenney/')+file+'.glb?v=7';const gltf=await loader.loadAsync(url);models.set(id,gltf.scene);
     loaded++;$('loading').textContent=`正在装载模型… ${loaded}/${files.length}`;
   }));
-  ready=true;buildDistrict();buildRoadPreview();selectAsset(selected,false);catalog();setMode('district');syncMotion();$('loading').hidden=true;$('loadStatus').textContent=`${assets.length} 个模型已就绪`;
+  ready=true;buildDistrict();buildRoadPreview();buildRuralPreview();selectAsset(selected,false);catalog();setMode('district');syncMotion();$('loading').hidden=true;$('loadStatus').textContent=`${assets.length} 个模型已就绪`;
 }catch(error){
   $('loading').textContent='模型装载失败，请刷新后重试。';$('loadStatus').textContent='装载失败';console.error(error);
 }
