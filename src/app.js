@@ -1816,7 +1816,8 @@ $('sourceDefaults').onclick=()=>{
   notify('默认敌源与 15 晚计划已填入，应用并重开后生效。');update();
 };
 $('sourceAudit').onclick=()=>{if(sourceConfigurationDirty()||paramsDirty()){showTopNotice('请先应用或取消配置，再校验路线。');return;}$('auditRoutes').click();};
-$('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;constrainCamera();hover=null;updateMapSourceHover();draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;$('fullFire').onchange=draw;
+// 全图必须显式回到城市中心；观察模式的平移约束只限世界范围，不再替它居中。
+$('homeView').onclick=()=>resize(true);$('fit').onclick=()=>{zoom=1;panX=width/2-SIZE/2*base;panY=height/2-SIZE/2*base;constrainCamera();hover=null;updateMapSourceHover();draw();};$('in').onclick=()=>changeZoom(1.25);$('out').onclick=()=>changeZoom(.8);$('routes').onchange=draw;$('heat').onchange=draw;$('fullFire').onchange=draw;
 // 地图图例复用手册内容；两个ⓘ统一悬停预览、点击固定，不改变侧栏布局。
 $('mapLegend').append(...Array.from($('mapLegendGuide').querySelectorAll('.manual-rule'),row=>{
   const copy=row.cloneNode(true);
