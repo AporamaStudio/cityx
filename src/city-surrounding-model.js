@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {surroundingLandscape,exteriorHeight,exteriorRiver} from './city-surroundings.js?v=5';
+import {surroundingLandscape,exteriorHeight,exteriorRiver} from './city-surroundings.js?v=6';
 import {createWaterMaterial} from './city-water.js?v=2';
 
 // 地图外共用同一太阳/环境光，远处向雾底色融合；无交互、真实灯或第二套游戏状态。
@@ -40,7 +40,9 @@ export function createSurroundingModel(layout,models,cellMeters=20){
     model.updateMatrixWorld(true);model.traverse(node=>{if(node.isMesh)add(node.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(matrix,node.matrixWorld)),node.material,true,abandoned);});
   };
   if(cellMeters>=8)for(const tree of land.trees){if(land.buildings.some(b=>Math.hypot(tree.x-b.x,tree.y-b.y)<(b.width+tree.width)/cellMeters))continue;place(tree);}
+  for(const field of land.fields)place(field);
   for(const building of land.buildings)place(building,true);
+  for(const prop of land.props)place(prop);
   for(const batch of batches.values()){
     const geometry=mergeGeometries(batch.geometries,false);batch.geometries.forEach(g=>g.dispose());const material=batch.color.getHexString()==='528592'?createWaterMaterial():new THREE.MeshStandardMaterial({color:batch.color,map:batch.map??null,roughness:1,side:THREE.DoubleSide});
     // 外围建筑只表示废弃景物；沿用城内废墟的褪色，不把林地和水面一起灰化。

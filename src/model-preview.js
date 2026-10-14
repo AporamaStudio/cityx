@@ -52,6 +52,8 @@ const assets=[
   ['damaged-car','损坏车辆','nature','damaged-car',2.7,'与完好车同车身和轮位，车顶塌陷、破窗、断保险杠；没有火焰或烟，混合放在已知废墟旁。'],
   ['farmland','耕地田垄','nature','farmland',4.8,'20×20m田块，保留田垄和田埂；仅作背景景物，不增加农业生产。'],
   ['wheatfield','麦田','nature','wheatfield',4.8,'20×20m田块，麦穗约0.9–1.1m高，低饱和金色；昼夜共用几何，不自发光。'],
+  ['wheatfield-abandoned','废弃麦田','nature','wheatfield-abandoned',4.8,'与20×20m麦田保留同一田垄；稀疏残穗、倒伏秆和杂草表达弃耕。'],
+  ['wheatfield-burnt','烧毁麦田','nature','wheatfield-burnt',4.8,'同一田块的短焦茬、灰烬和裸露土壤；静态烧毁痕迹，没有持续火焰。'],
   ['barn','完整谷仓','building','barn',4.8,'12×18m占地，屋脊约7.5m高；完整但未运营，与损坏谷仓共用占地、门和屋脊。'],
   ['barn-abandoned','损坏谷仓','building','barn-abandoned',4.8,'同一谷仓局部缺屋顶/侧墙、裸露梁架与落瓦；没有运营灯，不把完整度当控制状态。'],
   ['hay-bale','捆扎草垛','nature','hay-bale',3.2,'约2.4×1.4×1.3m的捆扎草垛，可少量置于田边；仅装饰，无资源或交互。'],
@@ -253,7 +255,7 @@ function buildRuralPreview(){
     const obj=cloneModel(assets.find(a=>a.id===id),meters/2,false);obj.position.set(x,0,z);obj.rotation.y=rotation;rural.add(obj);return obj;
   };
   // 留出田埂、横向农道与门前空地，田块不直接无缝拼成一张金色平面。
-  for(const x of [-17,-6,6,17])for(const z of [-13,-2])place(x<0?'wheatfield':'farmland',x,z,20);
+  for(const x of [-17,-6,6,17])for(const z of [-13,-2])place(x===-17?'wheatfield':x===-6?'wheatfield-abandoned':x===6?'wheatfield-burnt':'farmland',x,z,20);
   box(rural,0,-.015,0,1.5,.04,42,'#aa9979');box(rural,0,-.01,5,44,.04,2.5,'#ad9e81');
   const normal=place('barn',-10,13,18,Math.PI),damaged=place('barn-abandoned',-10,13,18,Math.PI);ruralBarns.push({normal,damaged});
   for(const [x,z] of [[-3,12],[-3,14.3],[1,13]])place('hay-bale',x,z,2.4);
@@ -311,7 +313,7 @@ function catalog(filter='all'){
   for(const a of assets.filter(a=>filter==='all'||a.category===filter)){
     const btn=document.createElement('button');btn.type='button';btn.className='asset';btn.dataset.id=a.id;
     if(!a.local){const img=document.createElement('img');img.src=root+'kenney/'+a.file+'.png';img.alt='';btn.append(img);}
-    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'farmland':'▤','wheatfield':'♒','barn':'⌂','barn-abandoned':'◩','hay-bale':'▰','tree-broad':'♣','tree-column':'♠','tree-young':'♧','bush-round':'●','bush-wild':'♒','tree-dead':'♱','hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','wall-gate':'▥','wall-gate-open':'Ⅱ','wall-gate-ruined':'⋈','courtyard-entry':'∩','camp-plaza':'▤','enemy-squad':'♟','enemy-source-ruined':'◇','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰','street-bench':'▰','street-planter':'♧','civil-car':'▱','damaged-car':'◩'})[a.id];btn.append(icon);}
+    else{const icon=document.createElement('span');icon.className='symbol';icon.textContent=({'wheatfield-abandoned':'♒','wheatfield-burnt':'▧','farmland':'▤','wheatfield':'♒','barn':'⌂','barn-abandoned':'◩','hay-bale':'▰','tree-broad':'♣','tree-column':'♠','tree-young':'♧','bush-round':'●','bush-wild':'♒','tree-dead':'♱','hospital':'✚','bank':'▥','watchtower':'♜','cannon-near':'Ⅱ','cannon-long':'⇈','brick-wall':'▦','wall-gate':'▥','wall-gate-open':'Ⅱ','wall-gate-ruined':'⋈','courtyard-entry':'∩','camp-plaza':'▤','enemy-squad':'♟','enemy-source-ruined':'◇','campfire':'♨','ruins':'◩','enemy-source':'◆','streetlight':'♧','trash':'▣','rubble':'▱','burnt-car':'▰','street-bench':'▰','street-planter':'♧','civil-car':'▱','damaged-car':'◩'})[a.id];btn.append(icon);}
     const label=document.createElement('span'),name=document.createElement('b'),origin=document.createElement('small');name.textContent=a.name;origin.textContent=a.local?'自制样件':'Kenney';label.append(name,origin);btn.append(label);
     btn.disabled=!ready;btn.classList.toggle('selected',a.id===selected.id);btn.addEventListener('click',()=>selectAsset(a));$('catalog').append(btn);
   }

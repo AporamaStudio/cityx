@@ -5,7 +5,7 @@ import {addBuildingFoundation,buildingVariation} from './city-building-style.js?
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
 import {createRoadModel} from './city-road-model.js?v=3';
 import {createNaturalModel} from './city-natural-model.js?v=8';
-import {createSurroundingModel} from './city-surrounding-model.js?v=10';
+import {createSurroundingModel} from './city-surrounding-model.js?v=11';
 import {updateWater} from './city-water.js?v=2';
 import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {PLANT_MODELS} from './city-vegetation.js?v=2';
@@ -16,6 +16,7 @@ import {createZombieCrowds} from './city-enemies.js?v=7';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
+for(const name of ['farmland','wheatfield','wheatfield-abandoned','wheatfield-burnt','barn','barn-abandoned','hay-bale'])files[name]='generated/'+name;
 for(const [name,file] of Object.entries(PLANT_MODELS))files[name]='generated/'+file;
 for(const name of ['home','small','wide','factory','workshop'])files[name+'Ruined']=files[name]+'-ruined';
 const resource=file=>new URL('../assets/model-preview/'+file+'.glb?v=5',import.meta.url).href;

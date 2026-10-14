@@ -341,22 +341,40 @@ def vegetation():
 
 def countryside():
     # 乡村样件全部原生米制、按颜色合批；只验证景物，不含农业生产或独立灯光。
-    for wheat in (False, True):
-        m=Model();m.box((0,-.08,0),(20,.16,20),'#766448')
+    for state in ('farmland','wheatfield','wheatfield-abandoned','wheatfield-burnt'):
+        m=Model();burnt=state=='wheatfield-burnt';abandoned=state=='wheatfield-abandoned'
+        m.box((0,-.08,0),(20,.16,20),'#575449' if burnt else '#766448')
         for row in range(18):
             x=-8.5+row
-            m.box((x,.045,0),(.62,.09,18),'#8c7650' if row%2 else '#806c4a')
-            if not wheat:
-                continue
+            m.box((x,.045,0),(.62,.09,18),('#55584b' if row%2 else '#454841') if burnt else ('#8c7650' if row%2 else '#806c4a'))
+            if state=='farmland':continue
             for col in range(18):
-                z=-8.5+col;h=.87+((row*7+col*13)%9)*.025
-                # 交叉薄叶与八面麦穗，近看有植株，远看仍可读成连续金色田垄。
+                z=-8.5+col;variation=(row*7+col*13)%9;h=.87+variation*.025
+                if burnt:
+                    # 烧过的田保留田垄，短焦茬与不规则灰烬；没有持续火焰或灾害机制。
+                    if variation<3:continue
+                    m.beam((x,.09,z),(x+.06,.2+variation*.02,z+.04),.04,'#343b34')
+                    if (row*31+col*17)%19==6:m.box((x+.12,.10,z-.08),(.4,.02,.55),'#88877b')
+                    continue
+                if abandoned:
+                    # 倒伏麦秆、缺株与杂草共同表达弃耕，而不是简单把正常麦田换色。
+                    if variation<3:continue
+                    if variation<6:
+                        m.beam((x,.10,z),(x+.58,.21,z+.24),.045,'#a09266')
+                        m.beam((x+.4,.19,z),(x-.2,.13,z+.6),.04,'#8c835c')
+                        continue
+                    h*=.72
                 for dx,dz in ((.15,0),(0,.15)):
                     a=(x-dx,.08,z-dz);b=(x+dx,.08,z+dz);c=(x,h-.18,z)
-                    m.triangle([a,b,c],'#8d8e51');m.triangle([c,b,a],'#8d8e51')
-                color=['#c4af69','#d4bf79','#b6a264'][(row+col)%3]
+                    leaf='#727b53' if abandoned else '#8d8e51'
+                    m.triangle([a,b,c],leaf);m.triangle([c,b,a],leaf)
+                color=['#a69b72','#b4a77a','#918761'][(row+col)%3] if abandoned else ['#c4af69','#d4bf79','#b6a264'][(row+col)%3]
                 m.cylinder((x,h-.08,z),.09,.32,color,top=.025,sides=4)
-        m.save('wheatfield' if wheat else 'farmland',{'units':'meters','visualOnly':True,'footprintMeters':[20,20],'cropHeightMeters':1.1 if wheat else 0})
+        if abandoned:
+            for i in range(25):
+                x=(i*7.17)%18-9;z=(i*3.83)%18-9
+                m.cylinder((x,.2,z),.23,.4,'#69774f',top=.06,sides=4)
+        m.save(state,{'units':'meters','visualOnly':True,'footprintMeters':[20,20],'fieldState':state,'pairedWith':'wheatfield' if abandoned or burnt else None,'cropHeightMeters':1.1 if state=='wheatfield' else .8 if abandoned else .4 if burnt else 0})
     for ruined in (False, True):
         m=Model();wood='#8d6e53' if not ruined else '#777464';roof='#637269' if not ruined else '#616860';trim='#c0b49b' if not ruined else '#a09b85'
         m.box((0,.12,0),(12,.24,18),'#807e6c')
@@ -395,7 +413,7 @@ def countryside():
 
 if __name__ == '__main__':
     if '--countryside' in sys.argv:
-        countryside();print('已生成5个米制田野/谷仓样件，仅供视觉预览')
+        countryside();print('已生成7个米制田野/谷仓样件，供预览与近郊装饰使用')
     elif '--enemies' in sys.argv:
         enemy_squad();print('已生成十六人米制僵尸群体样件')
     elif '--vegetation' in sys.argv:
@@ -408,4 +426,4 @@ if __name__ == '__main__':
         street_furniture();print('已生成3个米制长椅/花池/完好车辆样件')
     else:
         tower();cannon();cannon(True);props();street_props();camp_plaza();enemy_squad();entrances();street_furniture();damaged_car();vegetation();countryside()
-        print('已生成33个独立GLB样件，含配套门与三态车辆街景')
+        print('已生成35个独立GLB样件，含配套门与三态车辆街景')
