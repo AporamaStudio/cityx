@@ -12,6 +12,10 @@ export function createWaterMaterial(){
   };
   material.customProgramCacheKey=()=> 'cityx-water-depth-ripple';return material;
 }
+const waterUniforms=new WeakMap();
 export function updateWater(root,time,night,reducedMotion=false){
-  root.traverse(node=>{const uniforms=node.material?.userData.cityWater;if(uniforms){uniforms.time.value=reducedMotion?0:time;uniforms.night.value=night;}});
+  // 水域模型建好后节点不再改变；替换地形根对象会自动重新登记，不逐帧遍历整片郊野。
+  let list=waterUniforms.get(root);
+  if(!list){const found=new Set();root.traverse(node=>{const uniforms=node.material?.userData.cityWater;if(uniforms)found.add(uniforms);});list=[...found];waterUniforms.set(root,list);}
+  for(const uniforms of list){uniforms.time.value=reducedMotion?0:time;uniforms.night.value=night;}
 }
