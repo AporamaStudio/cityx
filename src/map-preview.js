@@ -1,4 +1,4 @@
-import {drawNaturalTerrain} from './natural-terrain.js?v=5';
+import {drawNaturalTerrain} from './natural-terrain.js?v=6';
 import {drawBlockTexture} from './city-textures.js?v=3';
 import {readMapSettings,mapSearch} from './map-settings.js?v=2';
 import {generateCityMap,walkableDistances} from './city-map.js?v=14';

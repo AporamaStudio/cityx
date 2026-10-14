@@ -40,3 +40,8 @@ test('岸草石块与草地色斑位置固定，不覆盖桥梁/道路或修改�
   for(const d of details){if(d.kind==='patch')for(const p of d.points)assert.equal(map.tiles[Math.floor(p.y)*map.width+Math.floor(p.x)],'open');
     if(d.kind==='reeds')assert.ok(!map.natural.bridges.some(b=>d.x>b.x-.6&&d.x<b.x+b.w+.6&&d.y>b.y-1&&d.y<b.y+b.h+1));}
 });
+test('滨水设施占格只移除遮挡树木，其余树位稳定且通行数据不变',()=>{
+  const map=generateCityMap(MAP_DEFAULTS),all=naturalPlants(map),p=all.find(p=>map.tiles[Math.floor(p.y)*60+Math.floor(p.x)]==='open'),id=Math.floor(p.y)*60+Math.floor(p.x),occupied=new Set([id]),before=structuredClone(map);
+  const visible=naturalPlants(map,20,occupied);assert.ok(!visible.some(item=>item.id===p.id));assert.deepEqual(map,before);assert.equal(occupied.size,1);
+  for(const item of visible)assert.deepEqual(item,all.find(old=>old.id===item.id));
+});

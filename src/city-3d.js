@@ -4,10 +4,10 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {addBuildingFoundation,buildingVariation} from './city-building-style.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
 import {createRoadModel} from './city-road-model.js?v=3';
-import {createNaturalModel} from './city-natural-model.js?v=6';
+import {createNaturalModel} from './city-natural-model.js?v=7';
 import {createSurroundingModel} from './city-surrounding-model.js?v=7';
 import {updateWater} from './city-water.js?v=2';
-import {naturalGroundAt} from './natural-terrain.js?v=5';
+import {naturalGroundAt} from './natural-terrain.js?v=6';
 import {PLANT_MODELS} from './city-vegetation.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=11';
@@ -95,7 +95,7 @@ export function createCity3D(onReady){
   const vegetation=new THREE.Group(),plantEntries=new Map();facilities.add(vegetation);let plantKey='';
   const streets=new THREE.Group();scene.add(streets);let terrain=null,roadLayout=null,streetKey='',lastShadow='';
   let roads=new THREE.Group(),roadKey='';scene.add(roads);
-  let nature=new THREE.Group(),natureLayout=null,natureMeters=0;scene.add(nature);
+  let nature=new THREE.Group(),natureLayout=null,natureMeters=0,natureKey='';scene.add(nature);
   let exterior=new THREE.Group();scene.add(exterior);
   const localLights=[];
   const effects=createCityEffects(scene),effectCanvas=document.createElement('canvas');
@@ -154,9 +154,13 @@ export function createCity3D(onReady){
       entry.object.updateMatrixWorld(true);const ray=new THREE.Raycaster(new THREE.Vector3(x,entry.roof+1,y),new THREE.Vector3(0,-1,0));
       const height=ray.intersectObject(entry.object,true)[0]?.point.y??entry.roof;entry.roofSamples.set(sample,height);return height;
     },
-    render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],dressing=[],plants=[],plantPreview=null,roadCells=[],fx}){
+    render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],dressing=[],plants=[],plantPreview=null,naturalOccupied=[],roadCells=[],fx}){
       if(!ready)return null;
-      if(natureLayout!==layout||natureMeters!==cellMeters){release({object:nature});nature=createNaturalModel(layout,cellMeters,models);scene.add(nature);release({object:exterior});exterior=createSurroundingModel(layout,models,cellMeters);scene.add(exterior);natureLayout=layout;natureMeters=cellMeters;}
+      const geographyChanged=natureLayout!==layout||natureMeters!==cellMeters;
+      // 只读实际设施占格；道路上的墙/塔不重建林地，悬停预览不触发整片几何更新。
+      const clearCells=naturalOccupied.filter(id=>layout.tiles[id]==='open'&&layout.natural?.regions.some(r=>id%layout.width>=r.x&&id%layout.width<r.x+r.w&&Math.floor(id/layout.width)>=r.y&&Math.floor(id/layout.width)<r.y+r.h)).sort((a,b)=>a-b),nextNature=clearCells.join(',');
+      if(geographyChanged||natureKey!==nextNature){release({object:nature});nature=createNaturalModel(layout,cellMeters,models,new Set(clearCells));scene.add(nature);natureKey=nextNature;}
+      if(geographyChanged){release({object:exterior});exterior=createSurroundingModel(layout,models,cellMeters);scene.add(exterior);natureLayout=layout;natureMeters=cellMeters;}
       // 远景融合发生在输出色域转换后，雾色也用sRGB，避免地平线形成暗色矩形边缘。
       exterior.userData.haze?.value.set(fx.hazeColor).convertLinearToSRGB();
       updateWater(nature,fx.time,night,fx.reducedMotion);updateWater(exterior,fx.time,night,fx.reducedMotion);
@@ -235,13 +239,13 @@ export function createCity3D(onReady){
       effects.updateLights(lightItems,fx.time,night,visible);
       // 静态云纹/悬停刷新复用城市画面；扫光与火光读取同一动效时间重画承光层。
       const shapes=plots.map(p=>`${p.id}:${entries.get(p.id).signature}`).join('|');
-      const signature=shapes+plantKey+plots.map(p=>p.powered?'1':'0').join('')+streetKey+roadKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightBudget}:${fx.observer??false}:${fx.time}`;
+      const signature=shapes+plantKey+'|nature:'+natureKey+'|'+plots.map(p=>p.powered?'1':'0').join('')+streetKey+roadKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightBudget}:${fx.observer??false}:${fx.time}`;
       if(signature!==lastFrame){
         const dimensions=`${width}:${height}`;if(pixels!==dimensions){renderer.setSize(width,height,false);pixels=dimensions;}
         camera.left=-panX/cell;camera.right=(width-panX)/cell;camera.top=panY/cell;camera.bottom=-(height-panY)/cell;camera.updateProjectionMatrix();
         sky.color.set('#f4f6e2').lerp(new THREE.Color('#b9d7ed'),night);sky.groundColor.set('#809180').lerp(new THREE.Color('#4c676b'),night);sky.intensity=2.4-night*.9;
         sun.color.set('#fff1cd').lerp(new THREE.Color('#b9cfff'),night);sun.intensity=3.2-night*2.3;
-        const shadowKey=shapes+streetKey+plantKey;if(shadowKey!==lastShadow){renderer.shadowMap.needsUpdate=true;lastShadow=shadowKey;}
+        const shadowKey=shapes+streetKey+plantKey+'|nature:'+natureKey;if(shadowKey!==lastShadow){renderer.shadowMap.needsUpdate=true;lastShadow=shadowKey;}
         // 斜视只准备同一批对象，由观察相机统一画；不再拷贝四张不会显示的俯视层。
         if(!fx.observer){exterior.visible=true;nature.visible=true;buildings.visible=true;facilities.visible=false;enemies.visible=false;streets.visible=true;roads.visible=true;effects.group.visible=false;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);}lastFrame=signature;
       }

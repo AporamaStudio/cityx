@@ -1,9 +1,9 @@
-import {drawNaturalTerrain,naturalGroundAt} from './natural-terrain.js?v=5';
+import {drawNaturalTerrain,naturalGroundAt} from './natural-terrain.js?v=6';
 import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback} from './enemy-overlay.js?v=6';
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=1';
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=3';
-import {createCity3D} from './city-3d.js?v=56';
+import {createCity3D} from './city-3d.js?v=57';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -589,7 +589,7 @@ function paintMap() {
   const plantOccupied=new Set([...state.walls,...previewState.outposts.keys(),...(hover!==null&&tool==='wall'?[hover]:[])]);
   const plants=emptyLandPlants(emptyPlots,{width:SIZE,cellMeters:controlState.params.cellMeters,visible:visibleCell,occupied:plantOccupied});
   const plantPreview=hover!==null&&['production','housing'].includes(tool)?productionId(hover,state):null;
-  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,plants,plantPreview,roadCells:state.layout.tiles.flatMap((type,id)=>type==='road'&&visibleCell(id)?[id]:[]),fx});
+  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,plants,plantPreview,naturalOccupied:[...state.playerWalls,...state.outposts.keys()],roadCells:state.layout.tiles.flatMap((type,id)=>type==='road'&&visibleCell(id)?[id]:[]),fx});
   const eligibleCells=viewMode==='top'&&weaponPlacementReady?view.towers.eligible(weaponType()):new Set();
   if(viewMode==='top'){
   // 真正的外围模型只画在行动地图外；未知城内继续受原信息遮罩约束。

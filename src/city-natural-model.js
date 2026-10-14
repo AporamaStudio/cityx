@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {hillHeight,lakeOutline,naturalPlants,naturalDetails} from './natural-terrain.js?v=5';
+import {hillHeight,lakeOutline,naturalPlants,naturalDetails} from './natural-terrain.js?v=6';
 import {createWaterMaterial} from './city-water.js?v=2';
 
 // 河面、岸带和桥梁共用少量材质合批；尺度以米转格，不增加独立光源或阴影贴图。
-export function createNaturalModel(layout,cellMeters=20,models=new Map()){
+export function createNaturalModel(layout,cellMeters=20,models=new Map(),occupied=new Set()){
   const root=new THREE.Group(),batches=new Map(),natural=layout.natural;
   if(!natural?.river)return root;
   const add=(geometry,color)=>{
@@ -51,7 +51,7 @@ export function createNaturalModel(layout,cellMeters=20,models=new Map()){
   for(const hill of natural.hills)for(let y=hill.y;y<hill.y+hill.h;y+=.25)for(let x=hill.x;x<hill.x+hill.w;x+=.25){
     const p=(x,y)=>[x,.001+hillHeight(hill,x,y,cellMeters),y];quad(p(x,y),p(x,y+.25),p(x+.25,y),p(x+.25,y+.25),'#809269');
   }
-  for(const plant of naturalPlants(layout,cellMeters)){
+  for(const plant of naturalPlants(layout,cellMeters,occupied)){
     const model=models.get(plant.asset);if(!model)continue;
     const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3()),scale=plant.w/Math.max(size.x,size.z);
     const matrix=new THREE.Matrix4().makeTranslation(plant.x,plant.ground,plant.y).multiply(new THREE.Matrix4().makeRotationY(plant.angle)).multiply(new THREE.Matrix4().makeScale(scale,scale,scale)).multiply(new THREE.Matrix4().makeTranslation(-center.x,-bounds.min.y,-center.z));

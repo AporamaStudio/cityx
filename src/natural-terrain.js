@@ -65,20 +65,21 @@ export function addNaturalTerrain({seed,width,height,tiles,blocks,bands,camp}){
 }
 
 // 岸边树木以固定簇密度生成；保守避开水、道路和桥，不生成可采集资源。
-export function naturalPlants(layout,cellMeters=20){
+export function naturalPlants(layout,cellMeters=20,occupied=new Set()){
   const plants=[];if(!layout.natural||cellMeters<8)return plants;
   let index=0;const step=12/cellMeters;
   for(const r of layout.natural.regions)for(let y=r.y+step/2;y<r.y+r.h;y+=step)for(let x=r.x+step/2;x<r.x+r.w;x+=step){
+    const id=index++;
     const hash=(Math.imul(Math.floor(x*100)+31,1664525)^Math.imul(Math.floor(y*100)+7,1013904223))>>>0;
     const cluster=Math.sin(x*.73+y*.19)+Math.cos(y*1.45-x*.13);
     if(hash%10>4||cluster<-.6)continue;
     const px=x+((hash>>>8)%101/100-.5)*step*.5,py=y+((hash>>>16)%101/100-.5)*step*.5;
     const asset=['broad','column','young','round','wild'][hash%5],w=({broad:10,column:5.4,young:4.3,round:2.7,wild:2.2}[asset])*(.8+(hash%31)/100)/cellMeters,radius=w/Math.SQRT2;
     let allowed=px-radius>=r.x&&px+radius<=r.x+r.w&&py-radius>=r.y&&py+radius<=r.y+r.h;
-    for(let cy=Math.floor(py-radius);allowed&&cy<=Math.floor(py+radius);cy++)for(let cx=Math.floor(px-radius);cx<=Math.floor(px+radius);cx++)if(!['open','hill'].includes(layout.tiles[cy*layout.width+cx]))allowed=false;
+    for(let cy=Math.floor(py-radius);allowed&&cy<=Math.floor(py+radius);cy++)for(let cx=Math.floor(px-radius);cx<=Math.floor(px+radius);cx++)if(!['open','hill'].includes(layout.tiles[cy*layout.width+cx])||occupied.has(cy*layout.width+cx))allowed=false;
     if(!allowed)continue;
     const hill=layout.natural.hills.find(h=>px>=h.x&&px<=h.x+h.w&&py>=h.y&&py<=h.y+h.h);
-    plants.push({id:index++,asset,x:px,y:py,w,angle:hash%628/100,ground:hill?hillHeight(hill,px,py,cellMeters):.001});
+    plants.push({id,asset,x:px,y:py,w,angle:hash%628/100,ground:hill?hillHeight(hill,px,py,cellMeters):.001});
     if(plants.length>=800)return plants;
   }
   return plants;
