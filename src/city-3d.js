@@ -146,7 +146,7 @@ export function createCity3D(onReady){
   }
   return {
     beginStats(){renderer.info.autoReset=false;renderer.info.reset();},
-    renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats()};renderer.info.autoReset=true;return stats;},
+    renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats(),streetLights:localLights.length};renderer.info.autoReset=true;return stats;},
     isReady(){return ready;},
     observationPick(x,y,width,height,view){return ready?observation.pick(x,y,width,height,view):null;},
     observationFrame(options){if(!ready)return null;if(terrain)terrain.visible=false;return observation.render({...options,objects:[exterior,nature,buildings,facilities,streets,roads],enemies,hasEnemies:zombieCrowds.stats().figures>0,geometryVersion,effects:effects.group});},
@@ -241,10 +241,11 @@ export function createCity3D(onReady){
       const visible=lightViewport??{left:-panX/cell,right:(width-panX)/cell,top:-panY/cell,bottom:(height-panY)/cell};
       const reach=22/cellMeters,cx=(width/2-panX)/cell,cy=(height/2-panY)/cell;
       const nearby=streetLights.filter(p=>p.x>=visible.left-reach&&p.x<=visible.right+reach&&p.y>=visible.top-reach&&p.y<=visible.bottom+reach).sort((a,b)=>Math.hypot(a.x-cx,a.y-cy)-Math.hypot(b.x-cx,b.y-cy)).slice(0,lightBudget);
-      // 固定池规模，空闲灯只归零强度；平移不改变Shader灯数，跨预算边缘渐变换位。
-      while(localLights.length>lightBudget)localLights.pop().removeFromParent();
-      while(localLights.length<lightBudget){const light=new THREE.PointLight('#ffd08a',0,reach,2);light.userData.level=0;scene.add(light);localLights.push(light);}
-      const wanted=new Map(nearby.map(p=>[`${p.x}:${p.y}`,p])),claimed=new Set(localLights.map(l=>l.userData.id).filter(id=>wanted.has(id)));
+      // 池规模不超过实际灯具数；平移仍保持槽位，避免没有路灯时也计算24盏零强度灯。
+      const wanted=new Map(nearby.map(p=>[`${p.x}:${p.y}`,p])),poolSize=Math.min(lightBudget,streetLights.length);
+      while(localLights.length>poolSize){const index=localLights.findIndex(light=>!wanted.has(light.userData.id)&&light.userData.level===0);if(index<0)break;localLights.splice(index,1)[0].removeFromParent();}
+      while(localLights.length<poolSize){const light=new THREE.PointLight('#ffd08a',0,reach,2);light.userData.level=0;scene.add(light);localLights.push(light);}
+      const claimed=new Set(localLights.map(l=>l.userData.id).filter(id=>wanted.has(id)));
       for(const light of localLights){
         let p=wanted.get(light.userData.id);const dt=Math.min(.1,Math.max(0,performance.now()/1000-(light.userData.at??performance.now()/1000)));light.userData.at=performance.now()/1000;
         light.userData.level=fx.reducedMotion?(p?1:0):Math.max(0,Math.min(1,light.userData.level+(p?1:-1)*dt*5));
