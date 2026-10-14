@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {surroundingLandscape,exteriorHeight,exteriorRiver} from './city-surroundings.js?v=3';
+import {surroundingLandscape,exteriorHeight,exteriorRiver} from './city-surroundings.js?v=4';
 import {createWaterMaterial} from './city-water.js?v=2';
 
 // 地图外共用同一太阳/环境光，远处向雾底色融合；无交互、真实灯或第二套游戏状态。
@@ -46,8 +46,9 @@ export function createSurroundingModel(layout,models,cellMeters=20){
     const previous=material.onBeforeCompile,key=material.customProgramCacheKey();material.userData.cityExterior=true;material.onBeforeCompile=shader=>{
       previous.call(material,shader);
       shader.uniforms.cityExteriorHaze=haze;shader.uniforms.cityExteriorSize={value:new THREE.Vector2(layout.width,layout.height)};
+      shader.uniforms.cityExteriorExtent={value:land.extent};
       shader.vertexShader='varying vec2 cityExteriorXZ;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncityExteriorXZ=(modelMatrix*vec4(transformed,1.)).xz;');
-      shader.fragmentShader='uniform vec3 cityExteriorHaze;\nuniform vec2 cityExteriorSize;\nvarying vec2 cityExteriorXZ;\n'+shader.fragmentShader.replace('#include <colorspace_fragment>','#include <colorspace_fragment>\nvec2 p=cityExteriorXZ;if(p.x>=0.&&p.y>=0.&&p.x<=cityExteriorSize.x&&p.y<=cityExteriorSize.y)discard;vec2 away=max(max(-p,p-cityExteriorSize),vec2(0.));float d=length(away);float mist=.12+.18*smoothstep(0.,12.,d)+.70*smoothstep(10.,48.,d);gl_FragColor.rgb=mix(gl_FragColor.rgb,cityExteriorHaze,mist);');
+      shader.fragmentShader='uniform vec3 cityExteriorHaze;\nuniform vec2 cityExteriorSize;\nuniform float cityExteriorExtent;\nvarying vec2 cityExteriorXZ;\n'+shader.fragmentShader.replace('#include <colorspace_fragment>','#include <colorspace_fragment>\nvec2 p=cityExteriorXZ;if(p.x>=0.&&p.y>=0.&&p.x<=cityExteriorSize.x&&p.y<=cityExteriorSize.y)discard;vec2 away=max(max(-p,p-cityExteriorSize),vec2(0.));float d=length(away);float mist=.12+.18*smoothstep(0.,cityExteriorExtent*.25,d)+.70*smoothstep(cityExteriorExtent*10./48.,cityExteriorExtent,d);gl_FragColor.rgb=mix(gl_FragColor.rgb,cityExteriorHaze,mist);');
     };material.customProgramCacheKey=()=>key+':cityx-exterior-haze';
     const mesh=new THREE.Mesh(geometry,material);mesh.castShadow=batch.cast;mesh.receiveShadow=true;mesh.userData.ownGeometry=true;mesh.userData.cityDecoration=true;root.add(mesh);
   }

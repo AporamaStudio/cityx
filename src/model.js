@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=86';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=87';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -558,6 +558,9 @@ export function validateVisualParams(params){
   if(!integer(params.campWarningPercent,0,100))return '火光危急阈值须为 0–100% 整数，0 关闭持续警示。';
   if(!Number.isFinite(params.cloudSpeedMultiplier)||params.cloudSpeedMultiplier<0||params.cloudSpeedMultiplier>3)return '云层流速倍率须为 0–3，0 静止。';
   if(!integer(params.fogS12,1,20)||!integer(params.fogS23,1,20))return 'S12/S23 雾带距离须为 1–20 格整数。';
+  if(!integer(params.exteriorFogTransitionPercent,5,50))return '外围雾过渡距离须为地图短边的 5–50%，整数。';
+  if(!integer(params.exteriorFogClearPercent,0,60))return '外围清晰段须占过渡距离的 0–60%，整数。';
+  if(!integer(params.exteriorFogFarOpacity,70,100))return '外围远雾强度须为 70–100%，整数。';
   if(!Number.isFinite(params.enemyFogFadeCells)||params.enemyFogFadeCells<0||params.enemyFogFadeCells>3)return '敌人进出雾过渡须为 0–3 格，0 关闭渐隐，可使用小数。';
   if(!integer(params.incomeReportMs,0,15000))return '收入暂显时长须为0–15000毫秒整数，0关闭自动展示。';
   if(!integer(params.resourceHoverMs,0,2000))return '资源详情悬停时长须为0–2000毫秒整数。';

@@ -8,6 +8,13 @@ test('云层流速只接受有限的0–3倍率，静止及小数合法',()=>{
  for(const cloudSpeedMultiplier of [0,.5,1,3])assert.equal(validateParams({...s.params,cloudSpeedMultiplier},s,false),'');
  for(const cloudSpeedMultiplier of [-1,3.1,NaN,Infinity])assert.match(validateParams({...s.params,cloudSpeedMultiplier},s,false),/云层流速/);
 });
+test('外围雾参数校验有限整数范围，不改变游戏视野',()=>{
+ const s=createState(),before=visionField(s);
+ for(const [name,min,max] of [['exteriorFogTransitionPercent',5,50],['exteriorFogClearPercent',0,60],['exteriorFogFarOpacity',70,100]]){
+  for(const value of [min,max]){const params={...s.params,[name]:value};assert.equal(validateParams(params,s,false),'');assert.deepEqual(visionField({...s,params}),before);}
+  for(const value of [min-1,max+1,min+.5,NaN,Infinity])assert.match(validateParams({...s.params,[name]:value},s,false),/外围/);
+ }
+});
 test('S12/S23默认各3格，仅接受1–20格整数且不改S01逻辑视野',()=>{
  const s=createState(),before=visionField(s);
  assert.equal(s.params.campS01,6);assert.equal(s.params.outpostS01,9);

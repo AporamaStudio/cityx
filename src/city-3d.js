@@ -5,13 +5,13 @@ import {addBuildingFoundation,buildingVariation} from './city-building-style.js?
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
 import {createRoadModel} from './city-road-model.js?v=3';
 import {createNaturalModel} from './city-natural-model.js?v=7';
-import {createSurroundingModel} from './city-surrounding-model.js?v=7';
+import {createSurroundingModel} from './city-surrounding-model.js?v=8';
 import {updateWater} from './city-water.js?v=2';
 import {naturalGroundAt} from './natural-terrain.js?v=6';
 import {PLANT_MODELS} from './city-vegetation.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=11';
-import {createCityObservation} from './city-observation.js?v=10';
+import {createCityObservation} from './city-observation.js?v=11';
 import {createZombieCrowds} from './city-enemies.js?v=7';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。

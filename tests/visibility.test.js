@@ -1,8 +1,43 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createVisibility,cloudDensity} from '../src/visibility.js';
+import {createVisibility,cloudDensity,exteriorFogDensity} from '../src/visibility.js';
 import {createState,controlMask,visionField,key,revealControl} from '../src/model.js';
-import {SIZE} from '../src/config.js';
+import {SIZE,DEFAULTS} from '../src/config.js';
+
+test('外围比例只影响景物，城内雾场与实时敌人权限完全保留',()=>{
+  const controlled=new Set(),sight=new Set();
+  for(let y=20;y<27;y++)for(let x=0;x<8;x++)controlled.add(y*SIZE+x);
+  for(let y=17;y<30;y++)for(let x=0;x<11;x++)sight.add(y*SIZE+x);
+  const original=createVisibility(SIZE,controlled,sight,3,3),world=createVisibility(SIZE,controlled,sight,3,3,1.5,DEFAULTS);
+  for(let y=.125;y<SIZE;y+=.25)for(let x=.125;x<SIZE;x+=.25){
+    assert.deepEqual(world.fogAt(x,y),original.fogAt(x,y));assert.equal(world.enemyAlpha(x,y),original.enemyAlpha(x,y));
+  }
+  assert.ok(world.fogAt(-2,23.5).cloud<.1);assert.ok(world.fogAt(-6,23.5).cloud>world.fogAt(-2,23.5).cloud);
+  assert.ok(world.fogAt(-12,23.5).cloud>world.fogAt(-6,23.5).cloud);
+  assert.ok(world.fogAt(62,23.5).cloud>.8);assert.equal(world.enemyAlpha(-2,23.5),0);
+  assert.equal(createVisibility(SIZE,controlled,sight,3,3,1.5,{...DEFAULTS}),world);
+});
+
+test('局部S1揭示不能产生12格清晰延伸，撤回边缘控制立即恢复外围雾',()=>{
+  const controlled=new Set([30*SIZE+30]),sight=new Set([...controlled,20*SIZE]);
+  const isolated=createVisibility(SIZE,controlled,sight,3,3,1.5,DEFAULTS);
+  assert.ok(isolated.fogAt(-6,20.5).cloud>.8);
+  controlled.add(20*SIZE);const opened=createVisibility(SIZE,controlled,sight,3,3,1.5,DEFAULTS);
+  assert.ok(opened.fogAt(-6,20.5).cloud<isolated.fogAt(-6,20.5).cloud);
+  controlled.delete(20*SIZE);assert.deepEqual(createVisibility(SIZE,controlled,sight,3,3,1.5,DEFAULTS).fogAt(-6,20.5),isolated.fogAt(-6,20.5));
+});
+
+test('外围距离随地图尺寸同比增长，远端融入背景且参数确实改变过渡',()=>{
+  const fog=(size,d,params=DEFAULTS)=>exteriorFogDensity(size,d,d,0,0,3,3,params);
+  assert.deepEqual(fog(60,6),fog(120,12));
+  let previous=0;for(let d=0;d<=12;d+=.1){const f=fog(60,d),opacity=f.cloud+f.veil*(1-f.cloud);assert.ok(opacity>=previous-1e-6);previous=opacity;}
+  const short=fog(60,3,{...DEFAULTS,exteriorFogTransitionPercent:5});assert.ok(Math.abs(short.cloud+short.veil*(1-short.cloud)-.9)<1e-6);
+  assert.ok(fog(60,6,{...DEFAULTS,exteriorFogTransitionPercent:25}).cloud<fog(60,6).cloud);
+  assert.ok(fog(60,6,{...DEFAULTS,exteriorFogClearPercent:50}).cloud<fog(60,6).cloud);
+  const far=fog(60,15);assert.ok(Math.abs(far.cloud+far.veil*(1-far.cloud)-.9)<1e-6);
+  const stronger=fog(60,15,{...DEFAULTS,exteriorFogFarOpacity:100});assert.equal(stronger.cloud+stronger.veil*(1-stronger.cloud),1);
+  assert.deepEqual(fog(60,48),{cloud:0,veil:1});
+});
 
 test('S01与实际昼夜视野一致，敌源揭示为局部S1，发现标记不提供视野',()=>{
   const s=createState();s.params.controlRadius=3;

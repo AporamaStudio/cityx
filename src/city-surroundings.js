@@ -1,5 +1,6 @@
 import {riverBanks} from './natural-terrain.js?v=6';
-import {fogColor} from './fog.js?v=19';
+import {fogColor} from './fog.js?v=22';
+import {exteriorFogExtent} from './visibility.js?v=9';
 const cache=new WeakMap(),smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
 const hash=(x,y)=>(Math.imul(Math.round(x*100)+101,73856093)^Math.imul(Math.round(y*100)+103,19349663))>>>0;
 export const outsideDistance=(layout,x,y)=>Math.hypot(Math.max(0,-x,x-layout.width),Math.max(0,-y,y-layout.height));
@@ -27,7 +28,7 @@ export function exteriorHeight(layout,land,x,y,cellMeters=20){
 // 外围不是第二张游戏地图：只输出延伸水系、郊区出口和远丘/林地，不存格子权限。
 export function surroundingLandscape(layout){
   if(cache.has(layout))return cache.get(layout);
-  const {width:w,height:h}=layout,extent=48;
+  const {width:w,height:h}=layout,extent=exteriorFogExtent(Math.min(w,h));
   const edgeRoad=(horizontal,position)=>{
     const length=horizontal?w:h,candidates=[];
     for(let i=1;i<length-1;i++){
@@ -76,7 +77,7 @@ export function drawSurroundingTerrain(ctx,layout,night){
     if(layout.natural?.river)for(const side of [-1,1]){const points=[];for(let d=0;d<=b;d++){const x=side<0?-d:w+d;points.push({x,...exteriorRiver(layout,x)});}g.fillStyle=dark?'#294b60':'#588a97';g.beginPath();points.forEach((p,i)=>i?g.lineTo(p.x,p.top):g.moveTo(p.x,p.top));for(const p of [...points].reverse())g.lineTo(p.x,p.bottom);g.closePath();g.fill();}
     g.fillStyle=dark?'#2f493c':'#627a4d';for(const tree of land.trees){g.beginPath();g.arc(tree.x,tree.y,tree.width/40,0,Math.PI*2);g.fill();}
     for(const house of land.buildings){g.fillStyle=dark?'#607273':'#a1a08a';g.fillRect(house.x-.35,house.y-.4,.7,.8);}
-    g.fillStyle=fogColor(dark);for(let y=-b;y<h+b;y++)for(let x=-b;x<w+b;x++){const d=outsideDistance(layout,x+.5,y+.5);if(!d)continue;g.globalAlpha=.12+.18*smooth(d/12)+.7*smooth((d-10)/38);g.fillRect(x,y,1.01,1.01);}g.restore();return canvas;
+    g.fillStyle=fogColor(dark);for(let y=-b;y<h+b;y++)for(let x=-b;x<w+b;x++){const d=outsideDistance(layout,x+.5,y+.5);if(!d)continue;g.globalAlpha=.12+.18*smooth(d/(b*.25))+.7*smooth((d-b*10/48)/(b*38/48));g.fillRect(x,y,1.01,1.01);}g.restore();return canvas;
   }));
   const [day,dark]=textures.get(layout);ctx.drawImage(day,-b,-b,w+b*2,h+b*2);if(night>0){ctx.save();ctx.globalAlpha=night;ctx.drawImage(dark,-b,-b,w+b*2,h+b*2);ctx.restore();}
 }

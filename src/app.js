@@ -3,20 +3,20 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=1';
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=3';
-import {createCity3D} from './city-3d.js?v=57';
+import {createCity3D} from './city-3d.js?v=59';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
-import {createVisibility} from './visibility.js?v=6';
-import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=19';
+import {createVisibility} from './visibility.js?v=9';
+import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=22';
 import {createTowerOverlay} from './tower-overlay.js?v=19';
-import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=21';
+import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=22';
 import {cameraScale,limitZoom,limitPan,limitObservationPan} from './map-camera.js?v=4';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=9';
 import {createGameAudio} from './audio.js?v=10';
-import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=86';
-import {applyExperimentParams,validateVisualParams, bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=102';
+import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=87';
+import {applyExperimentParams,validateVisualParams, bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=103';
 import {generateCityMap} from './city-map.js?v=14';
 import {readMapSettings} from './map-settings.js?v=2';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -443,7 +443,7 @@ function mapDisplay(){
     const boundary=controlBoundary(controlled),boundaryPath=new Path2D(),controlPath=new Path2D();
     for(const [a,b,c,d] of boundary){boundaryPath.moveTo(a,b);boundaryPath.lineTo(c,d);}
     for(const id of controlled){const [x,y]=xy(id);controlPath.rect(x,y,1,1);}
-    mapView={controlState,raw,controlled,boundary,boundaryPath,controlPath,visibility:createVisibility(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells),dirty:paramsDirty(),
+    mapView={controlState,raw,controlled,boundary,boundaryPath,controlPath,visibility:createVisibility(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells,params),dirty:paramsDirty(),
       towers:createTowerOverlay(state,controlled,new Set(motion?.actors.map(e=>e.to))),
       controlBorder:controlBorderTexture(SIZE,controlled,boundaryPath,controlPath,params),
       sourceSites:new Set([...state.enemySources.values()].map(s=>s.site)),
@@ -1154,7 +1154,9 @@ function updateCameraLabels(size,params){
 }
 function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,palette,fogTime,operationValid=false){
   const size=base*zoom,span=76,px=16,fogPx=4,camera=cameraView(),g=observationGround.getContext('2d'),m=observationMist.getContext('2d');
-  if(observationGround.width!==span*px){observationGround.width=observationGround.height=span*px;observationMist.width=observationMist.height=span*fogPx;}
+  if(observationGround.width!==span*px)observationGround.width=observationGround.height=span*px;
+  const {border:mistBorder,span:mistSpan}=view.visibility;
+  if(observationMist.width!==mistSpan*fogPx)observationMist.width=observationMist.height=mistSpan*fogPx;
   const terrainKey=view.controlBorder.signature+JSON.stringify(plots)+`${nightMix}:${$('heat').checked}:${size}:${$('heat').checked?JSON.stringify([...fire]):''}`;
   if(observationGroundKey!==terrainKey){
     g.setTransform(px,0,0,px,8*px,8*px);g.fillStyle=fogColor(nightMix);g.fillRect(-8,-8,span,span);
@@ -1169,9 +1171,9 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     for(const p of state.sites)if(p.role!=='camp'&&!detailed.has(key(p.x,p.y))&&view.towers.plots.get(key(p.x,p.y)).footprint.length)drawCitySilhouette(g,p,nightMix);
     drawControlBorderBands(g,view.controlBorder,nightMix);observationGroundKey=terrainKey;
   }
-  m.setTransform(1,0,0,1,0,0);m.clearRect(0,0,observationMist.width,observationMist.height);m.setTransform(fogPx,0,0,fogPx,8*fogPx,8*fogPx);
+  m.setTransform(1,0,0,1,0,0);m.clearRect(0,0,observationMist.width,observationMist.height);m.setTransform(fogPx,0,0,fogPx,mistBorder*fogPx,mistBorder*fogPx);
   if(mapFogEnabled())drawFog(m,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom);
-  const image=city3D.observationFrame({ground:observationGround,groundVersion:observationGroundKey,mist:observationMist,view:camera,background:fogColor(nightMix)});
+  const image=city3D.observationFrame({ground:observationGround,groundVersion:observationGroundKey,mist:observationMist,mistBounds:[-mistBorder,-mistBorder,mistSpan,mistSpan],view:camera,background:fogColor(nightMix)});
   ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.clearRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);
   const point=(x,y,z=0)=>projectView(x,y,z,camera);
   const polygon=(x,y,w,h,z=0)=>{
@@ -1653,6 +1655,7 @@ function paramsEditor(params,scope='all') {
   fields('性能',params,'',[['showRenderStats','显示绘制统计',0,1]],'visualParams');
   fields('敌群',params,'',[['enemyFiguresPerGroup','每敌群视觉人数',3,20]],'visualParams');
   fields('云层',params,'',[['cloudSpeedMultiplier','流速倍率（0静止）',0,3],['fogS12','S12 薄雾→中雾距离（格）',1,20],['fogS23','S23 中雾→浓雾距离（格）',1,20],['enemyFogFadeCells','敌人进出雾过渡（格）',0,3]],'visualParams');
+  fields('外围云雾',params,'',[['exteriorFogTransitionPercent','过渡距离／短边%',5,50],['exteriorFogClearPercent','清晰段／过渡%',0,60],['exteriorFogFarOpacity','远雾强度%',70,100]],'visualParams');
   fields('界面反馈',params,'',[['campWarningPercent','火光危急阈值%',0,100],['nightIdleTransitionMs','空闲夜末过渡时长（毫秒）',0,3000],['incomeReportMs','收入暂显时长（毫秒，0关闭）',0,15000],['resourceHoverMs','资源详情悬停时长（毫秒）',0,2000],['resourceHoverTolerancePx','资源悬停位移容差（像素）',0,20]],'visualParams');
 }
 function readParams(scope='all') {

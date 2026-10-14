@@ -4,6 +4,13 @@ import {generateCityMap} from '../src/city-map.js';
 import {MAP_DEFAULTS} from '../src/map-settings.js';
 import {surroundingLandscape,exteriorRiver,exteriorHeight,outsideDistance} from '../src/city-surroundings.js';
 import {riverBanks} from '../src/natural-terrain.js';
+import {exteriorFogExtent} from '../src/visibility.js';
+
+test('大地图郊野范围与雾纹范围同步增长，不截断同比扩大的外围过渡',()=>{
+  const map=generateCityMap({width:120,height:100}),land=surroundingLandscape(map);
+  assert.equal(land.extent,exteriorFogExtent(100));assert.equal(land.extent,80);
+  assert.ok(land.trees.length<=1200);assert.equal(exteriorFogExtent(240),192);
+});
 
 test('外围水系连续接城内两端，出口接真实道路，装饰不修改地图或通行数据',()=>{
   for(let seed=0;seed<8;seed++){

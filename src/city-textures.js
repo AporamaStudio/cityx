@@ -1,4 +1,4 @@
-import {drawSurroundingTerrain} from './city-surroundings.js?v=3';
+import {drawSurroundingTerrain} from './city-surroundings.js?v=4';
 // 轻量程序贴图：日/夜各生成一套并缓存，纹理只表达材质，不参与通行或受击规则。
 import {fogColor} from './fog.js?v=19';
 import {roadMarkings,roadCellParts} from './city-roads.js?v=1';

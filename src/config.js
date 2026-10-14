@@ -30,6 +30,8 @@ export const DEFAULTS = {
   cloudSpeedMultiplier: 1,
   // S01由火光/瞭望塔的有效视野决定；视野外S12/S23分别渐入中雾/浓雾。
   fogS12: 3, fogS23: 3,
+  // 外围仅为景物：按地图短边延伸，清晰段占过渡距离的比例，不增加城内视野。
+  exteriorFogTransitionPercent: 20, exteriorFogClearPercent: 25, exteriorFogFarOpacity: 90,
   // 仅在实时视野的可见侧融入雾中，0关闭渐隐，不扩大侦测范围。
   enemyFogFadeCells: 1.5,
   initialPopulation: 6, productionCellsPerWorker: 4, housingCellsPerResident: 2, housingCostPerCell: 8,
@@ -71,7 +73,7 @@ export const DEFAULTS = {
 
 
 // 视觉实验独立应用的白名单；不能借此修改战斗、经济或控制参数。
-export const VISUAL_PARAM_KEYS = ['cellMeters', 'mapMaxCellPx', 'obliqueElevationDegrees', 'freeProjection', 'freePerspectiveFovDegrees', 'returnToTopOnAction', 'streetLightBudget', 'enemyFiguresPerGroup', 'showRenderStats', 'fireNumbersMinCellPx', 'mapMidZoomPercent', 'mapNearZoomPercent', 'controlBorderInnerCells', 'controlBorderOuterCells', 'controlBorderInnerOpacity', 'controlBorderOuterOpacity', 'controlBorderLinePx', 'cloudSpeedMultiplier', 'fogS12', 'fogS23', 'enemyFogFadeCells', 'campWarningPercent', 'nightIdleTransitionMs', 'incomeReportMs', 'resourceHoverMs', 'resourceHoverTolerancePx'];
+export const VISUAL_PARAM_KEYS = ['cellMeters', 'mapMaxCellPx', 'obliqueElevationDegrees', 'freeProjection', 'freePerspectiveFovDegrees', 'returnToTopOnAction', 'streetLightBudget', 'enemyFiguresPerGroup', 'showRenderStats', 'fireNumbersMinCellPx', 'mapMidZoomPercent', 'mapNearZoomPercent', 'controlBorderInnerCells', 'controlBorderOuterCells', 'controlBorderInnerOpacity', 'controlBorderOuterOpacity', 'controlBorderLinePx', 'cloudSpeedMultiplier', 'fogS12', 'fogS23', 'exteriorFogTransitionPercent', 'exteriorFogClearPercent', 'exteriorFogFarOpacity', 'enemyFogFadeCells', 'campWarningPercent', 'nightIdleTransitionMs', 'incomeReportMs', 'resourceHoverMs', 'resourceHoverTolerancePx'];
 
 // 十五晚实验：前五晚保留原节奏，后十晚逐步增加强度；参数仍须真人试玩。
 const OPENING_WAVES = [
