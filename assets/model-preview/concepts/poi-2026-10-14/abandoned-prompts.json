@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-15",
+  "referenceDate": "2026-10-14",
+  "generator": "built-in image_gen",
+  "status": "AI concept previews for review; not Blender renders, implemented GLBs, measured CAD, or gameplay specifications",
+  "variant": "abandoned/non-operating; selective moderate damage",
+  "referenceManifest": "prompts.json",
+  "images": [
+    {
+      "source": "01-civic-life.png",
+      "file": "01-civic-life-abandoned.png",
+      "pois": [
+        "city-hall",
+        "community-center",
+        "school",
+        "athletics-ground"
+      ],
+      "prompt": "Edit the attached 2x2 CityX architectural concept sheet into four matching ABANDONED, NON-OPERATING versions. Preserve exact plot sizes, camera, arrangement, architectural identity, footprint, doors, roofs, original captions, white studio background, muted ivory/sage low-poly 3D render style and image quality. Retain most of each building, with selective moderate damage clearly visible from above. No people, lights, active fountain, flames, smoke, zombies or gameplay UI. Add small ABANDONED labels beside the existing captions. Upper left CITY HALL: preserve the symmetrical civic facade, central portico, stairs and fountain. One side-wing roof partially collapsed showing rafters, cracked glazing and local rubble; fountain dry, plaza cracks/weeds, flags faded. Upper right COMMUNITY CENTER: retain community hall, skylights, entrance canopy, courtyard and half-court; a cracked skylight and small roof breach, neglected courtyard with overturned benches, weeds and a damaged hoop. Lower left SCHOOL: retain long classroom block, admin wing, gym, gate and court; partial gym roof collapse exposing trusses, some broken classroom windows, sagging gate, neglected yard. Lower right ATHLETICS GROUND: same oval red track, field, bleachers and small pavilion, now faded/cracked track, patchy tall grass, torn nets, damaged bleacher canopy and fencing. Keep functional silhouettes recognizable, realistic debris sizes, bright inspectable daylight and the complete four dioramas within the original frames. This is a concept preview, no redesign or new buildings."
+    },
+    {
+      "source": "02-infrastructure.png",
+      "file": "02-infrastructure-abandoned.png",
+      "pois": [
+        "railway-station",
+        "power-plant",
+        "waterworks",
+        "logistics-hub"
+      ],
+      "prompt": "Create matching ABANDONED versions of the four POI dioramas in the attached reference sheet. Keep the same station, power plant, waterworks and warehouse, in the same 2x2 positions with the same footprint, orientation, orthographic camera, original captions, clean pale studio background and refined muted low-poly architectural render style. Most structures remain standing so each pairs unmistakably with its intact reference. No people, operating lights, active smoke or flames, zombies, weapons or game UI. Add one small ABANDONED label per panel. Top left RAILWAY STATION 180 x 100 m: same hall, two tracks/platforms and train. Moderate platform canopy collapse exposing ribs, localized hall roof damage, cracked platform, weeds in ballast and rusted derelict train with broken windows. Top right POWER PLANT 160 x 180 m: same generator hall, standing chimney, pipes and switchyard; missing roof section showing trusses, rusted disconnected pipes, damaged transformer casings and fallen cable frame, local debris, no nuclear tower or explosion crater. Bottom left WATERWORKS 120 x 140 m: same three circular tanks, filter basins and pump houses. Low dirty brown-green stagnant water, exposed sediment rings, rusted stopped equipment, broken railings and a cracked empty filter basin with weeds. Bottom right LOGISTICS HUB 140 x 160 m: same warehouse, loading bays, yard, trailers and containers. Localized warehouse roof collapse, broken bay door, rusted trucks, scattered damaged pallets and weeds in paving. Make neglect and selective roof damage visible from above, retain realistic tree/car/building proportions, daylight clarity, original facility identities, and full uncropped dioramas."
+    },
+    {
+      "source": "03-city-services.png",
+      "file": "03-city-services-abandoned.png",
+      "pois": [
+        "fire-station",
+        "police-station",
+        "communications-center",
+        "supermarket"
+      ],
+      "prompt": "Use case: precise-object-edit. Asset type: CityX POI abandoned-state concept contact sheet, used for planning later Blender models, not a real existing 3D render. Edit the attached ORIGINAL INTACT CONCEPT SHEET into the corresponding ABANDONED, NON-OPERATING variants. Preserve the SAME four facilities, exact site footprints, location and identity of main masses and ancillary facilities, camera direction and elevated orthographic angle, 2x2 panel layout, studio background, understated typography, and warm muted ivory/sage/dusty-brick low-poly game aesthetic. Keep the exact existing captions and nominal dimensions readable, and add one small 'ABANDONED' label for each panel. Show abandoned infrastructure and selective moderate structural damage, not four indistinguishable rubble heaps: most structure remains recognizably related to the intact version, damage is clearly visible in roof/top-down views as well as facade views. Use missing roof sections exposing rafters/floors, some boarded or broken windows, faded/stained walls, cracked paving with weeds, unmaintained vegetation, a few realistic small discarded objects and rusted vehicles. Local debris must correspond to damaged parts; preserve entrances and recognizable architectural silhouettes. Remove ALL humans and all signs of operation: no working fountain jets, no illuminated windows or road lamps, no fresh tidy queues of cars, no active trains. Daylight must stay bright enough to inspect all shapes; abandoned does not mean a global black tint. Polished stylized architectural 3D concept render with believable proportions and detailed materials, consistent quality with reference. No new buildings, no UI, gameplay icons, fog or control borders, zombies or weapons, smoke, active flames, logos or watermark. All four complete dioramas must fit, without crops or overlapping panels.\nSheet 3 services. Upper left FIRE STATION 60 x 80 m: preserve garage, three bay doors, crew wing, slender practice tower and red fire engines. Partly broken garage roof/door, dusty faded fire engines with missing glazing, local rust, weeds through apron and cracked training-tower plaster, tower and emergency-service silhouette still standing, no flashing lights. Upper right POLICE STATION 80 x 100 m: retain three-story pale building with blue-gray entrance accent, parking and gate. Broken/boarded windows, localized roof damage and sagging facade edge on one corner, derelict patrol cars with faded livery and missing tires, partly fallen gate, weeds. Not a military fortress or prison, no guns. Lower left COMMUNICATIONS CENTER 80 x 100 m: retain low equipment house, lattice antenna tower, dishes and cabinets. Bent antenna upper mast but most tower stands, one tilted/broken dish, missing cable sections, corroded equipment cabinets, small roof breach and weeds in service yard; no signal beams, no sci-fi effects. Lower right SUPERMARKET 80 x 100 m: same low broad-roofed store, skylights, entrance, trolley shelter, modest parking and rear loading. Moderate roof hole exposes regular beams, broken skylights and front glass, overturned abandoned shopping trolleys, faded derelict delivery van and only a few cars, weeds and cracked markings. Preserve supermarket silhouette, no stock visible as functioning business."
+    }
+  ]
+}
