@@ -101,7 +101,8 @@ function setViewMode(mode){
 }
 // 配置改变后同步操作说明；手动俯视与Escape始终保留。
 function updateViewHelp(){
-  const action=previewParams().returnToTopOnAction?'建设操作返回俯视':'单击建设，保持当前视角';
+  const returnToTop=previewParams().returnToTopOnAction,action=returnToTop?'建设操作返回俯视':'单击建设，保持当前视角';
+  $('viewActionGuide').textContent=returnToTop?'侧栏操作先回俯视，地图首击回俯视。':'三种视角均可直接建设。';
   canvas.setAttribute('aria-label',viewMode==='top'?'60乘60防守棋盘，单击布置，拖动平移':viewMode==='free'?`自由观察，拖动平移，Shift拖动或方向键旋转；${action}`:`城市斜视，拖动平移；${action}`);
   document.querySelector('[data-city-view="oblique"]').title=`固定斜视；${action}`;
   document.querySelector('[data-city-view="free"]').title=`自由观察；Shift拖动/中键拖动或方向键旋转；${action}`;
