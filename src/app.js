@@ -9,7 +9,7 @@ import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
 import {createVisibility} from './visibility.js?v=9';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=22';
-import {createTowerOverlay} from './tower-overlay.js?v=19';
+import {createTowerOverlayCache} from './tower-overlay.js?v=20';
 import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=22';
 import {cameraScale,limitZoom,limitPan,limitObservationPan} from './map-camera.js?v=4';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
@@ -351,10 +351,14 @@ const currentlyVisible=id=>!mapFogEnabled()||sight.has(id);
 function clipSight(){if(!mapFogEnabled())return;ctx.beginPath();for(const id of sight){const [x,y]=xy(id);ctx.rect(x,y,1,1);}ctx.clip();}
 // 两区草稿独立：未应用的视觉只预演显示，不阻止建设或开战。
 const paramsDirty = (scope='gameplay') => JSON.stringify(readParams(scope)) !== JSON.stringify(state.params);
+const paramReads=new Map();let paramPreview=null;
+function invalidateParamReads(){paramReads.clear();paramPreview=null;}
 function previewParams() {
+  if(paramPreview?.base===state.params&&paramPreview.phase===state.phase&&paramPreview.waves===state.waves)return paramPreview.value;
   const game=readParams('gameplay'),visual=readParams('visual');
-  const params=state.phase==='build'&&!validateParams(game,state,false)?game:structuredClone(state.params);
+  const params=structuredClone(state.phase==='build'&&!validateParams(game,state,false)?game:state.params);
   if(!validateVisualParams(visual))for(const key of VISUAL_PARAM_KEYS)params[key]=visual[key];
+  paramPreview={base:state.params,phase:state.phase,waves:state.waves,value:params};
   return params;
 }
 
@@ -401,6 +405,7 @@ function cellAt(event) {
 
 // 先绘制地形和覆盖，再叠加路线、设施、敌群，确保信息优先级清晰。
 let drawPending=false,mapView=null,borderLegendKey=null,observationBuildTargets=[];
+const towerOverlayCache=createTowerOverlayCache();
 let renderSamples=[],lastStatsAt=0,lastStatsView='';
 // 仅调试面板记录短窗口CPU绘制耗时；不强制等待GPU、不保存历史或改变渲染节奏。
 function recordRenderStats(cpu,stats){
@@ -444,7 +449,7 @@ function mapDisplay(){
     for(const [a,b,c,d] of boundary){boundaryPath.moveTo(a,b);boundaryPath.lineTo(c,d);}
     for(const id of controlled){const [x,y]=xy(id);controlPath.rect(x,y,1,1);}
     mapView={controlState,raw,controlled,boundary,boundaryPath,controlPath,visibility:createVisibility(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells,params),dirty:paramsDirty(),
-      towers:createTowerOverlay(state,controlled,new Set(motion?.actors.map(e=>e.to))),
+      towers:towerOverlayCache.get(state,controlled,new Set(motion?.actors.map(e=>e.to))),
       controlBorder:controlBorderTexture(SIZE,controlled,boundaryPath,controlPath,params),
       sourceSites:new Set([...state.enemySources.values()].map(s=>s.site)),
       sourceFootprint:new Set([...state.enemySources.values()].flatMap(sourceCells))};
@@ -1617,6 +1622,7 @@ $('sourceNight').onchange=()=>{sourceDrafts[editingNight-1]=readSources();editin
 $('settings').addEventListener('toggle',()=>{if(!$('settings').open)editorSourcePreview=null;else $('forecastDay').value=String(editingNight-1);mapView=null;updateForecast();draw();});
 // 小型参数面板：仅编辑当前实验，默认值仍保留在 config.js。
 function paramsEditor(params,scope='all') {
+  invalidateParamReads();
   if(scope!=='visual')$('params').replaceChildren();if(scope!=='gameplay')$('visualParams').replaceChildren();
   // 两区沿用同一控件生成方式，应用/取消/默认只重画自己的草稿。
   function fields(title, values, prefix, specs, target='params') {
@@ -1659,6 +1665,7 @@ function paramsEditor(params,scope='all') {
   fields('界面反馈',params,'',[['campWarningPercent','火光危急阈值%',0,100],['nightIdleTransitionMs','空闲夜末过渡时长（毫秒）',0,3000],['incomeReportMs','收入暂显时长（毫秒，0关闭）',0,15000],['resourceHoverMs','资源详情悬停时长（毫秒）',0,2000],['resourceHoverTolerancePx','资源悬停位移容差（像素）',0,20]],'visualParams');
 }
 function readParams(scope='all') {
+  const cached=paramReads.get(scope);if(cached?.base===state.params)return cached.value;
   const result=structuredClone(state.params);
   const selector=scope==='visual'?'#visualParams [data-param]':scope==='gameplay'?'#params [data-param]':'[data-param]';
   for(const input of document.querySelectorAll(selector)){
@@ -1666,9 +1673,10 @@ function readParams(scope='all') {
     const value=['returnToTopOnAction','showRenderStats'].includes(name)?input.value==='true':['shape','freeProjection'].includes(name)?input.value:input.value.trim()===''?NaN:Number(input.value);
     if(parts.length===1)result[name]=value;else result.weapons[parts[0]][name]=value;
   }
-  return result;
+  paramReads.set(scope,{base:state.params,value:result});return result;
 }
 function refreshParams(scope='all'){
+  invalidateParamReads();
   const gameError=validateParams(readParams('gameplay'),state),visualError=validateVisualParams(readParams('visual'));
   $('paramStatus').textContent=paramsDirty()?'玩法有未应用修改，建设与开战前请应用。':'当前玩法已应用。';
   $('visualParamStatus').textContent=paramsDirty('visual')?'正在预览未应用视觉参数。':'当前视觉已应用。';

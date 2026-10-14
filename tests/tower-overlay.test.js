@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
 import {key,createCampaign,controlMask,rawControlMask,placementError,buildTower,removeTower,clearPlot,buildHousing,buildProduction,funds,embeddingQuote,beginBattle,restoreNight,towerCapacity} from '../src/model.js';
-import {createTowerOverlay} from '../src/tower-overlay.js';
+import {createTowerOverlay,createTowerOverlayCache} from '../src/tower-overlay.js';
 
 function setup(){
   const blocks=[{x:12,y:10,width:3,height:3,kind:'building',ruinType:'production'},{x:15,y:10,width:3,height:3,kind:'building',ruinType:'housing'},{x:9,y:12,width:3,height:3,kind:'open'}];
@@ -63,4 +63,25 @@ test('架炮只看完整造价，余额恢复后资格与高亮同步恢复',()=
   }
   const s=setup();s.params.weapons.A.cost=7;s.params.budget=6;
   assert.equal(overlay(s).eligible('A').size,0);s.params.budget=7;assert.ok(overlay(s).eligible('A').has(origin));
+});
+
+test('敌人逐拍移动只更新占用，复用建筑资格并与真实校验一致',()=>{
+  const s=setup();s.phase='battle';const cache=createTowerOverlayCache(),get=moving=>cache.get(s,controlMask(s),moving);
+  const first=get();assertMatches(s,first);
+  s.enemies=[{id:origin,hp:100,max:100,members:1}];s.tick++;
+  const moving=new Set([far]);assert.strictEqual(get(moving),first);assertMatches(s,first,moving);
+  s.enemies[0].id=far;s.enemies[0].hp=40;s.tick++;
+  assert.strictEqual(get(),first);assertMatches(s,first);assert.ok(first.eligible('A').has(origin));assert.ok(!first.eligible('A').has(far));
+  s.enemies=[];assert.strictEqual(get(),first);assertMatches(s,first);assert.ok(first.eligible('A').has(far));
+});
+
+test('跨更新缓存随资金、建设、经营、参数、探索、阶段与重试失效',()=>{
+  const s=setup(),cache=createTowerOverlayCache();let previous=cache.get(s,controlMask(s));
+  const changed=()=>{const next=cache.get(s,controlMask(s));assert.notStrictEqual(next,previous);assertMatches(s,next);previous=next;};
+  s.debugGold=-995;changed();assert.equal(previous.eligible('A').size,0);
+  s.debugGold=0;changed();assert.equal(buildTower(s,origin,'A'),'');changed();
+  assert.equal(removeTower(s,origin),'');changed();assert.equal(buildProduction(s,origin),'');changed();
+  s.params.weapons.B.cost=900;changed();s.params.controlRadius=1;changed();
+  s.explored.clear();changed();s.params.controlRadius=2;changed();
+  const snapshot=beginBattle(s);changed();const retry=restoreNight(snapshot),next=cache.get(retry,controlMask(retry));assert.notStrictEqual(next,previous);assertMatches(retry,next);
 });
