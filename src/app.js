@@ -89,7 +89,7 @@ const blockedActionReasons=new Map();
 let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0, cameraBottom=0;
 let viewMode='top',viewYaw=Math.PI/4,viewElevation=DEFAULTS.obliqueElevationDegrees*Math.PI/180;
 const observationGround=document.createElement('canvas'),observationMist=document.createElement('canvas');
-let observationGroundKey='';
+let observationGroundKey='',pointerSample=null,pointerPending=false;
 const cameraView=()=>{const view={width,height,panX,panY,cell:base*zoom,zoom,projection:viewMode==='free'?previewParams().freeProjection:'orthographic',fov:previewParams().freePerspectiveFovDegrees,yaw:viewMode==='top'?0:viewYaw,elevation:viewMode==='top'?Math.PI/2:viewMode==='oblique'?previewParams().obliqueElevationDegrees*Math.PI/180:viewElevation};return viewMode==='top'?view:observationView(view,SIZE);};
 function setViewMode(mode){
   if(mode!=='top'&&!city3D?.isReady()){showTopNotice('3D模型仍在加载，请稍后。');return;}
@@ -109,7 +109,7 @@ function updateViewHelp(){
 }
 for(const button of document.querySelectorAll('[data-city-view]'))button.onclick=()=>setViewMode(button.dataset.cityView);
 function rotateView(turn,tilt){
-  const next=orbitView(viewYaw,viewElevation,turn,tilt);viewYaw=next.yaw;viewElevation=next.elevation;hover=null;updateMapSourceHover();draw();
+  const next=orbitView(viewYaw,viewElevation,turn,tilt);viewYaw=next.yaw;viewElevation=next.elevation;hover=null;pointerPending=true;updateMapSourceHover();draw();
 }
 for(const button of document.querySelectorAll('[data-orbit]'))button.onclick=()=>rotateView(...({left:[-Math.PI/12,0],right:[Math.PI/12,0],up:[0,Math.PI/18],down:[0,-Math.PI/18]})[button.dataset.orbit]);
 canvas.tabIndex=0;
@@ -365,6 +365,7 @@ function previewParams() {
 
 // 画布使用设备像素比，地图输入和绘制都以 CSS 像素换算。
 function resize(fit = false) {
+  pointerPending=true;
   const oldW = width, oldH = height,oldCell=base*zoom,oldBottom=cameraBottom;
   width = viewport.clientWidth; height = viewport.clientHeight;
   canvas.width = Math.round(width * devicePixelRatio); canvas.height = Math.round(height * devicePixelRatio);
@@ -385,6 +386,7 @@ function constrainCamera(){
   const pan=viewMode==='top'?limitPan(panX,panY,width,height,SIZE,base*zoom,cameraBottom):limitObservationPan(panX,panY,width,height,SIZE,base*zoom);panX=pan.x;panY=pan.y;
 }
 function changeZoom(factor, x = width / 2, y = (height-cameraBottom) / 2) {
+  pointerPending=true;
   const old = zoom,anchor=groundAt(x,y,cameraView());zoom = limitZoom(zoom * factor,base,previewParams().mapMaxCellPx);
   if(viewMode==='top'){panX = x - (x - panX) * zoom / old; panY = y - (y - panY) * zoom / old;}
   else{const next=groundAt(x,y,cameraView());panX+=(next.x-anchor.x)*base*zoom;panY+=(next.y-anchor.y)*base*zoom;}
@@ -392,27 +394,28 @@ function changeZoom(factor, x = width / 2, y = (height-cameraBottom) / 2) {
   draw();
 }
 function cellAt(event) {
-  if(viewMode!=='top'&&!previewParams().returnToTopOnAction&&['build','long','production','housing','bank'].includes(tool)){
-    const rect=canvas.getBoundingClientRect(),sx=event.clientX-rect.left,sy=event.clientY-rect.top;
+  const rect=canvas.getBoundingClientRect(),sx=event.clientX-rect.left,sy=event.clientY-rect.top,camera=cameraView();
+  if(sx<0||sy<0||sx>width||sy>height)return null;
+  if(viewMode!=='top'&&observationTargetsKey===JSON.stringify(camera)&&!previewParams().returnToTopOnAction&&['build','long','production','housing','bank'].includes(tool)){
     // 只吸附屏幕上已绘制的合法落点，解决低角度点中虚拟屋顶格却命中后方地面的偏差。
     const target=observationBuildTargets.filter(p=>p.tool===tool&&Math.hypot(p.x-sx,p.y-sy)<=6).sort((a,b)=>Math.hypot(a.x-sx,a.y-sy)-Math.hypot(b.x-sx,b.y-sy))[0];
     const error=target?['build','long'].includes(tool)?weaponPlacementError(target.id):tool==='housing'?housingError(state,target.id):tool==='bank'?bankError(state,target.id):productionError(state,target.id):'';
     if(target&&!error)return target.id;
   }
-  const rect=canvas.getBoundingClientRect(),point=(viewMode!=='top'?city3D?.observationPick(event.clientX-rect.left,event.clientY-rect.top,width,height):null)??groundAt(event.clientX-rect.left,event.clientY-rect.top,cameraView()),x=Math.floor(point.x),y=Math.floor(point.y);
+  const point=(viewMode!=='top'?city3D?.observationPick(sx,sy,width,height,camera):null)??groundAt(sx,sy,camera),x=Math.floor(point.x),y=Math.floor(point.y);
   return !point.sky&&inside(x, y)&&visibleCell(key(x,y)) ? key(x, y) : null;
 }
 
 // 先绘制地形和覆盖，再叠加路线、设施、敌群，确保信息优先级清晰。
-let drawPending=false,mapView=null,borderLegendKey=null,observationBuildTargets=[];
+let drawPending=false,mapView=null,borderLegendKey=null,observationBuildTargets=[],observationTargetsKey='';
 const towerOverlayCache=createTowerOverlayCache();
 let renderSamples=[],lastStatsAt=0,lastStatsView='';
-// 仅调试面板记录短窗口CPU绘制耗时；不强制等待GPU、不保存历史或改变渲染节奏。
-function recordRenderStats(cpu,stats){
-  const panel=$('renderStats'),view=[viewMode,zoom,viewYaw,viewElevation,state.phase,previewParams().freeProjection].join(':');if(view!==lastStatsView){lastStatsView=view;renderSamples=[];lastStatsAt=0;}panel.hidden=false;renderSamples.push(cpu);if(renderSamples.length>60)renderSamples.shift();
+// 调试面板记录显示回调及绘制的CPU耗时；连续转镜头不清空窗口，不强制等待GPU。
+function recordRenderStats(cpu,stats,total){
+  const panel=$('renderStats'),view=[viewMode,state.phase,previewParams().freeProjection].join(':');if(view!==lastStatsView){lastStatsView=view;renderSamples=[];lastStatsAt=0;}panel.hidden=false;renderSamples.push({cpu,total});if(renderSamples.length>60)renderSamples.shift();
   if(performance.now()-lastStatsAt<1000)return;lastStatsAt=performance.now();
-  const mean=renderSamples.reduce((sum,v)=>sum+v,0)/renderSamples.length,sorted=[...renderSamples].sort((a,b)=>a-b),p95=sorted[Math.floor((sorted.length-1)*.95)];
-  panel.textContent=stats?`绘制调用 ${mean.toFixed(1)}ms（P95 ${p95.toFixed(1)}ms） · 提交 ${stats.calls} · ${(stats.triangles/1000).toFixed(0)}k面 · 人物 ${stats.figures}/${stats.capacity}`:'3D不可用，保留原地图。';
+  const mean=renderSamples.reduce((sum,v)=>sum+v.total,0)/renderSamples.length,drawMean=renderSamples.reduce((sum,v)=>sum+v.cpu,0)/renderSamples.length,sorted=renderSamples.map(v=>v.total).sort((a,b)=>a-b),p95=sorted[Math.floor((sorted.length-1)*.95)];
+  panel.textContent=stats?`更新绘制 ${mean.toFixed(1)}ms（P95 ${p95.toFixed(1)}ms） · 绘制 ${drawMean.toFixed(1)}ms · 提交 ${stats.calls} · ${(stats.triangles/1000).toFixed(0)}k面 · 人物 ${stats.figures}/${stats.capacity}`:'3D不可用，保留原地图。';
 }
 // 输入与动画可以同时要求刷新，但同一浏览器帧只重画一次。
 function draw(){drawPending=true;}
@@ -1186,7 +1189,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     const path=new Path2D();path.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>path.lineTo(p.x,p.y));path.closePath();return path;
   };
   const weaponSelected=canBuildWeapon()&&['build','long'].includes(tool),directBuild=!view.controlState.params.returnToTopOnAction;
-  observationBuildTargets=[];
+  observationBuildTargets=[];observationTargetsKey=JSON.stringify(camera);
   if(directBuild&&weaponSelected&&!view.dirty&&(state.phase==='build'||state.phase==='battle')){
     const eligible=view.towers.eligible(weaponType());
     for(const id of eligible){
@@ -1340,7 +1343,7 @@ function updateNightProgress(){
 }
 function update() {
   // 所有建设、收支、参数、阶段和敌人移动更新都经此入口；镜头操作不失效缓存。
-  mapView=null;updateViewHelp();
+  mapView=null;pointerPending=true;updateViewHelp();
   sound.setScene(state.phase,paused,!!nightOutro);
   sight=visionField(state);revealControl(state);
   fire = fireField({...state,params:previewParams()});
@@ -1882,21 +1885,25 @@ canvas.addEventListener('contextmenu',e=>{e.preventDefault();tool=null;selectedS
 canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();changeZoom(e.deltaY<0?1.12:1/1.12,e.clientX-r.left,e.clientY-r.top);},{passive:false});
 // 单击放置、拖动平移；在松开时才建造，避免拖地图误花预算。
 canvas.addEventListener('pointerdown',e=>{
+  pointerSample={clientX:e.clientX,clientY:e.clientY};pointerPending=true;
   if(e.button===2)return;
   const rotate=viewMode==='free'&&(e.shiftKey||e.button===1);if(rotate)e.preventDefault();
   dragging={x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,moved:false,panOnly:e.button!==0||e.altKey,rotate};
   canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener('pointermove',e=>{
+  pointerSample={clientX:e.clientX,clientY:e.clientY};pointerPending=true;
   if(dragging){
     if(Math.hypot(e.clientX-dragging.startX,e.clientY-dragging.startY)>4)dragging.moved=true;
     if(dragging.rotate)rotateView(-(e.clientX-dragging.x)*.008,-(e.clientY-dragging.y)*.006);
-    else if(dragging.moved||dragging.panOnly){const delta=panView(e.clientX-dragging.x,e.clientY-dragging.y,cameraView(),e.clientX-canvas.getBoundingClientRect().left,e.clientY-canvas.getBoundingClientRect().top);panX+=delta.x*base*zoom/cameraView().cell;panY+=delta.y*base*zoom/cameraView().cell;constrainCamera();}
+    else if(dragging.moved||dragging.panOnly){const camera=cameraView(),rect=canvas.getBoundingClientRect(),delta=panView(e.clientX-dragging.x,e.clientY-dragging.y,camera,e.clientX-rect.left,e.clientY-rect.top);panX+=delta.x*base*zoom/camera.cell;panY+=delta.y*base*zoom/camera.cell;constrainCamera();}
     dragging.x=e.clientX;dragging.y=e.clientY;
   }
-  hover=dragging?.rotate?null:cellAt(e);updateMapSourceHover();draw();
+  if(dragging&&(dragging.moved||dragging.panOnly||dragging.rotate)){hover=null;updateMapSourceHover();}
+  draw();
 });
 canvas.addEventListener('pointerup',e=>{
+  pointerSample={clientX:e.clientX,clientY:e.clientY};pointerPending=true;draw();
   const shouldPlace=dragging&&!dragging.moved&&!dragging.panOnly&&!dragging.rotate;dragging=null;
   if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);
   if(!shouldPlace||nightOutro)return;
@@ -1936,9 +1943,9 @@ canvas.addEventListener('pointerup',e=>{
   }else{showTopNotice(/失去与篝火的连接/.test(actionError)?'无法拆除：会切断与篝火的连接。':actionError);}
   update();
 });
-canvas.addEventListener('pointercancel',()=>{dragging=null;});
+canvas.addEventListener('pointercancel',()=>{dragging=null;pointerSample=null;pointerPending=false;hover=null;updateMapSourceHover();draw();});
 canvas.addEventListener('lostpointercapture',()=>{dragging=null;});
-canvas.addEventListener('pointerleave',()=>{hover=null;updateMapSourceHover();draw();});
+canvas.addEventListener('pointerleave',()=>{pointerSample=null;pointerPending=false;hover=null;updateMapSourceHover();draw();});
 new ResizeObserver(()=>resize()).observe(viewport);
 new ResizeObserver(fitResources).observe(document.querySelector('.wallet'));
 // 预告选项跟随实际波次，避免增加夜晚后界面仍停在前三晚。
@@ -2180,6 +2187,7 @@ function beginMotion(singleStep=false){
 $('step').onclick=()=>{if(nightOutro||state.phase!=='battle'||!paused)return;if(motion){motion.singleStep=true;update();}else beginMotion(true);};
 // 移动占一个节拍的后 160ms；加速同步缩短动画，暂停冻结自动移动。
 function frame(now){
+  const measured=previewParams().showRenderStats,frameStart=measured?performance.now():0;
   const elapsed=Math.min(now-last,100);last=now;
   if(dayEndHold&&!document.hidden){const progress=Math.min(1,(now-dayEndHold.at)/dayEndHold.duration);showDayEndCharge(progress);if(progress>=1)finishDayEnd();}
   if(dayEndReturn){
@@ -2218,9 +2226,11 @@ function frame(now){
     else{timer+=dt;if(timer>=state.params.stepMs-moveDuration())beginMotion();}
   }
   if(state.phase==='battle'||dawnAt)updateNightProgress();
+  // 只消费本帧最后一个悬停坐标；点击仍在pointerup按最新相机立即确认，不等战斗拍。
+  if(pointerPending){pointerPending=false;if(pointerSample&&!(dragging&&(dragging.moved||dragging.panOnly||dragging.rotate))){hover=cellAt(pointerSample);updateMapSourceHover();draw();}}
   if(drawPending){
-    drawPending=false;const measured=previewParams().showRenderStats,start=measured?performance.now():0;if(measured)city3D?.beginStats();paintMap();
-    if(measured)recordRenderStats(performance.now()-start,city3D?.renderStats());else $('renderStats').hidden=true;
+    drawPending=false;const start=measured?performance.now():0;if(measured)city3D?.beginStats();paintMap();
+    if(measured)recordRenderStats(performance.now()-start,city3D?.renderStats(),performance.now()-frameStart);else $('renderStats').hidden=true;
   }
   requestAnimationFrame(frame);
 }

@@ -7,10 +7,19 @@ export function createCityObservation(scene,renderer){
   let camera=orthographic;
   const canvas=document.createElement('canvas'),enemyCanvas=document.createElement('canvas');
   let pickObjects=[],lastGroundVersion=null;
+  const ray=new THREE.Raycaster(),pointer=new THREE.Vector2(),pickMeshes=[],hits=[];
   const groundTexture=new THREE.CanvasTexture(document.createElement('canvas'));groundTexture.colorSpace=THREE.SRGBColorSpace;groundTexture.generateMipmaps=false;groundTexture.minFilter=THREE.LinearFilter;
   const fogTexture=new THREE.CanvasTexture(document.createElement('canvas'));fogTexture.flipY=false;fogTexture.generateMipmaps=false;fogTexture.minFilter=THREE.LinearFilter;
   const fog={enabled:{value:0},texture:{value:fogTexture},bounds:{value:new THREE.Vector4(-8,-8,76,76)}};
   const floor=new THREE.Mesh(new THREE.PlaneGeometry(76,76),new THREE.MeshStandardMaterial({map:groundTexture,roughness:1,transparent:true,depthWrite:false}));floor.rotation.x=-Math.PI/2;floor.position.set(30,-.014,30);floor.receiveShadow=true;floor.visible=false;scene.add(floor);
+  // 拾取和绘制共用相机配置；旋转/缩放后快速点击也使用当前矩阵。
+  function setCamera(view){
+    const {width,height,cell,yaw,elevation}=view,center=viewCenter(view),distance=viewDistance(view);
+    camera=view.projection==='perspective'?perspective:orthographic;
+    if(camera===perspective){camera.fov=view.fov;camera.aspect=width/height;camera.near=distance*.05;camera.far=distance+300;}
+    else{camera.left=-width/(2*cell);camera.right=width/(2*cell);camera.top=height/(2*cell);camera.bottom=-height/(2*cell);camera.near=.1;camera.far=300;}
+    camera.position.set(center.x+Math.sin(yaw)*Math.cos(elevation)*distance,Math.sin(elevation)*distance,center.y+Math.cos(yaw)*Math.cos(elevation)*distance);camera.up.set(0,1,0);camera.lookAt(center.x,0,center.y);camera.updateProjectionMatrix();camera.updateMatrixWorld();
+  }
   function bind(object){object.traverse(node=>{if(!node.isMesh&&!node.isLine)return;const material=node.material;if(material.userData.cityObserveFog)return;
     material.userData.cityObserveFog=true;const previous=material.onBeforeCompile,key=material.customProgramCacheKey();
     material.onBeforeCompile=shader=>{
@@ -24,20 +33,18 @@ export function createCityObservation(scene,renderer){
   });}
   return {
     enemiesFrame(){return enemyCanvas;},
-    pick(x,y,width,height){
-      const ray=new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2(x/width*2-1,1-y/height*2),camera);
-      const hit=ray.intersectObjects(pickObjects,true).find(hit=>!hit.object.material.transparent&&(!hit.object.userData.cityDecoration||hit.object.userData.cityGroundSurface));return hit?{x:hit.point.x,y:hit.point.z}:null;
+    pick(x,y,width,height,view){
+      setCamera(view);pointer.set(x/width*2-1,1-y/height*2);ray.setFromCamera(pointer,camera);pickMeshes.length=0;hits.length=0;
+      // 在检测三角面之前排除透明特效/装饰；根层为分层合成临时隐藏，不能据此排除楼体。
+      for(const object of pickObjects)object.traverse(node=>{if(node.isMesh&&!node.material.transparent&&(!node.userData.cityDecoration||node.userData.cityGroundSurface))pickMeshes.push(node);});
+      const hit=ray.intersectObjects(pickMeshes,false,hits)[0];return hit?{x:hit.point.x,y:hit.point.z}:null;
     },
     render({ground,groundVersion,mist,mistBounds,view,background,objects,enemies,effects}){
       // 外围纯景物不参加鼠标射线，避免每次移动鼠标检测整片郊野几何。
       pickObjects=[...objects.filter(object=>!object.userData.cityNoPick),floor];
       if(groundTexture.image!==ground||lastGroundVersion!==groundVersion){groundTexture.image=ground;groundTexture.needsUpdate=true;lastGroundVersion=groundVersion;}fogTexture.image=mist;fogTexture.needsUpdate=true;
       fog.bounds.value.set(...mistBounds);
-      const {width,height,cell,yaw,elevation}=view,center=viewCenter(view),distance=viewDistance(view);
-      camera=view.projection==='perspective'?perspective:orthographic;
-      if(camera===perspective){camera.fov=view.fov;camera.aspect=width/height;camera.near=distance*.05;camera.far=distance+300;}
-      else{camera.left=-width/(2*cell);camera.right=width/(2*cell);camera.top=height/(2*cell);camera.bottom=-height/(2*cell);camera.near=.1;camera.far=300;}
-      camera.position.set(center.x+Math.sin(yaw)*Math.cos(elevation)*distance,Math.sin(elevation)*distance,center.y+Math.cos(yaw)*Math.cos(elevation)*distance);camera.up.set(0,1,0);camera.lookAt(center.x,0,center.y);camera.updateProjectionMatrix();
+      setCamera(view);
       floor.visible=true;for(const object of [floor,...objects,effects]){object.visible=true;bind(object);}fog.enabled.value=1;
       // 敌人已按原插值中心渐隐；单独在雾上绘制，避免楼体遮住本应可见的敌群。
       enemies.visible=false;renderer.setClearColor(background,1);renderer.render(scene,camera);

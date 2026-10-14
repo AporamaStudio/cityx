@@ -11,7 +11,7 @@ import {naturalGroundAt} from './natural-terrain.js?v=6';
 import {PLANT_MODELS} from './city-vegetation.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=11';
-import {createCityObservation} from './city-observation.js?v=11';
+import {createCityObservation} from './city-observation.js?v=12';
 import {createZombieCrowds} from './city-enemies.js?v=7';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
@@ -138,7 +138,7 @@ export function createCity3D(onReady){
     beginStats(){renderer.info.autoReset=false;renderer.info.reset();},
     renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats()};renderer.info.autoReset=true;return stats;},
     isReady(){return ready;},
-    observationPick(x,y,width,height){return ready?observation.pick(x,y,width,height):null;},
+    observationPick(x,y,width,height,view){return ready?observation.pick(x,y,width,height,view):null;},
     observationFrame(options){if(!ready)return null;if(terrain)terrain.visible=false;return observation.render({...options,objects:[exterior,nature,buildings,facilities,streets,roads],enemies,effects:effects.group});},
     observationEnemiesFrame(){return ready?observation.enemiesFrame():null;},
     has(id){return ready&&entries.has(id);},
