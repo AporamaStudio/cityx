@@ -31,6 +31,6 @@ test('水域作为固定自然障碍，不能造墙或瞭望塔；桥面高差�
   for(const wave of s.waves)assert.equal(validateSources(wave,s),'');
   for(const p of s.sites)if(p.role!=='camp')s.plotContents.set(key(p.x,p.y),{status:'building',type:'production'});
   rebuildTerrain(s);for(const source of s.sourceCatalog)assert.ok(s.field.distance.has(key(source.x,source.y)));
-  const b=layout.natural.bridges[2];assert.equal(naturalGroundAt(layout,b.x+.5,b.y+.5),.04);assert.equal(naturalGroundAt(layout,layout.camp.x,layout.camp.y),0);
+  const b=layout.natural.bridges[2];assert.equal(naturalGroundAt(layout,b.x+.5,b.y+.5),.04);assert.equal(naturalGroundAt(layout,b.x+.5,b.y-.5),.02);assert.equal(naturalGroundAt(layout,b.x+.5,b.y-1),0);assert.equal(naturalGroundAt(layout,layout.camp.x,layout.camp.y),0);
   const settings={...MAP_DEFAULTS,nature:false};assert.deepEqual(readMapSettings('?'+mapSearch(settings)),settings);assert.equal(generateCityMap(settings).stats.water,0);
 });

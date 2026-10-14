@@ -22,7 +22,7 @@ export function createCityEffects(scene){
   }
   function targetPoint(item,props,start,cellMeters){
     const target=props.get(item.targetObject),object=target?.object;
-    if(!object)return new THREE.Vector3(item.x,.95/cellMeters,item.y);
+    if(!object)return new THREE.Vector3(item.x,(item.ground??0)+.95/cellMeters,item.y);
     object.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(object),center=bounds.getCenter(new THREE.Vector3());
     center.y=bounds.min.y+(bounds.max.y-bounds.min.y)*.55;
     // 清源弹迹落在当前源头表面，敌群则指向身体中部；位置不参与攻击判定。

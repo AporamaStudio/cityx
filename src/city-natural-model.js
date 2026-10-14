@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {hillHeight,lakeOutline,naturalPlants} from './natural-terrain.js?v=3';
+import {hillHeight,lakeOutline,naturalPlants} from './natural-terrain.js?v=4';
+import {createWaterMaterial} from './city-water.js?v=2';
 
 // 河面、岸带和桥梁共用少量材质合批；尺度以米转格，不增加独立光源或阴影贴图。
 export function createNaturalModel(layout,cellMeters=20,models=new Map()){
@@ -9,18 +10,21 @@ export function createNaturalModel(layout,cellMeters=20,models=new Map()){
   const add=(geometry,color)=>{
     // 程序地面与GLB树木只合并同一组位置/法线属性，避免索引和UV差异破坏合批。
     if(geometry.index){const plain=geometry.toNonIndexed();geometry.dispose();geometry=plain;}
-    for(const name of Object.keys(geometry.attributes))if(!['position','normal'].includes(name))geometry.deleteAttribute(name);
+    for(const name of Object.keys(geometry.attributes))if(!['position','normal',...(color==='#528592'?['cityWaterDepth']:[])].includes(name))geometry.deleteAttribute(name);
     if(!batches.has(color))batches.set(color,[]);batches.get(color).push(geometry);
   };
-  const quad=(a,b,c,d,color)=>{
-    const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute([...a,...b,...c,...c,...b,...d],3));geometry.computeVertexNormals();add(geometry,color);
+  const quad=(a,b,c,d,color,depth=[0,1,0,1])=>{
+    const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute([...a,...b,...c,...c,...b,...d],3));geometry.computeVertexNormals();
+    if(color==='#528592')geometry.setAttribute('cityWaterDepth',new THREE.Float32BufferAttribute([depth[0],depth[1],depth[2],depth[2],depth[1],depth[3]],1));add(geometry,color);
   };
   const box=(x,y,z,w,h,d,color)=>{const geometry=new THREE.BoxGeometry(w,h,d);geometry.translate(x,y,z);add(geometry,color);};
   for(const r of natural.regions)quad([r.x,.001,r.y],[r.x,.001,r.y+r.h],[r.x+r.w,.001,r.y],[r.x+r.w,.001,r.y+r.h],'#7d8d67');
   const river=natural.river,points=river.points,shore=.7/cellMeters,fringe=3/cellMeters;
   for(let i=0;i<points.length-1;i++){
     const a=points[i],b=points[i+1];
-    quad([a.x,.002,a.top],[a.x,.002,a.bottom],[b.x,.002,b.top],[b.x,.002,b.bottom],'#528592');
+    const ac=(a.top+a.bottom)/2,bc=(b.top+b.bottom)/2;
+    quad([a.x,.002,a.top],[a.x,.002,ac],[b.x,.002,b.top],[b.x,.002,bc],'#528592');
+    quad([a.x,.002,ac],[a.x,.002,a.bottom],[b.x,.002,bc],[b.x,.002,b.bottom],'#528592',[1,0,1,0]);
     for(const edge of ['top','bottom']){
       const sign=edge==='top'?-1:1;
       quad([a.x,.002,a[edge]],[a.x,.006,a[edge]+sign*shore],[b.x,.002,b[edge]],[b.x,.006,b[edge]+sign*shore],'#b7b094');
@@ -30,6 +34,7 @@ export function createNaturalModel(layout,cellMeters=20,models=new Map()){
   for(const bridge of natural.bridges){
     const {x,y,w,h}=bridge,deck=.8/cellMeters;
     box(x+w/2,deck-.3/cellMeters,y+h/2,w,.6/cellMeters,h,'#84887d');
+    for(const side of [x,x+w])for(const [start,end,up,down] of [[y-1,y,.001,deck],[y+h,y+h+1,deck,.001]])quad([side,.001,start],[side,up,start],[side,.001,end],[side,down,end],'#84887d');
     for(const side of [x+.08/cellMeters,x+w-.08/cellMeters]){
       box(side,deck+1/cellMeters,y+h/2,.16/cellMeters,.2/cellMeters,h,'#b5b09c');
       for(let z=y;z<=y+h;z+=2.5/cellMeters)box(side,deck+.5/cellMeters,z,.2/cellMeters,1/cellMeters,.2/cellMeters,'#9a9c8c');
@@ -38,7 +43,7 @@ export function createNaturalModel(layout,cellMeters=20,models=new Map()){
   for(const lake of natural.lakes){
     const outline=lakeOutline(lake);
     for(let i=0;i<outline.length;i++){
-      const a=outline[i],b=outline[(i+1)%outline.length],geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute([lake.cx,.002,lake.cy,a.x,.002,a.y,b.x,.002,b.y],3));geometry.computeVertexNormals();add(geometry,'#528592');
+      const a=outline[i],b=outline[(i+1)%outline.length],geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute([lake.cx,.002,lake.cy,a.x,.002,a.y,b.x,.002,b.y],3));geometry.setAttribute('cityWaterDepth',new THREE.Float32BufferAttribute([1,0,0],1));geometry.computeVertexNormals();add(geometry,'#528592');
       const edge=p=>[p.x+(p.x-lake.cx)/lake.rx*1.6/cellMeters,.006,p.y+(p.y-lake.cy)/lake.ry*1.6/cellMeters];
       quad([a.x,.002,a.y],edge(a),[b.x,.002,b.y],edge(b),'#b7b094');
     }
@@ -54,7 +59,7 @@ export function createNaturalModel(layout,cellMeters=20,models=new Map()){
   }
   for(const [color,list] of batches){
     const geometry=mergeGeometries(list,false);list.forEach(g=>g.dispose());
-    const material=new THREE.MeshStandardMaterial({color:color.startsWith('#')?color:'#'+color,roughness:color==='#528592'?.42:1,side:THREE.DoubleSide});
+    const material=color==='#528592'?createWaterMaterial():new THREE.MeshStandardMaterial({color:color.startsWith('#')?color:'#'+color,roughness:1,side:THREE.DoubleSide});
     const mesh=new THREE.Mesh(geometry,material);mesh.receiveShadow=true;mesh.castShadow=!color.startsWith('#')||color==='#809269';mesh.userData.ownGeometry=true;mesh.userData.cityDecoration=true;root.add(mesh);
   }
   return root;

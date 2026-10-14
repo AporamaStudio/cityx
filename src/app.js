@@ -1,23 +1,23 @@
-import {drawNaturalTerrain,naturalGroundAt} from './natural-terrain.js?v=3';
+import {drawNaturalTerrain,naturalGroundAt} from './natural-terrain.js?v=4';
 import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback} from './enemy-overlay.js?v=5';
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=1';
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=3';
-import {createCity3D} from './city-3d.js?v=51';
+import {createCity3D} from './city-3d.js?v=53';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
 import {createVisibility} from './visibility.js?v=6';
 import {drawFog,drawCloudBackdrop,fogColor,fogTransitionActive} from './fog.js?v=19';
 import {createTowerOverlay} from './tower-overlay.js?v=19';
-import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=20';
+import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings,roadMarkings} from './city-textures.js?v=21';
 import {cameraScale,limitZoom,limitPan,limitObservationPan} from './map-camera.js?v=4';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=9';
 import {createGameAudio} from './audio.js?v=10';
 import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=86';
 import {applyExperimentParams,validateVisualParams, bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=102';
-import {generateCityMap} from './city-map.js?v=12';
+import {generateCityMap} from './city-map.js?v=13';
 import {readMapSettings} from './map-settings.js?v=2';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
 const mapSettings=readMapSettings(location.search);
@@ -657,6 +657,7 @@ function paintMap() {
   }
   // 目标引用只来自已筛选的显示帧；击中消失的身体保留短反馈，不读取隐藏对象。
   for(const item of [...fx.shots,...fx.impacts]){
+    item.ground=naturalGroundAt(state.layout,item.x,item.y,controlState.params.cellMeters);
     const frame=enemyFrames.find(frame=>frame.enemy.id===(item.enemyTarget!==undefined?item.target:item.cell)&&frame.enemy.target===(item.enemyTarget??item.target));
     item.targetObject=item.sourceId?'source:'+item.sourceId:frame?.id;
   }
@@ -1217,7 +1218,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     const source=route.potential?displayedEnemySources().find(s=>s.id===route.sourceId):focused?routeSources.find(s=>sourceIdentity(s)===(linked&&linkedRoute(route,linked)?linked:pinnedSource)):routeSources[index];
     const colorIndex=route.potential?route.index:sourceNumber(source)>=0?sourceNumber(source):index;
     const appearance=routeAppearance(enemyRouteColor(colorIndex),{focused,potential:route.potential,future:route.future}),lineWidth=focused?4:2.8,spacing=focused?42:56,dim=focusActive&&!focused?.3:1;
-    const offset=(index%3-1)*.12,points=route.path.map(id=>{const [x,y]=xy(id);return point(x+.5+offset,y+.5,.04);});
+    const offset=(index%3-1)*.12,points=route.path.map(id=>{const [x,y]=xy(id);return point(x+.5+offset,y+.5,naturalGroundAt(state.layout,x+.5+offset,y+.5,view.controlState.params.cellMeters)+.04);});
     ctx.save();if(mapFogEnabled())ctx.clip(sightClip);ctx.lineCap=route.potential?'butt':'round';ctx.lineJoin='round';ctx.globalAlpha=appearance.alpha*dim;ctx.setLineDash(route.potential||route.future?[14,10]:[]);ctx.lineDashOffset=0;
     // 完整折线分两遍绘制；逐格交替衬边/彩线会覆盖上一段彩线，拐角因此变暗。
     for(const [stroke,width] of [[focused&&!route.potential?'#172029':'#392328',lineWidth+3],[appearance.line,lineWidth]]){
@@ -1237,11 +1238,11 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
       }
     }ctx.restore();
   }
-  const border=new Path2D();for(const [x,y,nx,ny] of view.boundary){const a=point(x,y,.02),b=point(nx,ny,.02);if(a.hidden||b.hidden)continue;border.moveTo(a.x,a.y);border.lineTo(b.x,b.y);}
+  const border=new Path2D();for(const [x,y,nx,ny] of view.boundary){const a=point(x,y,naturalGroundAt(state.layout,x,y,view.controlState.params.cellMeters)+.02),b=point(nx,ny,naturalGroundAt(state.layout,nx,ny,view.controlState.params.cellMeters)+.02);if(a.hidden||b.hidden)continue;border.moveTo(a.x,a.y);border.lineTo(b.x,b.y);}
   drawControlBorderLine(ctx,border,1,view.controlState.params,nightMix);
   // 米制墙在远景很细；连续墙顶衬边和真实墙段共向，不能把道路误认为完整防线。
   for(const [id,body] of state.wallHealth)if(body.hp>0&&currentlyVisible(id)){
-    const [x,y]=xy(id),z=2.5/view.controlState.params.cellMeters,mask=wallConnections(id,state.walls,SIZE,SIZE,roadMarkings(state.layout).get(id)?.axis),path=new Path2D(),center=point(x+.5,y+.5,z);if(center.hidden)continue;
+    const [x,y]=xy(id),z=naturalGroundAt(state.layout,x+.5,y+.5,view.controlState.params.cellMeters)+2.5/view.controlState.params.cellMeters,mask=wallConnections(id,state.walls,SIZE,SIZE,roadMarkings(state.layout).get(id)?.axis),path=new Path2D(),center=point(x+.5,y+.5,z);if(center.hidden)continue;
     for(const [bit,dx,dy] of [[1,0,-1],[2,1,0],[4,0,1],[8,-1,0]])if(mask&bit){const end=point(x+.5+dx*.5,y+.5+dy*.5,z);if(!end.hidden){path.moveTo(center.x,center.y);path.lineTo(end.x,end.y);}}
     ctx.save();ctx.strokeStyle='#1c2b32';ctx.lineWidth=3;ctx.stroke(path);ctx.strokeStyle=body.hp<body.max?'#e0b58c':'#cfccb7';ctx.lineWidth=1.3;ctx.stroke(path);ctx.restore();
   }

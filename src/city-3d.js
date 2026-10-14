@@ -3,13 +3,15 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {addBuildingFoundation,buildingVariation} from './city-building-style.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
-import {createRoadModel} from './city-road-model.js?v=2';
-import {createNaturalModel} from './city-natural-model.js?v=3';
-import {createSurroundingModel} from './city-surrounding-model.js?v=3';
+import {createRoadModel} from './city-road-model.js?v=3';
+import {createNaturalModel} from './city-natural-model.js?v=5';
+import {createSurroundingModel} from './city-surrounding-model.js?v=5';
+import {updateWater} from './city-water.js?v=2';
+import {naturalGroundAt} from './natural-terrain.js?v=4';
 import {PLANT_MODELS} from './city-vegetation.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=4';
-import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=9';
-import {createCityObservation} from './city-observation.js?v=8';
+import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=10';
+import {createCityObservation} from './city-observation.js?v=9';
 import {createZombieCrowds} from './city-enemies.js?v=7';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
@@ -157,6 +159,7 @@ export function createCity3D(onReady){
       if(natureLayout!==layout||natureMeters!==cellMeters){release({object:nature});nature=createNaturalModel(layout,cellMeters,models);scene.add(nature);release({object:exterior});exterior=createSurroundingModel(layout,models,cellMeters);scene.add(exterior);natureLayout=layout;natureMeters=cellMeters;}
       // 远景融合发生在输出色域转换后，雾色也用sRGB，避免地平线形成暗色矩形边缘。
       exterior.userData.haze?.value.set(fx.hazeColor).convertLinearToSRGB();
+      updateWater(nature,fx.time,night,fx.reducedMotion);updateWater(exterior,fx.time,night,fx.reducedMotion);
       const active=new Set(plots.map(p=>p.id));
       for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
       for(const plot of plots){
@@ -196,19 +199,19 @@ export function createCity3D(onReady){
       const nextStreets=cellMeters+JSON.stringify([lamps,dressing]),streetLights=[];
       const rawStreet=models.get('street'),streetBounds=new THREE.Box3().setFromObject(rawStreet),streetScale=7.5/cellMeters/(streetBounds.max.y-streetBounds.min.y);
       let lightOffset=new THREE.Vector3();rawStreet.traverse(node=>{if(node.isMesh&&node.material.name==='#ffe1a3')lightOffset=new THREE.Box3().setFromObject(node).getCenter(new THREE.Vector3());});
-      for(const lamp of lamps){const offset=lightOffset.clone().multiplyScalar(streetScale).applyAxisAngle(new THREE.Vector3(0,1,0),lamp.angle);streetLights.push({x:lamp.x+offset.x,y:lamp.y+offset.z,height:offset.y});}
+      for(const lamp of lamps){const offset=lightOffset.clone().multiplyScalar(streetScale).applyAxisAngle(new THREE.Vector3(0,1,0),lamp.angle);streetLights.push({x:lamp.x+offset.x,y:lamp.y+offset.z,height:offset.y+naturalGroundAt(layout,lamp.x,lamp.y,cellMeters)});}
       if(nextStreets!==streetKey){
         for(const object of [...streets.children])release({object});streets.clear();
         for(const lamp of lamps){
           const object=new THREE.Group(),model=models.get('street').clone(true);object.add(model);model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.castShadow=true;}});
-          model.scale.setScalar(streetScale);model.position.y=-streetBounds.min.y*streetScale;object.position.set(lamp.x,0,lamp.y);object.rotation.y=lamp.angle;
+          model.scale.setScalar(streetScale);model.position.y=-streetBounds.min.y*streetScale;object.position.set(lamp.x,naturalGroundAt(layout,lamp.x,lamp.y,cellMeters),lamp.y);object.rotation.y=lamp.angle;
           const pool=groundGlow(18/cellMeters,28/cellMeters,'#ffca72',.32);pool.position.set(lightOffset.x*streetScale,.012,lightOffset.z*streetScale);pool.userData.ownGeometry=true;object.add(pool);streets.add(object);
         }
         for(const prop of dressing){
           const object=models.get(prop.asset).clone(true),bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3()),scale=Math.min(prop.w/size.x,prop.h/size.z);
           object.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.castShadow=true;node.receiveShadow=true;}});
           if(prop.color)styleVehicleBody(object,prop.color,prop.asset==='damagedCar');
-          const anchor=new THREE.Group();object.scale.setScalar(scale);object.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);anchor.add(object);anchor.position.set(prop.x,0,prop.y);anchor.rotation.y=prop.angle;streets.add(anchor);
+          const anchor=new THREE.Group();object.scale.setScalar(scale);object.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);anchor.add(object);anchor.position.set(prop.x,naturalGroundAt(layout,prop.x,prop.y,cellMeters),prop.y);anchor.rotation.y=prop.angle;streets.add(anchor);
         }
         mergePlot(streets);streets.traverse(node=>{if(node.isMesh&&node.material.transparent)node.castShadow=false;});
         streetKey=nextStreets;
@@ -228,7 +231,7 @@ export function createCity3D(onReady){
         light.visible=night>0;light.distance=reach;light.intensity=night*1.7*(20/cellMeters)**2*light.userData.level;if(p)light.position.set(p.x,p.height,p.y);
       }
       streets.traverse(node=>{if(node.isMesh){if(node.material.map)node.material.opacity=night*.32;else if(node.material.name==='#ffe1a3'){node.material.emissive.set('#ffb75c');node.material.emissiveIntensity=night*1.8;}}});
-      const lightItems=[...fx.sweeps,...fx.fires].map(item=>{const size=new THREE.Box3().setFromObject(models.get(item.asset)).getSize(new THREE.Vector3());return {...item,height:size.y*Math.min(item.w/size.x,item.h/size.z)*(item.asset==='watch'?.84:.65)};});
+      const lightItems=[...fx.sweeps,...fx.fires].map(item=>{const size=new THREE.Box3().setFromObject(models.get(item.asset)).getSize(new THREE.Vector3());return {...item,height:naturalGroundAt(layout,item.x,item.y,cellMeters)+size.y*Math.min(item.w/size.x,item.h/size.z)*(item.asset==='watch'?.84:.65)};});
       effects.updateLights(lightItems,fx.time,night,visible);
       // 静态云纹/悬停刷新复用城市画面；扫光与火光读取同一动效时间重画承光层。
       const shapes=plots.map(p=>`${p.id}:${entries.get(p.id).signature}`).join('|');

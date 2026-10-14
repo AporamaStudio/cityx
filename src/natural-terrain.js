@@ -1,7 +1,9 @@
 // 自然地形先占用完整非特殊街区带，再沿主路架桥；不切开医院、银行或教学街区。
 const smooth=t=>t*t*(3-2*t);
 export function naturalGroundAt(layout,x,y,cellMeters=20){
-  return (layout.natural?.bridges??[]).some(b=>x>=b.x&&x<b.x+b.w&&y>=b.y&&y<b.y+b.h)?.8/cellMeters:0;
+  const bridge=(layout.natural?.bridges??[]).find(b=>x>=b.x&&x<=b.x+b.w&&y>=b.y-1&&y<=b.y+b.h+1);
+  if(!bridge){const hill=(layout.natural?.hills??[]).find(h=>x>=h.x&&x<=h.x+h.w&&y>=h.y&&y<=h.y+h.h);return hill?hillHeight(hill,x,y,cellMeters):0;}
+  return .8/cellMeters*Math.max(0,Math.min(1,y-(bridge.y-1),bridge.y+bridge.h+1-y));
 }
 export function hillHeight(hill,x,y,cellMeters=20){
   const r=((x-hill.cx)/hill.rx)**2+((y-hill.cy)/hill.ry)**2;
@@ -22,7 +24,7 @@ export function addNaturalTerrain({seed,width,height,tiles,blocks,bands,camp}){
   let hash=0;for(const c of String(seed))hash=(Math.imul(hash,31)+c.codePointAt(0))>>>0;
   const phase=hash%628/100,points=[];
   for(let x=0;x<=width;x++){
-    const center=band.y+band.height/2+Math.sin(x/11+phase)*.72+Math.sin(x/23+phase*.7)*.4;
+    const center=band.y+band.height/2+Math.sin(x/11+phase)*1.3+Math.sin(x/23+phase*.7)*.6;
     const half=1.25+Math.sin(x/17+phase)*.16;points.push({x,top:center-half,bottom:center+half});
   }
   const river=natural.river={y:band.y,height:band.height,points};natural.regions.push({x:0,y:band.y,w:width,h:band.height,kind:'river'});

@@ -1,4 +1,4 @@
-import {riverBanks} from './natural-terrain.js?v=3';
+import {riverBanks} from './natural-terrain.js?v=4';
 import {fogColor} from './fog.js?v=19';
 const cache=new WeakMap(),smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
 const hash=(x,y)=>(Math.imul(Math.round(x*100)+101,73856093)^Math.imul(Math.round(y*100)+103,19349663))>>>0;
