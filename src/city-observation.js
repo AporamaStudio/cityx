@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import {viewCenter,viewDistance} from './city-view.js?v=3';
 
+// 仅用于已定位完成且父层不移动的静态景物；材质/可见性仍可更新，替换模型重新登记。
+export function freezeCityTransforms(object){
+  object.updateMatrixWorld(true);object.traverse(node=>{node.matrixAutoUpdate=false;node.matrixWorldAutoUpdate=false;});
+}
+
 // 原城市对象共用观察相机，不复制游戏状态；雾纹按世界XZ覆盖楼顶和地面。
 export function createCityObservation(scene,renderer){
   const orthographic=new THREE.OrthographicCamera(),perspective=new THREE.PerspectiveCamera();
@@ -11,7 +16,7 @@ export function createCityObservation(scene,renderer){
   const groundTexture=new THREE.CanvasTexture(document.createElement('canvas'));groundTexture.colorSpace=THREE.SRGBColorSpace;groundTexture.generateMipmaps=false;groundTexture.minFilter=THREE.LinearFilter;
   const fogTexture=new THREE.CanvasTexture(document.createElement('canvas'));fogTexture.flipY=false;fogTexture.generateMipmaps=false;fogTexture.minFilter=THREE.LinearFilter;
   const fog={enabled:{value:0},texture:{value:fogTexture},bounds:{value:new THREE.Vector4(-8,-8,76,76)}};
-  const floor=new THREE.Mesh(new THREE.PlaneGeometry(76,76),new THREE.MeshStandardMaterial({map:groundTexture,roughness:1,transparent:true,depthWrite:false}));floor.rotation.x=-Math.PI/2;floor.position.set(30,-.014,30);floor.receiveShadow=true;floor.visible=false;scene.add(floor);
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(76,76),new THREE.MeshStandardMaterial({map:groundTexture,roughness:1,transparent:true,depthWrite:false}));floor.rotation.x=-Math.PI/2;floor.position.set(30,-.014,30);floor.receiveShadow=true;floor.visible=false;scene.add(floor);freezeCityTransforms(floor);
   // 拾取和绘制共用相机配置；旋转/缩放后快速点击也使用当前矩阵。
   function setCamera(view){
     const {width,height,cell,yaw,elevation}=view,center=viewCenter(view),distance=viewDistance(view);

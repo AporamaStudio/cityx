@@ -42,3 +42,20 @@ test('观察层缓存静态材质并登记新网格，空敌人不绘制也不�
     observation.render({...options,geometryVersion:2});assert.equal(renders,5);assert.equal(observation.enemiesFrame(),null);assert.equal(enemies.visible,false);
   }finally{globalThis.document=previous;}
 });
+
+
+test('静态变换保留屋顶拾取和包围盒，镜头帧不重算矩阵，重建后使用新位置',async()=>{
+  const {freezeCityTransforms}=await loadBrowserModule('city-observation.js');
+  const scene=new THREE.Scene(),root=new THREE.Group(),mesh=new THREE.Mesh(new THREE.BoxGeometry(2,2,2),new THREE.MeshStandardMaterial());
+  root.position.set(8,1,4);mesh.position.y=2;mesh.rotation.y=.4;root.add(mesh);scene.add(root);scene.updateMatrixWorld(true);
+  const before=new THREE.Box3().setFromObject(root),matrix=mesh.matrixWorld.clone();
+  const ray=new THREE.Raycaster(new THREE.Vector3(8,20,4),new THREE.Vector3(0,-1,0)),height=ray.intersectObject(root,true)[0].point.y;
+  freezeCityTransforms(root);let recalculations=0;
+  const multiply=mesh.matrixWorld.multiplyMatrices.bind(mesh.matrixWorld);mesh.matrixWorld.multiplyMatrices=(...args)=>{recalculations++;return multiply(...args);};
+  for(let i=0;i<3;i++)scene.updateMatrixWorld(true);
+  assert.equal(recalculations,0);assert.ok(mesh.matrixWorld.equals(matrix));assert.ok(new THREE.Box3().setFromObject(root).equals(before));
+  assert.equal(ray.intersectObject(root,true)[0].point.y,height);
+  mesh.material.opacity=.3;root.visible=false;assert.equal(mesh.material.opacity,.3);
+  root.removeFromParent();const replacement=new THREE.Group();replacement.position.set(12,0,4);replacement.add(new THREE.Mesh(new THREE.BoxGeometry(2,2,2),new THREE.MeshStandardMaterial()));scene.add(replacement);freezeCityTransforms(replacement);
+  assert.equal(new THREE.Box3().setFromObject(replacement).getCenter(new THREE.Vector3()).x,12);
+});

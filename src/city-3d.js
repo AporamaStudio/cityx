@@ -11,7 +11,7 @@ import {naturalGroundAt} from './natural-terrain.js?v=6';
 import {PLANT_MODELS} from './city-vegetation.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=11';
-import {createCityObservation} from './city-observation.js?v=13';
+import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=14';
 import {createZombieCrowds} from './city-enemies.js?v=7';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
@@ -141,7 +141,7 @@ export function createCity3D(onReady){
     if(!landmark)mergePlot(object);
     if(status==='ruin'&&!landmark)ruinAppearance(object);
     if(status==='building')operatingLights(object);
-    const powerNodes=[];object.traverse(node=>{if(node.userData.cityRoofLights||node.material?.userData.cityPower||node.parent?.userData.cityRoofLights)powerNodes.push(node);});
+    freezeCityTransforms(object);const powerNodes=[];object.traverse(node=>{if(node.userData.cityRoofLights||node.material?.userData.cityPower||node.parent?.userData.cityRoofLights)powerNodes.push(node);});
     return {object,powerNodes,signature:`${type}:${status}:${w}:${h}:${cellMeters}`,roof:new THREE.Box3().setFromObject(object).max.y};
   }
   return {
@@ -169,8 +169,8 @@ export function createCity3D(onReady){
       const geographyChanged=natureLayout!==layout||natureMeters!==cellMeters;
       // 只读实际设施占格；道路上的墙/塔不重建林地，悬停预览不触发整片几何更新。
       const clearCells=naturalOccupied.filter(id=>layout.tiles[id]==='open'&&layout.natural?.regions.some(r=>id%layout.width>=r.x&&id%layout.width<r.x+r.w&&Math.floor(id/layout.width)>=r.y&&Math.floor(id/layout.width)<r.y+r.h)).sort((a,b)=>a-b),nextNature=clearCells.join(',');
-      if(geographyChanged||natureKey!==nextNature){release({object:nature});nature=createNaturalModel(layout,cellMeters,models,new Set(clearCells));scene.add(nature);natureKey=nextNature;}
-      if(geographyChanged){release({object:exterior});exterior=createSurroundingModel(layout,models,cellMeters);scene.add(exterior);natureLayout=layout;natureMeters=cellMeters;}
+      if(geographyChanged||natureKey!==nextNature){release({object:nature});nature=createNaturalModel(layout,cellMeters,models,new Set(clearCells));scene.add(nature);freezeCityTransforms(nature);natureKey=nextNature;}
+      if(geographyChanged){release({object:exterior});exterior=createSurroundingModel(layout,models,cellMeters);scene.add(exterior);freezeCityTransforms(exterior);natureLayout=layout;natureMeters=cellMeters;}
       // 远景融合发生在输出色域转换后，雾色也用sRGB，避免地平线形成暗色矩形边缘。
       exterior.userData.haze?.value.set(fx.hazeColor).convertLinearToSRGB();
       updateWater(nature,fx.time,night,fx.reducedMotion);updateWater(exterior,fx.time,night,fx.reducedMotion);
@@ -194,7 +194,7 @@ export function createCity3D(onReady){
       }
       const nextRoads=cellMeters+':'+roadCells.join(',');
       if(roads.userData.layout!==layout||nextRoads!==roadKey){
-        release({object:roads});const visibleRoads=new Set(roadCells);roads=createRoadModel(layout,cellMeters,id=>visibleRoads.has(id));roads.userData.layout=layout;scene.add(roads);roadKey=nextRoads;
+        release({object:roads});const visibleRoads=new Set(roadCells);roads=createRoadModel(layout,cellMeters,id=>visibleRoads.has(id));roads.userData.layout=layout;scene.add(roads);freezeCityTransforms(roads);roadKey=nextRoads;
       }
       const plantPlots=new Map();for(const plant of plants){if(!plantPlots.has(plant.plot))plantPlots.set(plant.plot,[]);plantPlots.get(plant.plot).push(plant);}
       for(const [id,entry] of plantEntries)if(!plantPlots.has(id)){release(entry);plantEntries.delete(id);}
@@ -209,7 +209,7 @@ export function createCity3D(onReady){
             object.scale.setScalar(scale);object.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
             const anchor=new THREE.Group();anchor.add(object);anchor.position.set(plant.x,0,plant.y);anchor.rotation.y=plant.angle;group.add(anchor);
           }
-          mergePlot(group);group.traverse(node=>{if(node.isMesh)node.userData.cityDecoration=true;});geometryVersion++;vegetation.add(group);plantEntries.set(id,{object:group,signature});
+          mergePlot(group);group.traverse(node=>{if(node.isMesh)node.userData.cityDecoration=true;});geometryVersion++;vegetation.add(group);freezeCityTransforms(group);plantEntries.set(id,{object:group,signature});
         }
         const faded=id===plantPreview,entry=plantEntries.get(id);
         if(entry.faded!==faded){entry.object.traverse(node=>{if(node.isMesh){node.material.transparent=faded;node.material.opacity=faded ? .18 : 1;node.material.depthWrite=!faded;node.castShadow=!faded;}});entry.faded=faded;}
@@ -234,7 +234,7 @@ export function createCity3D(onReady){
           if(prop.color)styleVehicleBody(object,prop.color,prop.asset==='damagedCar');
           const anchor=new THREE.Group();object.scale.setScalar(scale);object.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);anchor.add(object);anchor.position.set(prop.x,naturalGroundAt(layout,prop.x,prop.y,cellMeters),prop.y);anchor.rotation.y=prop.angle;streets.add(anchor);
         }
-        mergePlot(streets);const materials=new Set();streets.traverse(node=>{if(node.isMesh){materials.add(node.material);if(node.material.transparent)node.castShadow=false;}});streetMaterials=[...materials];
+        mergePlot(streets);const materials=new Set();streets.traverse(node=>{if(node.isMesh){materials.add(node.material);if(node.material.transparent)node.castShadow=false;}});streetMaterials=[...materials];freezeCityTransforms(streets);
         geometryVersion++;streetKey=nextStreets;
       }
       // 只启用镜头附近路灯的真实光源；远景保留灯具与光池，灯不投独立阴影。
