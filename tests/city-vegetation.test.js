@@ -2,11 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {emptyLandPlants} from '../src/city-vegetation.js';
 import {generateCityMap} from '../src/city-map.js';
+import {naturalPlants} from '../src/natural-terrain.js';
+import {surroundingLandscape} from '../src/city-surroundings.js';
+import {MAP_DEFAULTS} from '../src/map-settings.js';
 import {DEFAULTS} from '../src/config.js';
 import {createCampaign,buildProduction,plotContent,key,funds,economyBuildQuote} from '../src/model.js';
 
 const plot={id:606,x:6,y:6,w:6,h:6,kind:'open',status:'empty'};
 const options={width:60,cellMeters:20,visible:()=>true,occupied:new Set()};
+
+test('普通空地、自然公园和外围共用同树种米制范围，不把窄冠/幼树放大到成年宽冠尺寸',()=>{
+  const map=generateCityMap(MAP_DEFAULTS),limits={broad:6.6,column:3.6,young:2.9,round:2.7,wild:2.2,dead:3.2};
+  for(const cellMeters of [20,40])for(const plants of [emptyLandPlants([plot],{...options,cellMeters}),naturalPlants(map,cellMeters),surroundingLandscape(map).trees]){
+    assert.ok(plants.length);
+    for(const p of plants){const meters=p.width??p.w*cellMeters;assert.ok(meters>=limits[p.asset]*.85-1e-8&&meters<=limits[p.asset]+1e-8);}
+  }
+});
 
 test('植被稳定、边缘多样且米制树冠完整留在原空地',()=>{
   const plants=emptyLandPlants([plot],options);assert.ok(plants.length>10);assert.deepEqual(plants,emptyLandPlants([plot],options));

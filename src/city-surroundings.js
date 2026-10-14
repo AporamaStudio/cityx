@@ -1,4 +1,5 @@
-import {riverBanks} from './natural-terrain.js?v=6';
+import {riverBanks} from './natural-terrain.js?v=7';
+import {plantWidthMeters} from './city-vegetation.js?v=2';
 import {fogColor} from './fog.js?v=22';
 import {exteriorFogExtent} from './visibility.js?v=9';
 const cache=new WeakMap(),smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
@@ -50,7 +51,9 @@ export function surroundingLandscape(layout){
     const px=x+((n>>>8)%101/100-.5)*.6,py=y+((n>>>16)%101/100-.5)*.6,river=exteriorRiver(layout,px);
     if(river&&py>river.top-.8&&py<river.bottom+.8)continue;
     if(exits.some(road=>road.points.some((p,i)=>i&&segmentDistance(px,py,road.points[i-1],p)<road.w/2+.8)))continue;
-    land.trees.push({x:px,y:py,asset:['broad','column','young','broad','column'][n%5],width:7+n%7,angle:n%628/100});
+    // 郊野多一些成年宽冠树形成林冠；窄冠/幼树沿用城市尺度，不靠整体放大表现森林。
+    const asset=['broad','broad','column','broad','young','broad'][n%6];
+    land.trees.push({x:px,y:py,asset,width:plantWidthMeters(asset,n),angle:n%628/100});
   }
   // 远林减密但保留固定位置；预算只约束装饰，不截断水系或道路。
   if(land.trees.length>1200)land.trees=land.trees.filter((_,i)=>i%Math.ceil(land.trees.length/1200)===0);
