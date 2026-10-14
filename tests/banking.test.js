@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
 import {MAP_DEFAULTS} from '../src/map-settings.js';
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
-import {createCampaign,key,funds,population,bankFinance,bankActive,bankError,restoreBank,canAfford,availableFunds,changeWall,repairFacility,repairQuote,buildTower,buildProduction,clearPlot,productionControlled,applyTestScenario,settleEconomy,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,finishIdleNight,lockAttacks,validateParams,removeOutpost} from '../src/model.js';
+import {createCampaign,key,funds,population,bankFinance,bankActive,bankError,restoreBank,canAfford,availableFunds,changeWall,repairFacility,repairQuote,buildTower,buildProduction,clearPlot,productionControlled,applyTestScenario,settleEconomy,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,finishIdleNight,lockAttacks,validateParams,removeOutpost,controlMask,placementError} from '../src/model.js';
+import {createTowerOverlayCache} from '../src/tower-overlay.js';
 const first=key(12,23),second=key(18,23),plot=key(18,27);
 function setup(n=1,balance=100,params={}){
   const blocks=[{x:12,y:23,width:2,height:2,kind:'building',role:'bank',ruinType:'bank'},{x:18,y:23,width:2,height:2,kind:'building',role:'bank',ruinType:'bank'},{x:18,y:27,width:2,height:2,kind:'building',ruinType:'production'}];
@@ -14,6 +15,15 @@ function setup(n=1,balance=100,params={}){
   assert.equal(applyTestScenario(s,3,balance,6),'');return s;
 }
 function settle(s){s.phase='won';settleEconomy(s);}
+
+test('炮位缓存随贷款余额更新可负担状态，昼夜加急仍与实际校验一致',()=>{
+  const s=setup(1,-45),cache=createTowerOverlayCache();let view=cache.get(s,controlMask(s));
+  const matches=()=>{for(const type of ['A','B'])for(const id of view.candidates)assert.equal(view.eligible(type).has(id),!placementError(s,id,type));};
+  matches();assert.equal(view.eligible('B').size,0);
+  s.earned+=10;assert.strictEqual(cache.get(s,controlMask(s)),view);matches();assert.ok(view.eligible('B').size>0);
+  s.phase='battle';view=cache.get(s,controlMask(s));matches();assert.equal(view.eligible('B').size,0);
+  s.earned+=20;assert.strictEqual(cache.get(s,controlMask(s)),view);matches();assert.ok(view.eligible('B').size>0);
+});
 
 test('预置银行保留8×8地标占地，不重叠且所有通行地面连通',()=>{
   const m=generateCityMap(MAP_DEFAULTS),banks=m.blocks.filter(p=>p.role==='bank');assert.equal(banks.length,2);

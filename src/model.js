@@ -494,7 +494,7 @@ export function enterMorning(state) {
 }
 // 基价用于投资与拆返；夜间差额立即记为不可退加急费。
 export const towerBuildCost=(state,type)=>Math.ceil(state.params.weapons[type].cost*(state.phase==='battle'?state.params.nightTowerCostMultiplier:1));
-export function placementError(state, id, type = 'A') {
+export function placementError(state, id, type = 'A', {ignoreFunds=false}={}) {
   if (!['build','battle'].includes(state.phase)) return '本晚已结束，请进入次日或重试。';
   if (!Number.isInteger(id) || id < 0 || id >= SIZE * SIZE) return '请选择地图内的格子。';
   if(!isExplored(state,id))return '该位置尚未探索。';
@@ -506,7 +506,7 @@ export function placementError(state, id, type = 'A') {
   const siteError=towerSiteError(state,id);if(siteError)return siteError;
   const embed=embeddingError(state,id);if(embed)return embed;
   // 建造资格共用现金与当前银行信用，夜间包含加急费。
-  if (!canAfford(state,towerBuildCost(state,type))) return '预算不足，无法架设炮台。';
+  if (!ignoreFunds&&!canAfford(state,towerBuildCost(state,type))) return '预算不足，无法架设炮台。';
   return '';
 }
 

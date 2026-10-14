@@ -75,11 +75,12 @@ test('敌人逐拍移动只更新占用，复用建筑资格并与真实校验�
   s.enemies=[];assert.strictEqual(get(),first);assertMatches(s,first);assert.ok(first.eligible('A').has(far));
 });
 
-test('跨更新缓存随资金、建设、经营、参数、探索、阶段与重试失效',()=>{
+test('资金变化只更新可负担状态，其余建设/参数等依赖仍重建',()=>{
   const s=setup(),cache=createTowerOverlayCache();let previous=cache.get(s,controlMask(s));
   const changed=()=>{const next=cache.get(s,controlMask(s));assert.notStrictEqual(next,previous);assertMatches(s,next);previous=next;};
-  s.debugGold=-995;changed();assert.equal(previous.eligible('A').size,0);
-  s.debugGold=0;changed();assert.equal(buildTower(s,origin,'A'),'');changed();
+  s.debugGold=-995;assert.strictEqual(cache.get(s,controlMask(s)),previous);assertMatches(s,previous);assert.equal(previous.eligible('A').size,0);
+  s.earned+=10;assert.strictEqual(cache.get(s,controlMask(s)),previous);assertMatches(s,previous);assert.ok(previous.eligible('A').has(origin));assert.equal(previous.eligible('B').size,0);
+  s.debugGold=-5;assert.strictEqual(cache.get(s,controlMask(s)),previous);assertMatches(s,previous);assert.equal(buildTower(s,origin,'A'),'');changed();
   assert.equal(removeTower(s,origin),'');changed();assert.equal(buildProduction(s,origin),'');changed();
   s.params.weapons.B.cost=900;changed();s.params.controlRadius=1;changed();
   s.explored.clear();changed();s.params.controlRadius=2;changed();

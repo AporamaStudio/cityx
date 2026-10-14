@@ -1,10 +1,10 @@
 import {SIZE} from './config.js?v=77';
-import {key,productionCells,buildingCells,plotContent,streetEdgeAccess,placementError,reservedSources,availableFunds,population} from './model.js?v=103';
+import {key,productionCells,buildingCells,plotContent,streetEdgeAccess,placementError,reservedSources,availableFunds,population,towerBuildCost} from './model.js?v=105';
 
 // 一次状态更新生成一份辅助显示；镜头与悬停变化复用它，不重新跑整图建设校验。
 export function createTowerOverlay(state,controlled,movingCells=new Set()){
   const plots=new Map(),cellSites=Array(SIZE*SIZE),candidates=[],eligibleByType=new Map(),visibleByType=new Map();
-  const staticState={...state,enemies:[]};let occupied=new Set(),occupancyKey='';
+  const staticState={...state,enemies:[]};let occupied=new Set(),occupancyKey='',wallet=NaN;
   for(const p of state.sites){
     const id=key(p.x,p.y),cells=productionCells(id,state),footprint=buildingCells(state,id),content=plotContent(state,id);
     const taken=footprint.length>0&&footprint.some(cell=>controlled.has(cell));
@@ -30,10 +30,14 @@ export function createTowerOverlay(state,controlled,movingCells=new Set()){
   }
   const view={plots,cellSites,candidates,updateOccupancy(moving=new Set()){
     const next=new Set([...moving,...(state.phase==='battle'?state.enemies.map(enemy=>enemy.id):[])]),signature=[...next].sort((a,b)=>a-b).join(',');
-    if(signature!==occupancyKey){occupied=next;occupancyKey=signature;visibleByType.clear();}
+    const nextWallet=availableFunds(state);
+    if(signature!==occupancyKey||wallet!==nextWallet){occupied=next;occupancyKey=signature;wallet=nextWallet;visibleByType.clear();}
   },eligible(type){
-    // 建筑/报价资格只算一次；敌人所在与即将进入格只做集合过滤，点击仍用原模型校验。
-    if(!eligibleByType.has(type))eligibleByType.set(type,new Set(candidates.filter(cell=>!placementError(staticState,cell,type))));
+    // 建筑资格只算一次；金币/银行信用只比较一次整炮造价，实际点击仍执行完整校验。
+    if(!eligibleByType.has(type))eligibleByType.set(type,new Set(candidates.filter(cell=>!placementError(staticState,cell,type,{ignoreFunds:true}))));
+    if(!state.params.weapons[type]||wallet+1e-9<towerBuildCost(state,type)){
+      if(!visibleByType.has(type))visibleByType.set(type,new Set());return visibleByType.get(type);
+    }
     if(!occupied.size)return eligibleByType.get(type);
     if(!visibleByType.has(type))visibleByType.set(type,new Set([...eligibleByType.get(type)].filter(cell=>!occupied.has(cell))));
     return visibleByType.get(type);
@@ -46,7 +50,7 @@ export function createTowerOverlayCache(){
   let previous=null,signature='',view=null;
   return {get(state,controlled,movingCells=new Set()){
     const next=JSON.stringify([state.sites,state.fixedWalls,state.playerWalls,state.towers,state.outposts,state.plotContents,state.production,state.housing,state.banks,state.params,state.phase,state.day,state.camp,state.hp>0,controlled,state.explored,
-      [...(state.enemySources?.values()??[])].map(source=>[source.id,source.site]),reservedSources(state).map(source=>[source.x,source.y]),availableFunds(state),population(state)],
+      [...(state.enemySources?.values()??[])].map(source=>[source.id,source.site]),reservedSources(state).map(source=>[source.x,source.y]),population(state)],
       (_key,value)=>value instanceof Map||value instanceof Set?[...value]:value);
     if(previous!==state||signature!==next){view=createTowerOverlay(state,controlled,movingCells);previous=state;signature=next;}
     else view.updateOccupancy(movingCells);
