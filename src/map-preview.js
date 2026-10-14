@@ -1,7 +1,7 @@
-import {drawNaturalTerrain} from './natural-terrain.js?v=1';
+import {drawNaturalTerrain} from './natural-terrain.js?v=3';
 import {drawBlockTexture} from './city-textures.js?v=3';
 import {readMapSettings,mapSearch} from './map-settings.js?v=2';
-import {generateCityMap,walkableDistances} from './city-map.js?v=10';
+import {generateCityMap,walkableDistances} from './city-map.js?v=12';
 const $=id=>document.getElementById(id),canvas=$('map'),ctx=canvas.getContext('2d'),viewport=$('viewport');
 let appliedSettings,map,lookup=[],scale=16,panX=0,panY=0,hover=-1,drag=null,width=0,height=0;
 // 地图可视化只依赖生成数据，点击不修改地形或模拟修复。
@@ -66,7 +66,7 @@ canvas.addEventListener('pointermove',e=>{
   const r=canvas.getBoundingClientRect(),x=Math.floor((e.clientX-r.left-panX)/scale),y=Math.floor((e.clientY-r.top-panY)/scale);
   const id=x>=0&&y>=0&&x<map.width&&y<map.height?y*map.width+x:-1;hover=id>=0?lookup[id]:-1;
   const block=hover>=0?map.blocks[hover]:null;
-  $('info').textContent=block?`${block.kind==='open'?'开放场地':block.role==='hospital'?'医院（收复目标）':block.role==='bank'?'银行POI':block.special?'特殊设施':'建筑街区'} ${block.id+1} · ${block.width}×${block.height} 格 · ${block.kind==='open'?'可通行 · 可建瞭望塔、墙或经营设施':block.role==='hospital'?'不可通行 · 占领待实现 · 不可清理换建':'废墟 · 不可通行 · 可修缮或清理换建'}`:id>=0&&map.tiles[id]==='water'?`(${x}, ${y}) · 水域 · 不可通行与建设`:id>=0?`(${x}, ${y}) · 道路 · 可通行 · 可建墙或挑高瞭望塔；敌人只攻击挡路墙`:'悬停查看街区占地与通行规则';draw();
+  $('info').textContent=block?`${block.kind==='open'?'开放场地':block.role==='hospital'?'医院（收复目标）':block.role==='bank'?'银行POI':block.special?'特殊设施':'建筑街区'} ${block.id+1} · ${block.width}×${block.height} 格 · ${block.kind==='open'?'可通行 · 可建瞭望塔、墙或经营设施':block.role==='hospital'?'不可通行 · 占领待实现 · 不可清理换建':'废墟 · 不可通行 · 可修缮或清理换建'}`:id>=0&&['water','hill'].includes(map.tiles[id])?`(${x}, ${y}) · ${map.tiles[id]==='water'?'水域':'小山'} · 不可通行与建设`:id>=0?`(${x}, ${y}) · 道路 · 可通行 · 可建墙或挑高瞭望塔；敌人只攻击挡路墙`:'悬停查看街区占地与通行规则';draw();
 });
 canvas.addEventListener('pointerup',()=>{drag=null;});canvas.addEventListener('pointercancel',()=>{drag=null;});canvas.addEventListener('lostpointercapture',()=>{drag=null;});canvas.addEventListener('pointerleave',()=>{hover=-1;draw();});
 const initial=readMapSettings(location.search);

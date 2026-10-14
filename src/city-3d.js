@@ -4,7 +4,7 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {addBuildingFoundation,buildingVariation} from './city-building-style.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
 import {createRoadModel} from './city-road-model.js?v=2';
-import {createNaturalModel} from './city-natural-model.js?v=1';
+import {createNaturalModel} from './city-natural-model.js?v=3';
 import {PLANT_MODELS} from './city-vegetation.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=9';
@@ -152,7 +152,7 @@ export function createCity3D(onReady){
     },
     render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],dressing=[],plants=[],plantPreview=null,roadCells=[],fx}){
       if(!ready)return null;
-      if(natureLayout!==layout||natureMeters!==cellMeters){release({object:nature});nature=createNaturalModel(layout,cellMeters);scene.add(nature);natureLayout=layout;natureMeters=cellMeters;}
+      if(natureLayout!==layout||natureMeters!==cellMeters){release({object:nature});nature=createNaturalModel(layout,cellMeters,models);scene.add(nature);natureLayout=layout;natureMeters=cellMeters;}
       const active=new Set(plots.map(p=>p.id));
       for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
       for(const plot of plots){
