@@ -6,12 +6,12 @@ import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody}
 import {createRoadModel} from './city-road-model.js?v=3';
 import {createNaturalModel} from './city-natural-model.js?v=7';
 import {createSurroundingModel} from './city-surrounding-model.js?v=8';
-import {updateWater} from './city-water.js?v=2';
+import {updateWater} from './city-water.js?v=3';
 import {naturalGroundAt} from './natural-terrain.js?v=6';
 import {PLANT_MODELS} from './city-vegetation.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=11';
-import {createCityObservation} from './city-observation.js?v=12';
+import {createCityObservation} from './city-observation.js?v=13';
 import {createZombieCrowds} from './city-enemies.js?v=7';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
@@ -100,16 +100,16 @@ export function createCity3D(onReady){
   const localLights=[];
   const effects=createCityEffects(scene),effectCanvas=document.createElement('canvas');
   const cityCanvas=document.createElement('canvas'),facilityCanvas=document.createElement('canvas'),enemyCanvas=document.createElement('canvas');
-  const models=new Map(),entries=new Map(),props=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',lastProps='',pixels='';
+  const models=new Map(),entries=new Map(),props=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',lastProps='',pixels='',geometryVersion=0;
   const zombieCrowds=createZombieCrowds(enemies);
   const observation=createCityObservation(scene,renderer);
   function capture(canvas){if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(renderer.domElement,0,0);return canvas;}
   Promise.all(Object.entries(files).map(async ([name,file])=>{models.set(name,(await loader.loadAsync(resource(file))).scene);})).then(()=>{ready=true;onReady();}).catch(error=>console.error('城市模型装载失败，保留原地图。',error));
   function release(entry){
-    entry.object.removeFromParent();const maps=new Set();entry.object.traverse(node=>{if(node.isMesh){if(node.material.map?.userData.cityOwned)maps.add(node.material.map);node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});for(const map of maps)map.dispose();
+    geometryVersion++;entry.object.removeFromParent();const maps=new Set();entry.object.traverse(node=>{if(node.isMesh){if(node.material.map?.userData.cityOwned)maps.add(node.material.map);node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});for(const map of maps)map.dispose();
   }
   function build(plot){
-    const {id,x,y,w,h,type,status,cellMeters}=plot,landmark=['hospital','bank'].includes(type);
+    geometryVersion++;const {id,x,y,w,h,type,status,cellMeters}=plot,landmark=['hospital','bank'].includes(type);
     const pool=type==='housing'?['small','home','wide']:['factory','workshop'];
     const object=new THREE.Group(),housing=type==='housing',columns=landmark?1:housing?Math.min(w,4):Math.ceil(w/2),rows=landmark?1:housing?Math.min(h,3):Math.ceil(h/2),slotW=w/columns,slotH=h/rows;
     const podium=landmark?0:(housing?2.5:1.5)/cellMeters;
@@ -139,14 +139,14 @@ export function createCity3D(onReady){
     renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats()};renderer.info.autoReset=true;return stats;},
     isReady(){return ready;},
     observationPick(x,y,width,height,view){return ready?observation.pick(x,y,width,height,view):null;},
-    observationFrame(options){if(!ready)return null;if(terrain)terrain.visible=false;return observation.render({...options,objects:[exterior,nature,buildings,facilities,streets,roads],enemies,effects:effects.group});},
+    observationFrame(options){if(!ready)return null;if(terrain)terrain.visible=false;return observation.render({...options,objects:[exterior,nature,buildings,facilities,streets,roads],enemies,hasEnemies:zombieCrowds.stats().figures>0,geometryVersion,effects:effects.group});},
     observationEnemiesFrame(){return ready?observation.enemiesFrame():null;},
     has(id){return ready&&entries.has(id);},
     hasFacility(id){return ready&&props.has(id);},
     facilityTopAt(id){const entry=props.get(id);return entry?entry.object.position.y+entry.height*entry.object.scale.y:0;},
     baseAt(id){return entries.get(id)?.object.userData.podiumHeight??0;},
     effectsFrame(){return ready?effectCanvas:null;},
-    enemiesFrame(){return ready?enemyCanvas:null;},
+    enemiesFrame(){return ready&&zombieCrowds.stats().figures>0?enemyCanvas:null;},
     roofAt(id,x,y){
       const entry=entries.get(id);if(!entry)return 0;
       // 楼体不变时屋顶采样不随镜头改变，复用射线结果以支持多个可建炮位标记。
@@ -195,7 +195,7 @@ export function createCity3D(onReady){
             object.scale.setScalar(scale);object.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
             const anchor=new THREE.Group();anchor.add(object);anchor.position.set(plant.x,0,plant.y);anchor.rotation.y=plant.angle;group.add(anchor);
           }
-          mergePlot(group);group.traverse(node=>{if(node.isMesh)node.userData.cityDecoration=true;});vegetation.add(group);plantEntries.set(id,{object:group,signature});
+          mergePlot(group);group.traverse(node=>{if(node.isMesh)node.userData.cityDecoration=true;});geometryVersion++;vegetation.add(group);plantEntries.set(id,{object:group,signature});
         }
         const faded=id===plantPreview;plantEntries.get(id).object.traverse(node=>{if(node.isMesh){node.material.transparent=faded;node.material.opacity=faded ? .18 : 1;node.material.depthWrite=!faded;node.castShadow=!faded;}});
       }
@@ -218,7 +218,7 @@ export function createCity3D(onReady){
           const anchor=new THREE.Group();object.scale.setScalar(scale);object.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);anchor.add(object);anchor.position.set(prop.x,naturalGroundAt(layout,prop.x,prop.y,cellMeters),prop.y);anchor.rotation.y=prop.angle;streets.add(anchor);
         }
         mergePlot(streets);streets.traverse(node=>{if(node.isMesh&&node.material.transparent)node.castShadow=false;});
-        streetKey=nextStreets;
+        geometryVersion++;streetKey=nextStreets;
       }
       // 只启用镜头附近路灯的真实光源；远景保留灯具与光池，灯不投独立阴影。
       const visible=lightViewport??{left:-panX/cell,right:(width-panX)/cell,top:-panY/cell,bottom:(height-panY)/cell};
@@ -265,7 +265,7 @@ export function createCity3D(onReady){
           if(['near','far'].includes(item.asset))model.traverse(node=>{if(node.isMesh){const color=node.material.name==='#6c7775'?'#354b4b':['#3f5057','#1e2b32'].includes(node.material.name)?'#98aaa1':item.asset==='far'?'#c3c5d0':'#a8b7a0';node.material.color.set(color);node.material.userData.baseColor=node.material.color.clone();node.material.emissive.set(color);node.material.emissiveIntensity=.10;}});
           const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
           if(item.asset!=='wall'){const scale=Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);}
-          facilities.add(object);props.set(item.id,{object,signature:shape,height:new THREE.Box3().setFromObject(object).max.y,motion:facilityMotion(object),wreck:item.asset==='wreck'?createWreckDressing(object,item.w,item.h):null});
+          geometryVersion++;facilities.add(object);props.set(item.id,{object,signature:shape,height:new THREE.Box3().setFromObject(object).max.y,motion:facilityMotion(object),wreck:item.asset==='wreck'?createWreckDressing(object,item.w,item.h):null});
         }
         const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);if(item.asset==='wreck')object.rotation.y=item.angle??0;object.scale.y=item.dead&&item.asset!=='sourceRuined'?.3:1;
         object.traverse(node=>{if(node.isMesh){node.material.opacity=item.alpha??1;node.material.transparent=node.material.opacity<1;if(!node.material.userData.baseColor)node.material.userData.baseColor=node.material.color.clone();node.material.color.copy(node.material.userData.baseColor).lerp(new THREE.Color('#84867a'),item.dead?.85:(1-(item.health??1))*.5);if(['#ff9538','#ffd36b'].includes(node.material.name))node.visible=!item.dead;}});
@@ -278,7 +278,7 @@ export function createCity3D(onReady){
         effects.updateTransitions(fx.transitions??[],fx.time);effects.updateShots(fx.shots,fx.impacts??[],props,fx.time,fx.cell,fx.cellMeters,night,fx.pixelsAt);
         if(!fx.observer){
           exterior.visible=false;nature.visible=false;buildings.visible=false;facilities.visible=true;enemies.visible=false;streets.visible=false;roads.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
-          facilities.visible=false;enemies.visible=true;renderer.render(scene,camera);capture(enemyCanvas);enemies.visible=false;
+          facilities.visible=false;if(zombieCrowds.stats().figures>0){enemies.visible=true;renderer.render(scene,camera);capture(enemyCanvas);enemies.visible=false;}
           effects.group.visible=true;renderer.render(scene,camera);capture(effectCanvas);
         }
         lastProps=signature;

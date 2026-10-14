@@ -6,7 +6,7 @@ export function createCityObservation(scene,renderer){
   const orthographic=new THREE.OrthographicCamera(),perspective=new THREE.PerspectiveCamera();
   let camera=orthographic;
   const canvas=document.createElement('canvas'),enemyCanvas=document.createElement('canvas');
-  let pickObjects=[],lastGroundVersion=null;
+  let pickCandidates=[],lastGeometryVersion=null,lastGroundVersion=null,hasEnemyFrame=false;
   const ray=new THREE.Raycaster(),pointer=new THREE.Vector2(),pickMeshes=[],hits=[];
   const groundTexture=new THREE.CanvasTexture(document.createElement('canvas'));groundTexture.colorSpace=THREE.SRGBColorSpace;groundTexture.generateMipmaps=false;groundTexture.minFilter=THREE.LinearFilter;
   const fogTexture=new THREE.CanvasTexture(document.createElement('canvas'));fogTexture.flipY=false;fogTexture.generateMipmaps=false;fogTexture.minFilter=THREE.LinearFilter;
@@ -32,25 +32,32 @@ export function createCityObservation(scene,renderer){
     material.customProgramCacheKey=()=>key+':cityx-observe-fog';material.needsUpdate=true;
   });}
   return {
-    enemiesFrame(){return enemyCanvas;},
+    enemiesFrame(){return hasEnemyFrame?enemyCanvas:null;},
     pick(x,y,width,height,view){
       setCamera(view);pointer.set(x/width*2-1,1-y/height*2);ray.setFromCamera(pointer,camera);pickMeshes.length=0;hits.length=0;
       // 在检测三角面之前排除透明特效/装饰；根层为分层合成临时隐藏，不能据此排除楼体。
-      for(const object of pickObjects)object.traverse(node=>{if(node.isMesh&&!node.material.transparent&&(!node.userData.cityDecoration||node.userData.cityGroundSurface))pickMeshes.push(node);});
+      for(const node of pickCandidates)if(!node.material.transparent&&(!node.userData.cityDecoration||node.userData.cityGroundSurface))pickMeshes.push(node);
       const hit=ray.intersectObjects(pickMeshes,false,hits)[0];return hit?{x:hit.point.x,y:hit.point.z}:null;
     },
-    render({ground,groundVersion,mist,mistBounds,view,background,objects,enemies,effects}){
+    render({ground,groundVersion,geometryVersion,mist,mistBounds,view,background,objects,enemies,hasEnemies,effects}){
       // 外围纯景物不参加鼠标射线，避免每次移动鼠标检测整片郊野几何。
-      pickObjects=[...objects.filter(object=>!object.userData.cityNoPick),floor];
+      // 只有网格增删/替换时重新登记材质和拾取候选；预览透明度仍在每次拾取时判断。
+      if(lastGeometryVersion!==geometryVersion){
+        pickCandidates=[];
+        for(const object of [floor,...objects]){bind(object);if(!object.userData.cityNoPick)object.traverse(node=>{if(node.isMesh)pickCandidates.push(node);});}
+        lastGeometryVersion=geometryVersion;
+      }
+      bind(effects);
       if(groundTexture.image!==ground||lastGroundVersion!==groundVersion){groundTexture.image=ground;groundTexture.needsUpdate=true;lastGroundVersion=groundVersion;}fogTexture.image=mist;fogTexture.needsUpdate=true;
       fog.bounds.value.set(...mistBounds);
       setCamera(view);
-      floor.visible=true;for(const object of [floor,...objects,effects]){object.visible=true;bind(object);}fog.enabled.value=1;
+      floor.visible=true;for(const object of [...objects,effects])object.visible=true;fog.enabled.value=1;
       // 敌人已按原插值中心渐隐；单独在雾上绘制，避免楼体遮住本应可见的敌群。
       enemies.visible=false;renderer.setClearColor(background,1);renderer.render(scene,camera);
       if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}
       const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(renderer.domElement,0,0);
-      floor.visible=false;objects.forEach(object=>object.visible=false);effects.visible=false;fog.enabled.value=0;enemies.visible=true;
+      floor.visible=false;objects.forEach(object=>object.visible=false);effects.visible=false;fog.enabled.value=0;
+      hasEnemyFrame=hasEnemies;if(!hasEnemies)return canvas;enemies.visible=true;
       // 单独交回敌人图层，让Canvas路线在实体下面、HP在实体上面。
       renderer.setClearColor('#000000',0);renderer.render(scene,camera);
       if(enemyCanvas.width!==canvas.width||enemyCanvas.height!==canvas.height){enemyCanvas.width=canvas.width;enemyCanvas.height=canvas.height;}
