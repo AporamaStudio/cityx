@@ -18,7 +18,7 @@ export function createSurroundingModel(layout,models,cellMeters=20){
   const ground=(x,y)=>[x,.001+exteriorHeight(layout,land,x,y,cellMeters),y],step=2;
   for(let y=-land.extent;y<layout.height+land.extent;y+=step)for(let x=-land.extent;x<layout.width+land.extent;x+=step){
     if(x>=0&&y>=0&&x+step<=layout.width&&y+step<=layout.height)continue;
-    quad(ground(x,y),ground(x,y+step),ground(x+step,y),ground(x+step,y+step),'#788864');
+    quad(ground(x,y),ground(x,y+step),ground(x+step,y),ground(x+step,y+step),'#6a7d58');
   }
   for(const road of land.exits)for(let i=1;i<road.points.length;i++){
     const a=road.points[i-1],b=road.points[i],length=Math.hypot(b.x-a.x,b.y-a.y),nx=-(b.y-a.y)/length,ny=(b.x-a.x)/length;

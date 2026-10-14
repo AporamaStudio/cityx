@@ -9,7 +9,7 @@ export function createDefenseVFX(parent,item){
   for(let i=0;i<(broken?10:camp?6:4);i++){
     const dust=new THREE.Mesh(dustGeometry,dustMaterial),chip=broken?new THREE.Mesh(chipGeometry,rubbleMaterial):null;group.add(dust);if(chip)group.add(chip);pieces.push({dust,chip});
   }
-  const ring=new THREE.Mesh(new THREE.RingGeometry(.85,1,24),new THREE.MeshBasicMaterial({color:camp?'#ec7d52':'#e2bd85',transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.04;group.add(ring);group.position.set(item.x,0,item.y);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(.85,1,24),new THREE.MeshBasicMaterial({color:camp?'#ec7d52':'#e2bd85',transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.04;group.add(ring);group.position.set(item.x,item.ground??0,item.y);
   return {group,update(age,alpha=1){
     const t=Math.max(0,Math.min(1,age/.65));group.visible=age>=0&&age<.65;
     pieces.forEach(({dust,chip},i)=>{

@@ -1,6 +1,6 @@
 import {createShotVFX,createImpactVFX,muzzlePoint} from './cannon-vfx.js?v=1';
 import {SHOT_STYLES,shotEnvelope} from './shot-visuals.js?v=1';
-import {createDefenseVFX} from './defense-vfx.js?v=1';
+import {createDefenseVFX} from './defense-vfx.js?v=2';
 import * as THREE from 'three';
 import {groundGlow} from './model-preview-effects.js?v=3';
 

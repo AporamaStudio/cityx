@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {hillHeight,lakeOutline,naturalPlants} from './natural-terrain.js?v=4';
+import {hillHeight,lakeOutline,naturalPlants,naturalDetails} from './natural-terrain.js?v=5';
 import {createWaterMaterial} from './city-water.js?v=2';
 
 // 河面、岸带和桥梁共用少量材质合批；尺度以米转格，不增加独立光源或阴影贴图。
@@ -18,7 +18,7 @@ export function createNaturalModel(layout,cellMeters=20,models=new Map()){
     if(color==='#528592')geometry.setAttribute('cityWaterDepth',new THREE.Float32BufferAttribute([depth[0],depth[1],depth[2],depth[2],depth[1],depth[3]],1));add(geometry,color);
   };
   const box=(x,y,z,w,h,d,color)=>{const geometry=new THREE.BoxGeometry(w,h,d);geometry.translate(x,y,z);add(geometry,color);};
-  for(const r of natural.regions)quad([r.x,.001,r.y],[r.x,.001,r.y+r.h],[r.x+r.w,.001,r.y],[r.x+r.w,.001,r.y+r.h],'#7d8d67');
+  for(const r of natural.regions)quad([r.x,.001,r.y],[r.x,.001,r.y+r.h],[r.x+r.w,.001,r.y],[r.x+r.w,.001,r.y+r.h],'#6c805e');
   const river=natural.river,points=river.points,shore=.7/cellMeters,fringe=3/cellMeters;
   for(let i=0;i<points.length-1;i++){
     const a=points[i],b=points[i+1];
@@ -57,10 +57,22 @@ export function createNaturalModel(layout,cellMeters=20,models=new Map()){
     const matrix=new THREE.Matrix4().makeTranslation(plant.x,plant.ground,plant.y).multiply(new THREE.Matrix4().makeRotationY(plant.angle)).multiply(new THREE.Matrix4().makeScale(scale,scale,scale)).multiply(new THREE.Matrix4().makeTranslation(-center.x,-bounds.min.y,-center.z));
     model.updateMatrixWorld(true);model.traverse(node=>{if(node.isMesh)add(node.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(matrix,node.matrixWorld)),node.material.color.getHexString());});
   }
+  for(const d of naturalDetails(layout,cellMeters)){
+    if(d.kind==='patch'){
+      for(let i=0;i<d.points.length;i++){const a=d.points[i],b=d.points[(i+1)%d.points.length],geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute([d.x,d.ground+.004,d.y,a.x,a.ground+.004,a.y,b.x,b.ground+.004,b.y],3));geometry.computeVertexNormals();add(geometry,d.seed%2?'#738662':'#627855');}
+    }else if(d.kind==='rock'){
+      const geometry=new THREE.IcosahedronGeometry(1,0);geometry.scale(d.width*.5/cellMeters,d.height*.5/cellMeters,d.width*.36/cellMeters);geometry.rotateY(d.seed%628/100);geometry.translate(d.x,d.ground+d.height*.28/cellMeters,d.y);add(geometry,'#949382');
+    }else for(let i=0;i<6;i++){
+      const angle=d.seed%628/100+i*2.399,x=d.x+Math.cos(angle)*.55/cellMeters,y=d.y+Math.sin(angle)*.55/cellMeters,height=(d.height+i*.07)/cellMeters;
+      const stalk=new THREE.CylinderGeometry(.018/cellMeters,.032/cellMeters,height,3);stalk.translate(x,d.ground+height/2,y);add(stalk,'#697c48');
+      const head=new THREE.CylinderGeometry(.05/cellMeters,.045/cellMeters,.2/cellMeters,4);head.translate(x,d.ground+height-.1/cellMeters,y);add(head,'#897b52');
+      const lean=.5/cellMeters,spread=.10/cellMeters;quad([x-spread,d.ground+height*.35,y],[x+spread,d.ground+height*.35,y],[x+Math.cos(angle)*lean-spread,d.ground+height*.7,y+Math.sin(angle)*lean],[x+Math.cos(angle)*lean+spread,d.ground+height*.7,y+Math.sin(angle)*lean],'#778c51');
+    }
+  }
   for(const [color,list] of batches){
     const geometry=mergeGeometries(list,false);list.forEach(g=>g.dispose());
     const material=color==='#528592'?createWaterMaterial():new THREE.MeshStandardMaterial({color:color.startsWith('#')?color:'#'+color,roughness:1,side:THREE.DoubleSide});
-    const mesh=new THREE.Mesh(geometry,material);mesh.receiveShadow=true;mesh.castShadow=!color.startsWith('#')||color==='#809269';mesh.userData.ownGeometry=true;mesh.userData.cityDecoration=true;root.add(mesh);
+    const mesh=new THREE.Mesh(geometry,material);mesh.receiveShadow=true;mesh.castShadow=!color.startsWith('#')||['#809269','#949382'].includes(color);mesh.userData.ownGeometry=true;mesh.userData.cityDecoration=true;mesh.userData.cityGroundSurface=['#6c805e','#809269','#528592','#84887d'].includes(color);root.add(mesh);
   }
   return root;
 }

@@ -40,7 +40,7 @@ export function drawEnemyBadges(ctx,layouts){
 
 export function drawDefenseFeedback(ctx,hits,{project,time}){
   for(const hit of hits){
-    const t=Math.max(0,Math.min(1,(time-hit.at)/.65)),p=project(hit.x,hit.y,.16);if(p.hidden||t>=1)continue;
+    const t=Math.max(0,Math.min(1,(time-hit.at)/.65)),p=project(hit.x,hit.y,(hit.ground??0)+.16);if(p.hidden||t>=1)continue;
     const text=hit.type==='wallLost'?'缺口':hit.type==='leak'?`火光 −${hit.value}`:`−${hit.value}`;
     // 破墙文字落在缺口下方，受击数字放墙右侧；给墙HP和拥堵人群的牌子留出空间。
     const x=p.x+(hit.type==='wallHit'?24:0),y=hit.type==='wallLost'?p.y+22+t*8:p.y-(hit.type==='leak'?40:16)-t*18;

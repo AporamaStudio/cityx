@@ -4,7 +4,7 @@ import {generateCityMap,walkableDistances} from '../src/city-map.js';
 import {MAP_DEFAULTS,mapSearch,readMapSettings} from '../src/map-settings.js';
 import {DEFAULTS} from '../src/config.js';
 import {createCampaign,key,validateSources,wallPreview,outpostError,rebuildTerrain} from '../src/model.js';
-import {naturalGroundAt,naturalPlants,hillHeight,lakeOutline} from '../src/natural-terrain.js';
+import {naturalGroundAt,naturalPlants,naturalDetails,hillHeight,lakeOutline} from '../src/natural-terrain.js';
 
 test('自然河道稳定、保护目标和起步街区，两岸经桥仍完整连通',()=>{
   for(let seed=0;seed<24;seed++)for(const mainRoadWidth of [2,3]){
@@ -33,4 +33,10 @@ test('水域作为固定自然障碍，不能造墙或瞭望塔；桥面高差�
   rebuildTerrain(s);for(const source of s.sourceCatalog)assert.ok(s.field.distance.has(key(source.x,source.y)));
   const b=layout.natural.bridges[2];assert.equal(naturalGroundAt(layout,b.x+.5,b.y+.5),.04);assert.equal(naturalGroundAt(layout,b.x+.5,b.y-.5),.02);assert.equal(naturalGroundAt(layout,b.x+.5,b.y-1),0);assert.equal(naturalGroundAt(layout,layout.camp.x,layout.camp.y),0);
   const settings={...MAP_DEFAULTS,nature:false};assert.deepEqual(readMapSettings('?'+mapSearch(settings)),settings);assert.equal(generateCityMap(settings).stats.water,0);
+});
+test('岸草石块与草地色斑位置固定，不覆盖桥梁/道路或修改地形',()=>{
+  const map=generateCityMap(MAP_DEFAULTS),before=structuredClone(map),details=naturalDetails(map);assert.deepEqual(details,naturalDetails(map));assert.deepEqual(map,before);
+  for(const kind of ['patch','rock','reeds'])assert.ok(details.some(d=>d.kind===kind));
+  for(const d of details){if(d.kind==='patch')for(const p of d.points)assert.equal(map.tiles[Math.floor(p.y)*map.width+Math.floor(p.x)],'open');
+    if(d.kind==='reeds')assert.ok(!map.natural.bridges.some(b=>d.x>b.x-.6&&d.x<b.x+b.w+.6&&d.y>b.y-1&&d.y<b.y+b.h+1));}
 });

@@ -1,7 +1,7 @@
-import {drawNaturalTerrain} from './natural-terrain.js?v=4';
+import {drawNaturalTerrain} from './natural-terrain.js?v=5';
 import {drawBlockTexture} from './city-textures.js?v=3';
 import {readMapSettings,mapSearch} from './map-settings.js?v=2';
-import {generateCityMap,walkableDistances} from './city-map.js?v=13';
+import {generateCityMap,walkableDistances} from './city-map.js?v=14';
 const $=id=>document.getElementById(id),canvas=$('map'),ctx=canvas.getContext('2d'),viewport=$('viewport');
 let appliedSettings,map,lookup=[],scale=16,panX=0,panY=0,hover=-1,drag=null,width=0,height=0;
 // 地图可视化只依赖生成数据，点击不修改地形或模拟修复。

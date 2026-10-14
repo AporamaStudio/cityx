@@ -84,6 +84,31 @@ export function naturalPlants(layout,cellMeters=20){
   return plants;
 }
 
+export function naturalDetails(layout,cellMeters=20){
+  const n=layout.natural,details=[];if(!n?.river||cellMeters<8)return details;
+  const random=(x,y)=>(Math.imul(Math.round(x*100)+37,73856093)^Math.imul(Math.round(y*100)+19,19349663))>>>0;
+  const ground=(x,y)=>{const h=n.hills.find(h=>x>=h.x&&x<=h.x+h.w&&y>=h.y&&y<=h.y+h.h);return h?hillHeight(h,x,y,cellMeters):.001;};
+  const shore=(x,y)=>{
+    if(n.bridges.some(b=>x>b.x-.6&&x<b.x+b.w+.6&&y>b.y-1&&y<b.y+b.h+1))return;
+    const seed=random(x,y);details.push({kind:seed%3?'reeds':'rock',x,y,ground:.002,seed,width:2+seed%3,height:1+(seed%5)*.18});
+  };
+  for(const p of n.river.points)if(p.x%3===1){shore(p.x,p.top+.02);shore(p.x,p.bottom-.02);}
+  for(const lake of n.lakes)lakeOutline(lake).forEach((p,i)=>{if(i%3===0)shore(p.x,p.y);});
+  for(const h of n.hills)for(let i=0;i<5;i++){
+    const angle=i*2.399,x=h.cx+Math.cos(angle)*h.rx*.32,y=h.cy+Math.sin(angle)*h.ry*.32;
+    details.push({kind:'rock',x,y,ground:ground(x,y),seed:random(x,y),width:2.4+i*.3,height:1.5+i*.12});
+  }
+  const step=50/cellMeters;
+  for(const r of n.regions)for(let y=r.y+step/2;y<r.y+r.h;y+=step)for(let x=r.x+step/2;x<r.x+r.w;x+=step){
+    const seed=random(x,y),radius=(8+seed%9)/cellMeters,points=[];if(seed%3===0||layout.tiles[Math.floor(y)*layout.width+Math.floor(x)]!=='open')continue;
+    for(let i=0;i<7;i++){const angle=i/7*Math.PI*2,scale=.75+((seed>>>(i*3))%8)/32;points.push({x:x+Math.cos(angle)*radius*scale,y:y+Math.sin(angle)*radius*scale});}
+    // 色斑保守留在自然地面内，不染道路或把水岸画成可行走泥路。
+    if(points.some(p=>p.x<r.x||p.x>r.x+r.w||p.y<r.y||p.y>r.y+r.h||layout.tiles[Math.floor(p.y)*layout.width+Math.floor(p.x)]!=='open'))continue;
+    details.push({kind:'patch',x,y,ground:ground(x,y),points:points.map(p=>({...p,ground:ground(p.x,p.y)})),seed});
+  }
+  return details;
+}
+
 // 俯视底图与布局预览共用岸线，缺少WebGL时仍能读出水域和桥梁。
 export function drawNaturalTerrain(ctx,layout,night=0){
   const n=layout.natural;if(!n?.river)return;
