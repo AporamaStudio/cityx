@@ -27,19 +27,19 @@ test('观察层缓存静态材质并登记新网格，空敌人不绘制也不�
   globalThis.document={createElement:()=>({width:64,height:64,getContext:()=>({clearRect(){},drawImage(){}})})};
   try{
     const {createCityObservation}=await loadBrowserModule('city-observation.js');
-    let renders=0,visits=0;
-    const renderer={domElement:{width:64,height:64},setClearColor(){},render(){renders++;}};
+    let renders=0,visits=0,clearAlpha=null;
+    const renderer={domElement:{width:64,height:64},setClearColor(color,alpha){clearAlpha=alpha;},render(){renders++;}};
     const root=new THREE.Group(),enemies=new THREE.Group(),effects=new THREE.Group(),scene=new THREE.Scene();scene.add(root,enemies,effects);
     const original=root.traverse.bind(root);root.traverse=fn=>{visits++;original(fn);};
     const mesh=new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshStandardMaterial());root.add(mesh);
     const observation=createCityObservation(scene,renderer);
     const options={ground:{},groundVersion:1,geometryVersion:1,mist:{},mistBounds:[0,0,60,60],view:{width:64,height:64,cell:2,panX:0,panY:0,yaw:0,elevation:Math.PI/2},background:'#000',objects:[root],enemies,hasEnemies:false,effects};
     observation.render(options);const firstVisits=visits;observation.render(options);
-    assert.equal(visits,firstVisits);assert.equal(mesh.material.userData.cityObserveFog,true);assert.equal(renders,2);assert.equal(observation.enemiesFrame(),null);
+    assert.equal(visits,firstVisits);assert.equal(mesh.material.userData.cityObserveFog,true);assert.equal(renders,2);assert.equal(observation.enemiesFrame(),null);assert.equal(clearAlpha,0);
     const added=new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshStandardMaterial());root.add(added);
     observation.render({...options,geometryVersion:2,hasEnemies:true});
     assert.equal(added.material.userData.cityObserveFog,true);assert.equal(renders,4);assert.ok(observation.enemiesFrame());
-    observation.render({...options,geometryVersion:2});assert.equal(renders,5);assert.equal(observation.enemiesFrame(),null);assert.equal(enemies.visible,false);
+    observation.render({...options,geometryVersion:2});assert.equal(renders,5);assert.equal(observation.enemiesFrame(),null);assert.equal(enemies.visible,false);assert.equal(clearAlpha,0);
   }finally{globalThis.document=previous;}
 });
 

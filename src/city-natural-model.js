@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {hillHeight,lakeOutline,naturalPlants,naturalDetails} from './natural-terrain.js?v=6';
+import {hillHeight,lakeOutline,naturalPlants,naturalDetails} from './natural-terrain.js?v=7';
 import {createWaterMaterial} from './city-water.js?v=2';
 
 // 河面、岸带和桥梁共用少量材质合批；尺度以米转格，不增加独立光源或阴影贴图。

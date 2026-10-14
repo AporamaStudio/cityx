@@ -1,4 +1,6 @@
 // 自然地形先占用完整非特殊街区带，再沿主路架桥；不切开医院、银行或教学街区。
+import {plantWidthMeters} from './city-vegetation.js?v=2';
+
 const smooth=t=>t*t*(3-2*t);
 export function naturalGroundAt(layout,x,y,cellMeters=20){
   const bridge=(layout.natural?.bridges??[]).find(b=>x>=b.x&&x<=b.x+b.w&&y>=b.y-1&&y<=b.y+b.h+1);
@@ -74,7 +76,7 @@ export function naturalPlants(layout,cellMeters=20,occupied=new Set()){
     const cluster=Math.sin(x*.73+y*.19)+Math.cos(y*1.45-x*.13);
     if(hash%10>4||cluster<-.6)continue;
     const px=x+((hash>>>8)%101/100-.5)*step*.5,py=y+((hash>>>16)%101/100-.5)*step*.5;
-    const asset=['broad','column','young','round','wild'][hash%5],w=({broad:10,column:5.4,young:4.3,round:2.7,wild:2.2}[asset])*(.8+(hash%31)/100)/cellMeters,radius=w/Math.SQRT2;
+    const asset=['broad','column','young','round','wild'][hash%5],w=plantWidthMeters(asset,hash)/cellMeters,radius=w/Math.SQRT2;
     let allowed=px-radius>=r.x&&px+radius<=r.x+r.w&&py-radius>=r.y&&py+radius<=r.y+r.h;
     for(let cy=Math.floor(py-radius);allowed&&cy<=Math.floor(py+radius);cy++)for(let cx=Math.floor(px-radius);cx<=Math.floor(px+radius);cx++)if(!['open','hill'].includes(layout.tiles[cy*layout.width+cx])||occupied.has(cy*layout.width+cx))allowed=false;
     if(!allowed)continue;

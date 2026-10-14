@@ -1,4 +1,5 @@
-import {riverBanks} from './natural-terrain.js?v=6';
+import {riverBanks} from './natural-terrain.js?v=7';
+import {plantWidthMeters} from './city-vegetation.js?v=2';
 import {fogColor} from './fog.js?v=22';
 import {exteriorFogExtent} from './visibility.js?v=9';
 const cache=new WeakMap(),smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
@@ -44,22 +45,40 @@ export function surroundingLandscape(layout){
   const anchors=[{x:north.center,y:0,w:north.w,dx:0,dy:-1},{x:south.center,y:h,w:south.w,dx:0,dy:1},{x:0,y:rowAt(.25)+.5,w:1,dx:-1,dy:0},{x:w,y:rowAt(.78)+.5,w:1,dx:1,dy:0}];
   const exits=anchors.map((a,index)=>({...a,points:[0,2,6,12,20,30,40].map(d=>{const drift=Math.sin(d/14)*(1-Math.exp(-d/5))*2*(index%2?1:-1);return {x:a.x+a.dx*d-a.dy*drift,y:a.y+a.dy*d+a.dx*drift};})}));
   const hills=[{x:-23,y:h*.18,rx:21,ry:18,height:65},{x:w+27,y:h*.72,rx:24,ry:26,height:82},{x:w*.7,y:-25,rx:28,ry:21,height:60},{x:w*.2,y:h+27,rx:25,ry:22,height:70}];
-  const land={extent,hills,exits,trees:[],buildings:[]};
+  const land={extent,hills,exits,trees:[],buildings:[],fields:[],props:[]};
   for(let y=-extent+2;y<h+extent-2;y+=.9)for(let x=-extent+2;x<w+extent-2;x+=.9){
     const n=hash(x,y),distance=outsideDistance(layout,x,y);if(distance<.8||distance>32||n%10>7||distance>12&&n%3!==0||Math.sin(x*.24+y*.16)+Math.cos(y*.34-x*.12)<1.1)continue;
     const px=x+((n>>>8)%101/100-.5)*.6,py=y+((n>>>16)%101/100-.5)*.6,river=exteriorRiver(layout,px);
     if(river&&py>river.top-.8&&py<river.bottom+.8)continue;
     if(exits.some(road=>road.points.some((p,i)=>i&&segmentDistance(px,py,road.points[i-1],p)<road.w/2+.8)))continue;
-    land.trees.push({x:px,y:py,asset:['broad','column','young','broad','column'][n%5],width:7+n%7,angle:n%628/100});
+    // 郊野多一些成年宽冠树形成林冠；窄冠/幼树沿用城市尺度，不靠整体放大表现森林。
+    const asset=['broad','broad','column','broad','young','broad'][n%6];
+    land.trees.push({x:px,y:py,asset,width:plantWidthMeters(asset,n),angle:n%628/100});
   }
   // 远林减密但保留固定位置；预算只约束装饰，不截断水系或道路。
   if(land.trees.length>1200)land.trees=land.trees.filter((_,i)=>i%Math.ceil(land.trees.length/1200)===0);
-  for(const road of exits)for(const distance of [2,5,8])for(const side of [-1,1]){
-    const point=road.points.reduce((best,p)=>Math.abs(Math.hypot(p.x-road.x,p.y-road.y)-distance)<Math.abs(Math.hypot(best.x-road.x,best.y-road.y)-distance)?p:best,road.points[0]);
-    const x=point.x-road.dy*side*(road.w/2+1.25),y=point.y+road.dx*side*(road.w/2+1.25),river=exteriorRiver(layout,x);
-    if(river&&y>river.top-1&&y<river.bottom+1)continue;
-    land.buildings.push({x,y,asset:hash(x,y)%5?'homeRuined':'factoryRuined',width:hash(x,y)%5?14:24,angle:Math.atan2(road.dx,road.dy)});
+  // 近郊只放田野与谷仓，不再放玩家可经营的住房/厂房模型；沿真实出口拼少量田块。
+  const occupied=[],tryPlace=(item,target)=>{
+    const radius=item.width/20*Math.SQRT1_2;
+    for(const [dx,dy] of [[0,0],[-radius,-radius],[-radius,radius],[radius,-radius],[radius,radius]]){
+      const x=item.x+dx,y=item.y+dy,river=exteriorRiver(layout,x);
+      if(outsideDistance(layout,x,y)<.6||exteriorHeight(layout,land,x,y)*20>1||river&&y>river.top-.35&&y<river.bottom+.35)return false;
+    }
+    if(exits.some(road=>road.points.some((p,i)=>i&&segmentDistance(item.x,item.y,road.points[i-1],p)<road.w/2+radius+.15)))return false;
+    if(occupied.some(p=>Math.hypot(item.x-p.x,item.y-p.y)<radius+p.radius+.12))return false;
+    target.push(item);occupied.push({...item,radius});return true;
+  };
+  for(const [index,road] of exits.entries()){
+    const point=road.points[1],side=index%2?1:-1,angle=Math.atan2(road.dx,road.dy),near=(along,cross)=>({x:point.x+road.dx*along-road.dy*side*cross,y:point.y+road.dy*along+road.dx*side*cross});
+    for(let row=0;row<2;row++)for(let col=0;col<3;col++){
+      const asset=['farmland','wheatfield','wheatfield-abandoned','wheatfield-burnt'][(index+col+row)%4];
+      tryPlace({...near(row?3.6:1.8,road.w/2+.9+col*1.65),asset,width:20,angle},land.fields);
+    }
+    const barn={...near(.1,road.w/2+1.35),asset:index%2?'barn':'barn-abandoned',width:18,angle:angle+side*Math.PI/2};
+    if(tryPlace(barn,land.buildings))for(const offset of [2.2,2.5])tryPlace({...near(.1,road.w/2+offset),asset:'hay-bale',width:2.4,angle},land.props);
   }
+  // 稳定候选林地只移除占住田野/谷仓的树，不重新随机全片森林。
+  land.trees=land.trees.filter(tree=>!occupied.some(p=>Math.hypot(tree.x-p.x,tree.y-p.y)<p.radius+tree.width/40+.15));
   cache.set(layout,land);return land;
 }
 
@@ -75,8 +94,10 @@ export function drawSurroundingTerrain(ctx,layout,night){
     }
     for(const road of land.exits){g.strokeStyle=dark?'#364b52':'#718279';g.lineWidth=road.w;g.beginPath();road.points.forEach((p,i)=>i?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y));g.stroke();}
     if(layout.natural?.river)for(const side of [-1,1]){const points=[];for(let d=0;d<=b;d++){const x=side<0?-d:w+d;points.push({x,...exteriorRiver(layout,x)});}g.fillStyle=dark?'#294b60':'#588a97';g.beginPath();points.forEach((p,i)=>i?g.lineTo(p.x,p.top):g.moveTo(p.x,p.top));for(const p of [...points].reverse())g.lineTo(p.x,p.bottom);g.closePath();g.fill();}
+    for(const field of land.fields){g.save();g.translate(field.x,field.y);g.rotate(-field.angle);g.fillStyle=field.asset==='wheatfield-burnt'?(dark?'#333d38':'#575449'):field.asset==='wheatfield'?(dark?'#666044':'#b6a264'):field.asset==='wheatfield-abandoned'?(dark?'#505b42':'#8c835c'):(dark?'#514c3c':'#806c4a');g.fillRect(-.5,-.5,1,1);g.strokeStyle=dark?'#3c4639':'#766448';g.lineWidth=.025;for(let x=-.4;x<.5;x+=.12){g.beginPath();g.moveTo(x,-.45);g.lineTo(x,.45);g.stroke();}g.restore();}
     g.fillStyle=dark?'#2f493c':'#627a4d';for(const tree of land.trees){g.beginPath();g.arc(tree.x,tree.y,tree.width/40,0,Math.PI*2);g.fill();}
-    for(const house of land.buildings){g.fillStyle=dark?'#607273':'#a1a08a';g.fillRect(house.x-.35,house.y-.4,.7,.8);}
+    for(const house of land.buildings){g.fillStyle=dark?'#607273':'#a1a08a';g.save();g.translate(house.x,house.y);g.rotate(-house.angle);g.fillRect(-.3,-.45,.6,.9);if(house.asset==='barn-abandoned'){g.fillStyle=dark?'#37433e':'#586055';g.fillRect(0,-.2,.27,.3);}g.restore();}
+    for(const prop of land.props){g.fillStyle=dark?'#625b42':'#a09266';g.fillRect(prop.x-.06,prop.y-.035,.12,.07);}
     g.fillStyle=fogColor(dark);for(let y=-b;y<h+b;y++)for(let x=-b;x<w+b;x++){const d=outsideDistance(layout,x+.5,y+.5);if(!d)continue;g.globalAlpha=.12+.18*smooth(d/(b*.25))+.7*smooth((d-b*10/48)/(b*38/48));g.fillRect(x,y,1.01,1.01);}g.restore();return canvas;
   }));
   const [day,dark]=textures.get(layout);ctx.drawImage(day,-b,-b,w+b*2,h+b*2);if(night>0){ctx.save();ctx.globalAlpha=night;ctx.drawImage(dark,-b,-b,w+b*2,h+b*2);ctx.restore();}

@@ -62,9 +62,10 @@ export function createCityObservation(scene,renderer){
       if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}
       const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(renderer.domElement,0,0);
       floor.visible=false;objects.forEach(object=>object.visible=false);effects.visible=false;fog.enabled.value=0;
-      hasEnemyFrame=hasEnemies;if(!hasEnemies)return canvas;enemies.visible=true;
+      // 空敌人也恢复透明清屏，防止切回俯视后设施/特效层盖住整座城市。
+      renderer.setClearColor('#000000',0);hasEnemyFrame=hasEnemies;if(!hasEnemies)return canvas;enemies.visible=true;
       // 单独交回敌人图层，让Canvas路线在实体下面、HP在实体上面。
-      renderer.setClearColor('#000000',0);renderer.render(scene,camera);
+      renderer.render(scene,camera);
       if(enemyCanvas.width!==canvas.width||enemyCanvas.height!==canvas.height){enemyCanvas.width=canvas.width;enemyCanvas.height=canvas.height;}
       const enemyContext=enemyCanvas.getContext('2d');enemyContext.clearRect(0,0,enemyCanvas.width,enemyCanvas.height);enemyContext.drawImage(renderer.domElement,0,0);enemies.visible=false;
       return canvas;
