@@ -1,8 +1,9 @@
-import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback} from './enemy-overlay.js?v=4';
+import {drawNaturalTerrain,naturalGroundAt} from './natural-terrain.js?v=1';
+import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback} from './enemy-overlay.js?v=5';
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=1';
 import {projectView,groundAt,panView,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=3';
-import {createCity3D} from './city-3d.js?v=45';
+import {createCity3D} from './city-3d.js?v=46';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -15,9 +16,9 @@ import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawCo
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=9';
 import {createGameAudio} from './audio.js?v=10';
 import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=86';
-import {applyExperimentParams,validateVisualParams, bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=101';
-import {generateCityMap} from './city-map.js?v=9';
-import {readMapSettings} from './map-settings.js?v=1';
+import {applyExperimentParams,validateVisualParams, bankActive,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=102';
+import {generateCityMap} from './city-map.js?v=10';
+import {readMapSettings} from './map-settings.js?v=2';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
 const mapSettings=readMapSettings(location.search);
 mapSettings.width=SIZE;mapSettings.height=SIZE;
@@ -570,7 +571,7 @@ function paintMap() {
 
   // 只把原画面允许显示完整外观的地块交给3D；运营灯光不新增经营或安全判断。
   const impact=Math.min(1,impactAge/IMPACT_MS),enemyFrames=enemyDisplayFrames(state,motion?{...motion,duration:moveDuration()}:null,incoming,impact,reducedMotion.matches);
-  for(const frame of enemyFrames){frame.fogAlpha=mapFogEnabled()?view.visibility.enemyAlpha(frame.rawX+.5,frame.rawY+.5):1;frame.alpha*=frame.fogAlpha;if(frame.enemy.hp===0&&!currentlyVisible(frame.enemy.id))frame.alpha=0;}
+  for(const frame of enemyFrames){frame.ground=naturalGroundAt(state.layout,frame.x+.5,frame.y+.5,controlState.params.cellMeters);frame.fogAlpha=mapFogEnabled()?view.visibility.enemyAlpha(frame.rawX+.5,frame.rawY+.5):1;frame.alpha*=frame.fogAlpha;if(frame.enemy.hp===0&&!currentlyVisible(frame.enemy.id))frame.alpha=0;}
   showLoanPreview(goldDelta);
   const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:['hospital','bank'].includes(p.site.role)?p.site.role:p.content.type,status:p.content.status,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id)||bankActive(state,id)),cellMeters:controlState.params.cellMeters}));
   const streetLamps=operatingStreetLamps(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
@@ -619,6 +620,11 @@ function paintMap() {
       ctx.strokeStyle = palette.grid; ctx.lineWidth = .025; ctx.strokeRect(x, y, 1, 1);ctx.restore();
     }
   }
+  // 自然地形复用城市承光层；裁到已知格，雾与控制权限仍由原系统决定。
+  if(state.layout.natural?.regions.length){
+    ctx.save();ctx.beginPath();for(const r of state.layout.natural.regions)for(let y=r.y;y<r.y+r.h;y++)for(let x=r.x;x<r.x+r.w;x++)if(visibleCell(key(x,y)))ctx.rect(x,y,1,1);ctx.clip();
+    if(cityFrame)ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);else drawNaturalTerrain(ctx,state.layout,nightMix);ctx.restore();
+  }
   // 灯光只代表存活设施与生产状态，不表示敌人无法进入的安全区。
   const lamp=(x,y,r,color)=>{
     const light=ctx.createRadialGradient(x,y,.05,x,y,r);
@@ -632,10 +638,10 @@ function paintMap() {
     ctx.restore();
   }
   const facilityItems=[];
-  const prop=(id,asset,x,y,w=.86,h=.86,extra={})=>facilityItems.push({id,asset,x,y,w,h,...extra});
+  const prop=(id,asset,x,y,w=.86,h=.86,extra={})=>facilityItems.push({id,asset,x,y,w,h,roof:naturalGroundAt(state.layout,x,y,controlState.params.cellMeters),...extra});
   for(const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])])if(currentlyVisible(id)){const [x,y]=xy(id),plot=productionId(id,state);prop('tower:'+id,type==='B'?'far':'near',x+.5,y+.5,(type==='B'?3:4)/controlState.params.cellMeters,(type==='B'?6:5)/controlState.params.cellMeters,{alpha:ghost&&id===hover?.45:1,roof:city3D?.roofAt(plot,x+.5,y+.5)??0});}
   for(const [id,p] of previewState.outposts)if(currentlyVisible(id)){const [x,y]=xy(id);prop('post:'+id,'watch',x+.5,y+.5,5.2/controlState.params.cellMeters,5.2/controlState.params.cellMeters,{alpha:postGhost&&id===hover?.45:1,target:fx.sweeps.find(s=>s.id==='post:'+id)?.target});}
-  for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)){const [x,y]=xy(id),body=state.wallHealth.get(id);prop('wall:'+id,'wall',x+.5,y+.5,1,1,{dead:body?.hp===0,health:body?body.hp/body.max:1,connections:wallConnections(id,state.walls,SIZE,SIZE,roadMarkings(state.layout).get(id)?.axis),cellMeters:controlState.params.cellMeters});}
+  for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)&&!state.fixedWalls.has(id)){const [x,y]=xy(id),body=state.wallHealth.get(id);prop('wall:'+id,'wall',x+.5,y+.5,1,1,{dead:body?.hp===0,health:body?body.hp/body.max:1,connections:wallConnections(id,state.walls,SIZE,SIZE,roadMarkings(state.layout).get(id)?.axis),cellMeters:controlState.params.cellMeters});}
   const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,campWidth,campWidth,{dead:state.hp<=0});
   const campPlot=state.sites.find(p=>p.role==='camp');if(campPlot)prop('camp-plaza','plaza',campPlot.x+(campPlot.width??campPlot.size)/2,campPlot.y+(campPlot.height??campPlot.size)/2,campPlot.width??campPlot.size,campPlot.height??campPlot.size);
   for(const source of displayedEnemySources()){const w=source.width??1,h=source.height??1;prop('source:'+sourceIdentity(source),source.hp===0?'sourceRuined':'source',(source.bx??source.x)+w/2,(source.by??source.y)+h/2,w*.72,h*.72,{dead:source.hp===0,roof:city3D?.baseAt(source.site)??0});}
@@ -645,7 +651,7 @@ function paintMap() {
     const action=motion?.actions.get(enemyKey(frame.enemy))??frame.enemy,attacking=action.attackType==='wall'&&state.wallHealth.get(action.attackId)?.hp>0,wall=attacking?xy(action.attackId):null;
     const screen=projectView(frame.x+.5,frame.y+.5,.05,effectView),margin=Math.max(32,viewPixelScale(frame.x+.5,frame.y+.5,.05,effectView)*.55);
     if(screen.hidden||screen.x< -margin||screen.y< -margin||screen.x>width+margin||screen.y>height+margin)continue;
-    prop(frame.id,'enemy',frame.x+.5,frame.y+.5,2.85/controlState.params.cellMeters,1.9/controlState.params.cellMeters,{cellMeters:controlState.params.cellMeters,members:frame.enemy.members,health:frame.barHP/frame.enemy.max,attacking,deathProgress:frame.enemy.hp===0?impact:0,moving:!!motion&&(!paused||motion.singleStep)&&frame.enemy.to!==frame.enemy.id,alpha:frame.alpha,hitMix:!reducedMotion.matches&&state.events.some(event=>event.type==='hit'&&event.id===frame.enemy.id&&event.target===frame.enemy.target)?Math.max(0,1-(effectTime-(combatImpacts[0]?.at??-1))/.16)*.35:0,visualScale:frame.scale,angle:wall?Math.atan2(frame.x-wall[0],frame.y-wall[1]):frame.angle,fogAlpha:frame.fogAlpha,fogColor:fogColor(nightMix)});
+    prop(frame.id,'enemy',frame.x+.5,frame.y+.5,2.85/controlState.params.cellMeters,1.9/controlState.params.cellMeters,{ground:frame.ground,cellMeters:controlState.params.cellMeters,members:frame.enemy.members,health:frame.barHP/frame.enemy.max,attacking,deathProgress:frame.enemy.hp===0?impact:0,moving:!!motion&&(!paused||motion.singleStep)&&frame.enemy.to!==frame.enemy.id,alpha:frame.alpha,hitMix:!reducedMotion.matches&&state.events.some(event=>event.type==='hit'&&event.id===frame.enemy.id&&event.target===frame.enemy.target)?Math.max(0,1-(effectTime-(combatImpacts[0]?.at??-1))/.16)*.35:0,visualScale:frame.scale,angle:wall?Math.atan2(frame.x-wall[0],frame.y-wall[1]):frame.angle,fogAlpha:frame.fogAlpha,fogColor:fogColor(nightMix)});
   }
   // 目标引用只来自已筛选的显示帧；击中消失的身体保留短反馈，不读取隐藏对象。
   for(const item of [...fx.shots,...fx.impacts]){
@@ -1151,6 +1157,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
       if(known&&state.layout.tiles[id]==='road'){g.fillStyle='#475057';g.fillRect(x,y,1,1);}
       if($('heat').checked&&currentlyVisible(id)&&fire.get(id)){g.fillStyle=`rgba(99,211,166,${Math.min(.6,.17+fire.get(id)*.045)})`;g.fillRect(x,y,1,1);}
     }
+    drawNaturalTerrain(g,state.layout,nightMix);
     const detailed=new Set(plots.map(p=>p.id));
     for(const p of state.sites)if(p.role!=='camp'&&!detailed.has(key(p.x,p.y))&&view.towers.plots.get(key(p.x,p.y)).footprint.length)drawCitySilhouette(g,p,nightMix);
     drawControlBorderBands(g,view.controlBorder,nightMix);observationGroundKey=terrainKey;

@@ -4,7 +4,7 @@ export function enemyBadgeLayouts(frames,project,{width,height,cellMeters=20,occ
   const boxes=occupied.filter(box=>box&&[box.x,box.y,box.w,box.h].every(Number.isFinite)),result=[];
   for(const frame of frames){
     if(!(frame.alpha>0))continue;
-    const anchor=project(frame.x+.5,frame.y+.5,2.1/cellMeters);if(anchor.hidden||!Number.isFinite(anchor.x)||!Number.isFinite(anchor.y)||anchor.x< -20||anchor.y< -20||anchor.x>width+20||anchor.y>height+20)continue;
+    const anchor=project(frame.x+.5,frame.y+.5,(frame.ground??0)+2.1/cellMeters);if(anchor.hidden||!Number.isFinite(anchor.x)||!Number.isFinite(anchor.y)||anchor.x< -20||anchor.y< -20||anchor.x>width+20||anchor.y>height+20)continue;
     const count=Math.max(1,frame.enemy.members??1),text=String(frame.enemy.hp),w=Math.max(24,text.length*7+12)+(count>1?String(count).length*5+15:0),h=20;
     const candidates=[[0,-15],[-w/2-5,-15],[w/2+5,-15],[0,-39],[-w/2-5,-39],[w/2+5,-39]];
     let best=null,score=Infinity;
@@ -19,7 +19,7 @@ export function enemyBadgeLayouts(frames,project,{width,height,cellMeters=20,occ
 }
 export function drawEnemyPressure(ctx,frames,{project,pixels,cellMeters=20,elevation=Math.PI/2,time=0,reducedMotion=false}){
   for(const frame of frames){if(!(frame.alpha>0)||frame.enemy.hp<=0)continue;
-    const p=project(frame.x+.5,frame.y+.5,.02);if(p.hidden)continue;
+    const p=project(frame.x+.5,frame.y+.5,(frame.ground??0)+.02);if(p.hidden)continue;
     const radius=Math.max(6,Math.min(22,(2.7+Math.min(5,frame.enemy.members??1)*.35)/cellMeters*pixels(frame.x+.5,frame.y+.5,0)*frame.scale)),ry=radius*Math.max(.35,Math.sin(elevation));
     const pulse=reducedMotion?1:.88+.12*Math.sin(time*3.5+(frame.enemy.id??0)*.17);
     ctx.save();ctx.globalAlpha=frame.alpha*pulse;ctx.translate(p.x,p.y);ctx.scale(1,ry/radius);

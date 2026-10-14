@@ -1,11 +1,13 @@
 // 先划地块与道路，再给出初始内容；战斗中的清理与换建保存在独立运行状态。
-export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2,minBlock=2,maxBlock=5,special=false,specialMin=10,specialMax=30,touching=false,starterPlot=false,hospital=false,bankCount=0}={}) {
+import {addNaturalTerrain} from './natural-terrain.js?v=1';
+export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2,minBlock=2,maxBlock=5,special=false,specialMin=10,specialMax=30,touching=false,starterPlot=false,hospital=false,bankCount=0,nature=false}={}) {
   for(const [name,value,min,max] of [['width',width,20,240],['height',height,20,240],['mainRoadWidth',mainRoadWidth,2,3],['minBlock',minBlock,2,8],['maxBlock',maxBlock,2,8],['specialMin',specialMin,10,30],['specialMax',specialMax,10,30]]) {
     if(!Number.isInteger(value)||value<min||value>max)throw new Error(`${name} 必须是 ${min}–${max} 的整数`);
   }
   if(minBlock>maxBlock||specialMin>specialMax)throw new Error('最小边长不能超过最大边长');
   if(hospital&&(width<26||height<26))throw new Error('医院地图至少需要 26×26 格');
   if(!Number.isInteger(bankCount)||bankCount<0||bankCount>4)throw new Error('银行数量须为0–4整数');
+  if(typeof nature!=='boolean')throw new Error('自然地形开关须为布尔值');
   seed=String(seed);
   let hash=2166136261;
   for(const c of seed){hash^=c.codePointAt(0);hash=Math.imul(hash,16777619);}
@@ -59,7 +61,7 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
     if(hospital&&y===1){h=12;spine=Math.max(spine,12);}
     const bankBand=banksPlaced<bankCount&&y>=Math.floor(cityEnd*(banksPlaced+1)/(bankCount+1))&&remaining>=8&&width-spine-mainRoadWidth-1>=11;
     if(bankBand)h=Math.max(8,h);
-    bands.push({y,height:h,spine});
+    bands.push({y,height:h,spine,roadWidth:mainRoadWidth});
     road({x:spine,y,width:mainRoadWidth,height:h},mainRoadWidth===3?'highway':'main');
     if(hospital&&y===1){
       // 医院是固定目标地块，四周留路；不参与普通区块尺寸与随机特殊设施抽样。
@@ -124,7 +126,8 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
     camp.x=cx;camp.y=top+5;
     blocks.forEach((b,i)=>b.id=i);
   }
-  // 按最终地形记录道路，包含边缘余量，去掉被合拢的道路段。
+  const geography=nature?addNaturalTerrain({seed,width,height,tiles,blocks,bands,camp}):{};
+  // 按最终地形记录道路，包含桥梁与边缘余量，去掉被合拢的道路段。
   const roadKinds=new Map();
   for(const r of roads)if(r.kind!=='street')for(let cy=r.y;cy<r.y+r.height;cy++)for(let cx=r.x;cx<r.x+r.width;cx++)roadKinds.set(cy*width+cx,r.kind);
   roads.length=0;
@@ -133,7 +136,7 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
   for(const b of blocks)if(b.kind==='building')b.ruinType=['hospital','bank'].includes(b.role)?b.role:['starter','starterLarge'].includes(b.role)?'production':b.role==='starterHousing'?'housing':random()<.35?'housing':'production';
   const buildings=blocks.filter(b=>b.kind==='building'),openSpaces=blocks.filter(b=>b.kind==='open');
   const occupied=tiles.filter(t=>t==='block').length;
-  return {version:5,seed,width,height,mainRoadWidth,minBlock,maxBlock,special,specialMin,specialMax,touching,starterPlot,hospital,tiles,roads,blocks,buildings,openSpaces,camp,goal,stats:{banks:buildings.filter(b=>b.role==='bank').length,hospital:buildings.filter(b=>b.role==='hospital').length,special:buildings.filter(b=>b.special&&!['hospital','bank'].includes(b.role)).length,joined,buildings:buildings.length,openSpaces:openSpaces.length,occupied,coverage:occupied/(width*height)}};
+  return {version:6,seed,width,height,mainRoadWidth,minBlock,maxBlock,special,specialMin,specialMax,touching,starterPlot,hospital,nature,...geography,tiles,roads,blocks,buildings,openSpaces,camp,goal,stats:{banks:buildings.filter(b=>b.role==='bank').length,hospital:buildings.filter(b=>b.role==='hospital').length,special:buildings.filter(b=>b.special&&!['hospital','bank'].includes(b.role)).length,joined,buildings:buildings.length,openSpaces:openSpaces.length,occupied,water:tiles.filter(t=>t==='water').length,coverage:occupied/(width*height)}};
 }
 
 // 仅检查生成时的道路和空地连通；运行时通行由 model.js 的地块内容决定。

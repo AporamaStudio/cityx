@@ -19,7 +19,7 @@ test('预置银行保留8×8地标占地，不重叠且所有通行地面连通'
   const m=generateCityMap(MAP_DEFAULTS),banks=m.blocks.filter(p=>p.role==='bank');assert.equal(banks.length,2);
   const occupied=new Set();for(const b of m.blocks)for(let y=b.y;y<b.y+b.height;y++)for(let x=b.x;x<b.x+b.width;x++){const id=y*SIZE+x;assert.ok(!occupied.has(id));occupied.add(id);}
   assert.ok(banks.every(b=>b.width===8&&b.height===8&&b.ruinType==='bank'));
-  const d=walkableDistances(m);for(let id=0;id<m.tiles.length;id++)assert.equal(d[id]>=0,m.tiles[id]!=='block');
+  const d=walkableDistances(m);for(let id=0;id<m.tiles.length;id++)assert.equal(d[id]>=0,['road','open'].includes(m.tiles[id]));
   assert.throws(()=>generateCityMap({...MAP_DEFAULTS,bankCount:5}),/银行/);
 });
 test('无银行无利息；一座/两座按全局余额和容量计息',()=>{

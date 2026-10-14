@@ -3,12 +3,13 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {addBuildingFoundation,buildingVariation} from './city-building-style.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
-import {createRoadModel} from './city-road-model.js?v=1';
+import {createRoadModel} from './city-road-model.js?v=2';
+import {createNaturalModel} from './city-natural-model.js?v=1';
 import {PLANT_MODELS} from './city-vegetation.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=9';
 import {createCityObservation} from './city-observation.js?v=6';
-import {createZombieCrowds} from './city-enemies.js?v=6';
+import {createZombieCrowds} from './city-enemies.js?v=7';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
@@ -91,6 +92,7 @@ export function createCity3D(onReady){
   const vegetation=new THREE.Group(),plantEntries=new Map();facilities.add(vegetation);let plantKey='';
   const streets=new THREE.Group();scene.add(streets);let terrain=null,roadLayout=null,streetKey='',lastShadow='';
   let roads=new THREE.Group(),roadKey='';scene.add(roads);
+  let nature=new THREE.Group(),natureLayout=null,natureMeters=0;scene.add(nature);
   const localLights=[];
   const effects=createCityEffects(scene),effectCanvas=document.createElement('canvas');
   const cityCanvas=document.createElement('canvas'),facilityCanvas=document.createElement('canvas'),enemyCanvas=document.createElement('canvas');
@@ -133,7 +135,7 @@ export function createCity3D(onReady){
     renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats()};renderer.info.autoReset=true;return stats;},
     isReady(){return ready;},
     observationPick(x,y,width,height){return ready?observation.pick(x,y,width,height):null;},
-    observationFrame(options){if(!ready)return null;if(terrain)terrain.visible=false;return observation.render({...options,objects:[buildings,facilities,streets,roads],enemies,effects:effects.group});},
+    observationFrame(options){if(!ready)return null;if(terrain)terrain.visible=false;return observation.render({...options,objects:[nature,buildings,facilities,streets,roads],enemies,effects:effects.group});},
     observationEnemiesFrame(){return ready?observation.enemiesFrame():null;},
     has(id){return ready&&entries.has(id);},
     hasFacility(id){return ready&&props.has(id);},
@@ -150,6 +152,7 @@ export function createCity3D(onReady){
     },
     render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],dressing=[],plants=[],plantPreview=null,roadCells=[],fx}){
       if(!ready)return null;
+      if(natureLayout!==layout||natureMeters!==cellMeters){release({object:nature});nature=createNaturalModel(layout,cellMeters);scene.add(nature);natureLayout=layout;natureMeters=cellMeters;}
       const active=new Set(plots.map(p=>p.id));
       for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
       for(const plot of plots){
@@ -233,7 +236,7 @@ export function createCity3D(onReady){
         sun.color.set('#fff1cd').lerp(new THREE.Color('#b9cfff'),night);sun.intensity=3.2-night*2.3;
         const shadowKey=shapes+streetKey+plantKey;if(shadowKey!==lastShadow){renderer.shadowMap.needsUpdate=true;lastShadow=shadowKey;}
         // 斜视只准备同一批对象，由观察相机统一画；不再拷贝四张不会显示的俯视层。
-        if(!fx.observer){buildings.visible=true;facilities.visible=false;enemies.visible=false;streets.visible=true;roads.visible=true;effects.group.visible=false;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);}lastFrame=signature;
+        if(!fx.observer){nature.visible=true;buildings.visible=true;facilities.visible=false;enemies.visible=false;streets.visible=true;roads.visible=true;effects.group.visible=false;if(terrain)terrain.visible=true;renderer.render(scene,camera);capture(cityCanvas);}lastFrame=signature;
       }
       return cityCanvas;
     },
@@ -263,7 +266,7 @@ export function createCity3D(onReady){
         effects.updateDefense(fx.defenseHits??[],fx.time);
         effects.updateTransitions(fx.transitions??[],fx.time);effects.updateShots(fx.shots,fx.impacts??[],props,fx.time,fx.cell,fx.cellMeters,night,fx.pixelsAt);
         if(!fx.observer){
-          buildings.visible=false;facilities.visible=true;enemies.visible=false;streets.visible=false;roads.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
+          nature.visible=false;buildings.visible=false;facilities.visible=true;enemies.visible=false;streets.visible=false;roads.visible=false;effects.group.visible=false;if(terrain)terrain.visible=false;renderer.render(scene,camera);capture(facilityCanvas);
           facilities.visible=false;enemies.visible=true;renderer.render(scene,camera);capture(enemyCanvas);enemies.visible=false;
           effects.group.visible=true;renderer.render(scene,camera);capture(effectCanvas);
         }

@@ -14,7 +14,7 @@ test('尺寸、特殊设施和紧邻实验保持完整分区与通路',()=>{
       assert.ok(b.special?b.width>=10&&b.width<=30&&b.height>=10&&b.height<=30:b.width>=minBlock&&b.width<=maxBlock&&b.height>=minBlock&&b.height<=maxBlock);
       for(let y=b.y;y<b.y+b.height;y++)for(let x=b.x;x<b.x+b.width;x++){const id=y*width+x;assert.ok(!cells.has(id));cells.add(id);assert.equal(map.tiles[id],b.kind==='open'?'open':'block');}
     }
-    const d=walkableDistances(map);for(let id=0;id<map.tiles.length;id++)assert.equal(d[id]>=0,map.tiles[id]!=='block');
+    const d=walkableDistances(map);for(let id=0;id<map.tiles.length;id++)assert.equal(d[id]>=0,['road','open'].includes(map.tiles[id]));
     assert.equal(map.stats.special,1);joined+=map.stats.joined;
   }
   assert.ok(joined>0);
@@ -97,7 +97,7 @@ test('医院固定左上 10×12，不重叠且路网保持连通，不能清理�
     const map=generateCityMap({...MAP_DEFAULTS,seed,touching:true}),hospital=map.blocks.find(b=>b.role==='hospital');
     assert.deepEqual([hospital.x,hospital.y,hospital.width,hospital.height],[1,1,10,12]);
     const seen=new Set();for(const b of map.blocks)for(let y=b.y;y<b.y+b.height;y++)for(let x=b.x;x<b.x+b.width;x++){const id=key(x,y);assert.ok(!seen.has(id));seen.add(id);}
-    const distances=walkableDistances(map);map.tiles.forEach((t,i)=>assert.equal(distances[i]>=0,t!=='block'));
+    const distances=walkableDistances(map);map.tiles.forEach((t,i)=>assert.equal(distances[i]>=0,['road','open'].includes(t)));
     const s=createCampaign({...DEFAULTS,controlRadius:30},undefined,map);s.day=3;s.explored=new Set(Array.from({length:3600},(_,i)=>i));
     // 把控制锚点临时设在医院旁，验证不是因距离而碰巧禁建。
     s.camp=key(0,8);const id=key(1,1);

@@ -4,9 +4,11 @@ import {roadCellParts} from './city-roads.js?v=1';
 // 路面/标线用米制平面，路缘保留真实高度；分块按材质合批，近景无需放大底图。
 export function createRoadModel(layout,cellMeters=20,visible=()=>true){
   const root=new THREE.Group(),batches=new Map();
+  const bridges=layout.natural?.bridges??[];
   for(let y=0;y<layout.height;y++)for(let x=0;x<layout.width;x++)if(visible(y*layout.width+x)){
+    const deck=bridges.some(b=>x>=b.x&&x<b.x+b.w&&y>=b.y&&y<b.y+b.h)?.8/cellMeters:0;
     for(const part of roadCellParts(layout,x,y,cellMeters)){
-      const batch=[Math.floor(x/8),Math.floor(y/8),part.color].join(':'),elevation=part.height/cellMeters+.002;
+      const batch=[Math.floor(x/8),Math.floor(y/8),part.color].join(':'),elevation=deck+part.height/cellMeters+.002;
       if(!batches.has(batch))batches.set(batch,{color:part.color,positions:[],normals:[]});
       const b=batches.get(batch),a=part.x,z=part.y,r=a+part.w,s=z+part.h;
       b.positions.push(a,elevation,z,a,elevation,s,r,elevation,z,r,elevation,z,a,elevation,s,r,elevation,s);
@@ -14,7 +16,7 @@ export function createRoadModel(layout,cellMeters=20,visible=()=>true){
       // 边带垂直面很薄，仅解释15cm路缘，不能暗示新增障碍。
       if(part.height>=.10){
         for(const [u,v,t,q,nx,nz] of [[a,z,r,z,0,-1],[r,s,a,s,0,1],[a,s,a,z,-1,0],[r,z,r,s,1,0]]){
-          b.positions.push(u,.002,v,u,elevation,v,t,.002,q,u,elevation,v,t,elevation,q,t,.002,q);
+          b.positions.push(u,deck+.002,v,u,elevation,v,t,deck+.002,q,u,elevation,v,t,elevation,q,t,deck+.002,q);
           for(let i=0;i<6;i++)b.normals.push(nx,0,nz);
         }
       }

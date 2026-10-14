@@ -519,7 +519,7 @@ export function wallPreview(state, id, remove = false) {
   else if (!remove && !isExplored(state,id)) error = '该位置尚未探索。';
   else if (!remove && !inGroundControl(state,id)) error = '超出基础地面控制范围，不能建墙。';
   else if (!remove && state.blocked.has(id)) error = '建筑或废墟占地，需先清理为空地。';
-
+  else if (!remove && state.fixedWalls.has(id)) error = '水域或自然障碍不能建墙。';
   else if (!remove && (state.towers.has(id)||state.outposts.has(id))) error = '这里已有炮塔或瞭望塔，不能叠建墙。';
   else if (!remove && (state.walls.has(id)||state.playerWalls.has(id))) error = '这里已有墙或墙的废墟，请选择修复或拆除。';
   else if (!remove && (id === state.camp || reservedSources(state).some(s=>key(s.x,s.y)===id))) error = '不能覆盖篝火或敌人源头。';

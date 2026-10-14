@@ -44,7 +44,7 @@ export function createZombieCrowds(parent,capacity=2048){
         const pose=zombieFigurePose(i,seed,fx.reducedMotion?0:fx.time,!fx.reducedMotion&&item.moving),s=pose.height/1.8,fall=fx.reducedMotion?0:item.deathProgress??0,scale=(fall>0?1:item.visualScale??1)/meters;
         const attack=item.attacking&&i<4&&!fx.reducedMotion?Math.sin(fx.time*10+pose.phase):0;
         const formation=Math.min(1,Math.sqrt(count/16)),x=pose.x*formation,z=(pose.z-(Math.floor((count-1)/4)-3)*.575)*formation;
-        world.position.set(item.x+Math.cos(angle)*x*scale+Math.sin(angle)*z*scale,0,item.y-Math.sin(angle)*x*scale+Math.cos(angle)*z*scale);
+        world.position.set(item.x+Math.cos(angle)*x*scale+Math.sin(angle)*z*scale,item.ground??0,item.y-Math.sin(angle)*x*scale+Math.cos(angle)*z*scale);
         world.rotation.set(fall*Math.PI*.48,angle,0);world.scale.setScalar(scale);world.updateMatrix();
         const alpha=item.alpha??1;fog.set(item.fogColor??'#bfc9ca');
         const tint=hex=>color.set(hex).lerp(hit,item.hitMix??0).lerp(fog,(1-(item.fogAlpha??1))*.75);
