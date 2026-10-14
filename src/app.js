@@ -495,6 +495,18 @@ function cannonSoundView(id){
   if(p.hidden)return null;
   return shotSoundView(id,{panX:p.x-(x+.5)*cell,panY:p.y-(y+.5)*cell,cell,width,height,zoom});
 }
+// 静态城市描述随游戏状态更新一次；镜头和动效帧只消费结果。
+function citySceneDescriptor(view){
+  const {controlled,controlState}=view;
+  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:['hospital','bank'].includes(p.site.role)?p.site.role:p.content.type,status:p.content.status,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id)||bankActive(state,id)),cellMeters:controlState.params.cellMeters}));
+  const streetLamps=operatingStreetLamps(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
+  const vehicles=streetVehicles(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys()]),lamps:streetLamps,cellMeters:controlState.params.cellMeters}),wrecks=vehicles.filter(car=>car.asset==='wreck');
+  const streetDressing=[...operatingStreetProps(streetLamps,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys(),...vehicles.map(p=>key(Math.floor(p.x),Math.floor(p.y)))]),cellMeters:controlState.params.cellMeters}),...vehicles.filter(car=>car.asset!=='wreck')];
+  const emptyPlots=[...view.towers.plots].filter(([,p])=>p.content.status==='empty').map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,kind:p.site.kind,role:p.site.role,status:p.content.status}));
+  const debris=ruinStreetProps(cityPlots,{layout:state.layout,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
+  const roadCells=state.layout.tiles.flatMap((type,id)=>type==='road'&&visibleCell(id)?[id]:[]);
+  return {cityPlots,streetLamps,wrecks,streetDressing,emptyPlots,debris,roadCells};
+}
 function paintMap() {
   ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   ctx.clearRect(0, 0, width, height);
@@ -544,7 +556,9 @@ function paintMap() {
     else if(tool==='wall'&&candidate&&!candidate.error)goldDelta=-state.params.wallCost;
   }
   const added=new Set(ghost?coverage(hover,weapon.range,weapon.shape):[]);
-  const sourceDamage=sourceAttackPlan({...previewState,params:controlState.params},motion?[...incoming.values()]:state.enemies,new Map([...state.towers,...(ghost?[[hover,weaponType()]]:[])]));
+  const damageKey=postGhost?'post:'+hover:ghost?weaponType()+':'+hover:'actual';
+  if(view.damageKey!==damageKey){view.sourceDamage=sourceAttackPlan({...previewState,params:controlState.params},motion?[...incoming.values()]:state.enemies,new Map([...state.towers,...(ghost?[[hover,weaponType()]]:[])]));view.damageKey=damageKey;}
+  const sourceDamage=view.sourceDamage;
   const sourceFootprint=view.sourceFootprint;
   // 只预览本次建设的确定变化；数值由资源栏、对应按钮与地图展示，不在左下重复。
 
@@ -611,21 +625,21 @@ function paintMap() {
   const impact=Math.min(1,impactAge/IMPACT_MS),enemyFrames=enemyDisplayFrames(state,motion?{...motion,duration:moveDuration()}:null,incoming,impact,reducedMotion.matches);
   for(const frame of enemyFrames){frame.ground=naturalGroundAt(state.layout,frame.x+.5,frame.y+.5,controlState.params.cellMeters);frame.fogAlpha=mapFogEnabled()?view.visibility.enemyAlpha(frame.rawX+.5,frame.rawY+.5):1;frame.alpha*=frame.fogAlpha;if(frame.enemy.hp===0&&!currentlyVisible(frame.enemy.id))frame.alpha=0;}
   showLoanPreview(goldDelta);
-  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:['hospital','bank'].includes(p.site.role)?p.site.role:p.content.type,status:p.content.status,powered:p.controlled&&(state.production.has(id)&&productionActive(state,id)||state.housing.has(id)||bankActive(state,id)),cellMeters:controlState.params.cellMeters}));
-  const streetLamps=operatingStreetLamps(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
-  const vehicles=streetVehicles(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys()]),lamps:streetLamps,cellMeters:controlState.params.cellMeters}),wrecks=vehicles.filter(car=>car.asset==='wreck');
+  const {cityPlots,streetLamps,wrecks,streetDressing,emptyPlots,debris,roadCells}=view.cityScene??=citySceneDescriptor(view);
   cityTransitions=cityTransitions.filter(event=>effectTime-event.at<.8&&currentlyVisible(event.cell));
-  const streetDressing=[...operatingStreetProps(streetLamps,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys(),...vehicles.map(p=>key(Math.floor(p.x),Math.floor(p.y)))]),cellMeters:controlState.params.cellMeters}),...vehicles.filter(car=>car.asset!=='wreck')];
   const effectView=cameraView();
   defenseHits=defenseHits.filter(hit=>effectTime-hit.at<.65&&currentlyVisible(hit.cell));
   const fx={hazeColor:backdrop,defenseHits:reducedMotion.matches||state.phase!=='battle'?[]:defenseHits.map(hit=>({...hit,ground:naturalGroundAt(state.layout,hit.x,hit.y,controlState.params.cellMeters),alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),night:nightMix,enemyFiguresPerGroup:controlState.params.enemyFiguresPerGroup,cameraKey:JSON.stringify(effectView),time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),pixelsAt:(x,y,z)=>viewPixelScale(x,y,z,effectView),observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
-  const emptyPlots=[...view.towers.plots].filter(([,p])=>p.content.status==='empty').map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,kind:p.site.kind,role:p.site.role,status:p.content.status}));
-  const plantOccupied=new Set([...state.walls,...previewState.outposts.keys(),...(hover!==null&&tool==='wall'?[hover]:[])]);
-  const plants=emptyLandPlants(emptyPlots,{width:SIZE,cellMeters:controlState.params.cellMeters,visible:visibleCell,occupied:plantOccupied});
+  const plantKey=(hover!==null&&tool==='wall'?'wall:'+hover:'')+(postGhost?'post:'+hover:'');
+  if(view.plantKey!==plantKey){
+    const plantOccupied=new Set([...state.walls,...previewState.outposts.keys(),...(hover!==null&&tool==='wall'?[hover]:[])]);
+    view.plants=emptyLandPlants(emptyPlots,{width:SIZE,cellMeters:controlState.params.cellMeters,visible:visibleCell,occupied:plantOccupied});view.plantKey=plantKey;
+  }
+  const plants=view.plants;
   const plantPreview=hover!==null&&['production','housing'].includes(tool)?productionId(hover,state):null;
-  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,plants,plantPreview,naturalOccupied:[...state.playerWalls,...state.outposts.keys()],roadCells:state.layout.tiles.flatMap((type,id)=>type==='road'&&visibleCell(id)?[id]:[]),fx});
+  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,plants,plantPreview,naturalOccupied:[...state.playerWalls,...state.outposts.keys()],roadCells,fx});
   const eligibleCells=viewMode==='top'&&weaponPlacementReady?view.towers.eligible(weaponType()):new Set();
   if(viewMode==='top'){
   // 真正的外围模型只画在行动地图外；未知城内继续受原信息遮罩约束。
@@ -687,7 +701,6 @@ function paintMap() {
   const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,campWidth,campWidth,{dead:state.hp<=0});
   const campPlot=state.sites.find(p=>p.role==='camp');if(campPlot)prop('camp-plaza','plaza',campPlot.x+(campPlot.width??campPlot.size)/2,campPlot.y+(campPlot.height??campPlot.size)/2,campPlot.width??campPlot.size,campPlot.height??campPlot.size);
   for(const source of displayedEnemySources()){const w=source.width??1,h=source.height??1;prop('source:'+sourceIdentity(source),source.hp===0?'sourceRuined':'source',(source.bx??source.x)+w/2,(source.by??source.y)+h/2,w*.72,h*.72,{dead:source.hp===0,roof:city3D?.baseAt(source.site)??0});}
-  const debris=ruinStreetProps(cityPlots,{layout:state.layout,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
   facilityItems.push(...wrecks,...debris);
   for(const frame of enemyFrames)if(frame.alpha>0){
     const action=motion?.actions.get(enemyKey(frame.enemy))??frame.enemy,attacking=action.attackType==='wall'&&state.wallHealth.get(action.attackId)?.hp>0,wall=attacking?xy(action.attackId):null;
