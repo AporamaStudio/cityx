@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
 import {MAP_DEFAULTS} from '../src/map-settings.js';
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
-import {createCampaign,key,funds,population,bankFinance,bankActive,bankError,restoreBank,canAfford,availableFunds,changeWall,repairFacility,repairQuote,buildTower,buildProduction,clearPlot,productionControlled,applyTestScenario,settleEconomy,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,finishIdleNight,lockAttacks,validateParams,removeOutpost} from '../src/model.js';
+import {createCampaign,key,funds,population,bankFinance,bankActive,bankDiscovered,bankCapacityFor,pendingBanks,bankUpgradeQuote,bankUpgradeError,upgradeBank,bankError,restoreBank,canAfford,availableFunds,changeWall,repairFacility,repairQuote,buildTower,buildProduction,clearPlot,productionControlled,productionCells,applyTestScenario,settleEconomy,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,finishIdleNight,lockAttacks,validateParams,removeOutpost} from '../src/model.js';
 const first=key(12,23),second=key(18,23),plot=key(18,27);
 function setup(n=1,balance=100,params={}){
   const blocks=[{x:12,y:23,width:2,height:2,kind:'building',role:'bank',ruinType:'bank'},{x:18,y:23,width:2,height:2,kind:'building',role:'bank',ruinType:'bank'},{x:18,y:27,width:2,height:2,kind:'building',ruinType:'production'}];
   const layout={width:SIZE,height:SIZE,camp:{x:15,y:25},blocks,tiles:Array(SIZE*SIZE).fill('road')};
   const wave=[{x:15,y:24,hp:6,count:1,first:1,interval:1}];
-  const s=createCampaign({...DEFAULTS,budget:1000,nightTicks:3,...params},[wave,wave,wave,wave],layout);s.day=3;
+  const s=createCampaign({...DEFAULTS,budget:1000,bankCapacity:60,nightTicks:3,...params},[wave,wave,wave,wave],layout);s.day=3;
   for(const id of [first,second].slice(0,n))assert.equal(restoreBank(s,id),'');
   assert.equal(applyTestScenario(s,3,balance,6),'');return s;
 }
@@ -59,10 +59,10 @@ test('新增银行不改变旧债计息上限，使用新额度借款才提高�
   // 测试偏移恢复到正数后，下一轮债务只使用当前真实额度。
   s.params.controlRadius=9;assert.equal(applyTestScenario(s,3,0,6),'');s.camp=key(13,25);s.params.controlRadius=3;assert.equal(changeWall(s,key(14,27)),'');assert.equal(s.debtInterestCap,60);
 });
-test('经营先入账后计息；重复读取和重复结算不发钱，利息小数不会被吞掉',()=>{
-  const s=setup(1,10);assert.equal(buildProduction(s,plot),'');const g=funds(s);settle(s);assert.ok(Math.abs(s.nightInterest-(g+s.nightEconomy)*.05)<1e-10);
+test('经营先入账后整数计息；重复读取和重复结算不发钱',()=>{
+  const s=setup(1,10);assert.equal(buildProduction(s,plot),'');const g=funds(s);settle(s);assert.equal(s.nightInterest,Math.floor((g+s.nightEconomy)*.05));
   const after=funds(s);bankFinance(s);settleEconomy(s);assert.equal(funds(s),after);
-  const tiny=setup(1,.1);settle(tiny);assert.ok(Math.abs(funds(tiny)-.105)<1e-10);
+  const tiny=setup(1,1);settle(tiny);assert.equal(funds(tiny),1);
 });
 test('正常与空闲加速夜末均只计息一次，次日不重复；当拍失败无经营或金融结算',()=>{
   for(const idle of [false,true]){
@@ -82,5 +82,72 @@ test('击杀金币先自动还清债务，剩余正余额在夜末获得存款�
   const s=setup(1,9);s.waves[2]=s.sources=[{x:17,y:28,hp:2,count:1,first:1,interval:1}];lockAttacks(s);
   assert.equal(buildTower(s,plot,'A'),'');assert.equal(funds(s),-1);assert.equal(s.debtInterestCap,60);
   beginBattle(s);stepBattle(s,undefined,true);assert.equal(s.nightEarned,2);assert.equal(funds(s),1);assert.equal(s.debtInterestCap,0);
-  while(s.phase==='battle')stepBattle(s);assert.equal(s.nightInterest,.05);assert.ok(Math.abs(funds(s)-1.05)<1e-10);
+  while(s.phase==='battle')stepBattle(s);assert.equal(s.nightInterest,0);assert.equal(funds(s),1);
+});
+
+test('存息舍尾、贷息进位；零利率不收费，小数利率的整数边界不误进位',()=>{
+  for(const [balance,params,expected] of [[43,{bankDepositPercent:10},4],[-38,{},-4],[-1,{},-1],[-38,{bankLoanPercent:0,bankLoanMinPercent:0},0],[-50,{bankLoanPercent:14.000000000000002},-7]]){
+    const s=setup(1,balance,params);assert.equal(bankFinance(s).interest,expected);settle(s);assert.equal(funds(s),balance+expected);assert.ok(Number.isInteger(funds(s)));
+  }
+});
+test('金币与人口实验输入只接受整数，拒绝时保持状态',()=>{
+  const s=setup(),before=structuredClone(s);
+  for(const [gold,people] of [[4.3,6],[-3.8,6],[10,6.5]]){assert.match(applyTestScenario(s,3,gold,people),/整数/);assert.deepEqual(s,before);}
+});
+test('银行完整揭示才算发现，未控制仍可被发现；探索记忆保留但新局重置',()=>{
+  const s=setup(0);s.explored=new Set();assert.equal(bankDiscovered(s,first),false);
+  s.explored.add(first);assert.equal(bankDiscovered(s,first),false);
+  for(const id of productionCells(first,s))s.explored.add(id);
+  s.params.controlRadius=1;assert.equal(bankDiscovered(s,first),true);assert.match(bankError(s,first),/控制区/);
+  assert.equal(bankDiscovered(s,key(1,1)),false);
+  s.params.campS01=0;
+  assert.equal(bankDiscovered(restartCampaign(s),first),false);
+});
+
+test('新默认每座100额度，存贷5/10不变；满额利息可以超出消费下限',()=>{
+  assert.equal(DEFAULTS.bankCapacity,100);assert.equal(DEFAULTS.bankUpgradeCost,25);
+  const s=setup(1,100,{bankCapacity:100});assert.equal(bankFinance(s).interest,5);
+  assert.equal(applyTestScenario(s,3,-100,6),'');assert.equal(canAfford(s,1),false);settle(s);assert.equal(funds(s),-110);
+});
+test('每座独立三选一并支付25；额度只翻本座，利率加全局，升级不增用工',()=>{
+  const s=setup(2,500,{bankCapacity:100}),workers=population(s).working;
+  const unchanged=structuredClone(s);assert.match(upgradeBank(s,first,null),/请选择/);assert.deepEqual(s,unchanged);
+  const before=structuredClone(s),q=bankUpgradeQuote(s,first,'capacity');assert.equal(q.localAfter,200);assert.equal(q.after.capacity,300);assert.deepEqual(s,before);
+  assert.equal(upgradeBank(s,first,'capacity'),'');assert.equal(funds(s),475);assert.equal(bankCapacityFor(s,second),100);
+  const spent=structuredClone(s);assert.match(upgradeBank(s,first,'deposit'),/完成升级/);assert.deepEqual(s,spent);
+  assert.equal(upgradeBank(s,second,'deposit'),'');assert.equal(funds(s),450);assert.equal(bankFinance(s).depositPercent,7);assert.equal(bankFinance(s).interest,21);assert.equal(population(s).working,workers);
+});
+test('POI目标只含已知未完成实体；完成A后隐藏，发现B才重新出现',()=>{
+  const s=setup(0,100,{bankCapacity:100});s.explored=new Set(productionCells(first,s));
+  assert.deepEqual(pendingBanks(s),[first]);assert.deepEqual(pendingBanks(s,true),[]);
+  assert.equal(restoreBank(s,first),'');assert.deepEqual(pendingBanks(s),[]);assert.deepEqual(pendingBanks(s,true),[first]);
+  assert.equal(upgradeBank(s,first,'loan'),'');assert.deepEqual(pendingBanks(s,true),[]);
+  for(const id of productionCells(second,s))s.explored.add(id);assert.deepEqual(pendingBanks(s),[second]);
+  s.params.controlRadius=1;assert.deepEqual(pendingBanks(s),[second]);assert.match(bankError(s,second),/控制区/);
+});
+test('升级不能预借未来额度；实际借款保留操作前债务上限，下次借款才更新',()=>{
+  const s=setup(1,-90,{bankCapacity:100}),before=structuredClone(s);
+  assert.match(upgradeBank(s,first,'capacity'),/不足/);assert.deepEqual(s,before);
+  assert.equal(applyTestScenario(s,3,0,6),'');assert.equal(upgradeBank(s,first,'capacity'),'');assert.equal(funds(s),-25);assert.equal(s.debtInterestCap,100);assert.equal(bankFinance(s).capacity,200);
+  assert.equal(changeWall(s,key(15,23)),'');assert.equal(s.debtInterestCap,200);
+});
+test('已有欠款享受贷款专精；停业暂停利率加成但不免息，复业恢复专精',()=>{
+  const s=setup(1,-50,{bankCapacity:100});assert.equal(upgradeBank(s,first,'loan'),'');assert.equal(bankFinance(s).loanPercent,8);assert.equal(bankFinance(s).interest,-6);
+  s.params.controlRadius=1;assert.equal(bankFinance(s).capacity,0);assert.equal(bankFinance(s).loanPercent,10);assert.equal(bankFinance(s).interest,-8);
+  s.params.controlRadius=9;assert.equal(bankFinance(s).loanPercent,8);assert.equal(s.banks.get(first).upgrade,'loan');
+});
+test('利率可交叉，仍按唯一余额单向计息；上下限无效果的升级被拒绝',()=>{
+  const s=setup(2,500,{bankCapacity:100}),third=key(22,23);s.sites.push({...s.sites[0],x:22,y:23});s.plotContents.set(third,{status:'ruin',type:'bank'});
+  assert.equal(restoreBank(s,third),'');assert.equal(upgradeBank(s,first,'deposit'),'');assert.equal(upgradeBank(s,second,'deposit'),'');assert.equal(upgradeBank(s,third,'loan'),'');
+  assert.equal(bankFinance(s).depositPercent,9);assert.equal(bankFinance(s).loanPercent,8);assert.equal(bankFinance(s,100).interest,9);
+  assert.equal(applyTestScenario(s,3,-100,6),'');assert.equal(bankFinance(s).interest,-8);
+  const capped=setup(2,500,{bankCapacity:100,bankUpgradeRatePoints:8,bankRateMaxPercent:10});assert.equal(upgradeBank(capped,first,'loan'),'');assert.equal(bankFinance(capped).loanPercent,2);
+  const before=structuredClone(capped);assert.match(upgradeBank(capped,second,'loan'),/下限/);assert.deepEqual(capped,before);
+  assert.equal(upgradeBank(capped,second,'deposit'),'');assert.equal(bankFinance(capped).depositPercent,10);
+});
+test('专精与费用随重试恢复，重开清零；升级参数校验拒绝矛盾利率边界',()=>{
+  const s=setup(1,100,{bankCapacity:100});assert.equal(upgradeBank(s,first,'deposit'),'');const snap=beginBattle(s);
+  while(s.phase==='battle')stepBattle(s);const retry=restoreNight(snap);assert.equal(funds(retry),75);assert.equal(retry.banks.get(first).upgrade,'deposit');assert.equal(bankFinance(retry).depositPercent,7);
+  const fresh=restartCampaign(s);assert.equal(fresh.banks.size,0);assert.deepEqual(pendingBanks(fresh,true),[]);
+  for(const changes of [{bankUpgradeCost:0},{bankUpgradeCapacityMultiplier:1.5},{bankUpgradeRatePoints:-1},{bankLoanMinPercent:11},{bankRateMaxPercent:4}])assert.match(validateParams({...DEFAULTS,...changes},fresh),/银行升级/);
 });

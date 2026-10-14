@@ -398,3 +398,16 @@ input[type=number]{background:var(--input);color:var(--text);border-color:var(--
 
 .worker-cost .worker-icon{display:inline-flex;width:14px;height:14px;flex:none}
 #financeDetails .facility-icon{width:12px;height:12px;flex:none}
+
+/* 银行专精固定三选一，不随机发牌；沿用昼夜主题，取消始终清晰可见。 */
+#bankUpgradeDialog{width:min(590px,calc(100vw - 32px));box-sizing:border-box;padding:24px;border:1px solid var(--line);border-radius:12px;background:var(--tooltip);color:var(--text)}
+#bankUpgradeDialog::backdrop{background:#101c2766}
+.bank-upgrade-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bank-upgrade-heading h2{font-size:18px;margin:0}.bank-upgrade-heading .tool-price{font-size:14px}
+.bank-upgrade-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:20px}
+.bank-upgrade-choices button{display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px 12px;min-width:0}
+.bank-upgrade-icon{display:inline-flex;width:48px;height:48px;flex:none}
+.bank-upgrade-icon .facility-icon{width:48px;height:48px}.bank-upgrade-name{font-size:12px;font-weight:600}
+.bank-upgrade-value{font-size:18px;white-space:nowrap}
+#bankUpgradeCancel{display:block;min-width:110px;margin:20px auto 0}
+@media(max-width:540px){#bankUpgradeDialog{padding:16px}.bank-upgrade-choices{grid-template-columns:1fr}.bank-upgrade-choices button{gap:8px;padding:12px}.bank-upgrade-icon,.bank-upgrade-icon .facility-icon{width:40px;height:40px}}

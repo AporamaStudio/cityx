@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=88';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=89';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -228,13 +228,23 @@ export function fireField(state) {
 export const funds = state => state.params.budget + (state.debugGold??0) + state.earned + state.economyEarned + (state.bankEarned??0) - [...(state.banks?.values()??[])].reduce((sum,b)=>sum+b.cost,0) - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - state.outposts.size*state.params.outpostCost - (state.nightBuildSpent??0) - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
 // 银行不另设账户：本金就是全局余额，停业仅撤销当前额度，不清偿既有债务。
 export const bankAt=(state,id)=>productionSite(id,state)?.role==='bank'?productionId(id,state):null;
+// 与银行实体揭示一致：完整占地已探索才解锁工具，展示关闭迷雾不算发现。
+export const bankDiscovered=(state,id)=>bankAt(state,id)!==null&&productionCells(id,state).every(cell=>isExplored(state,cell));
 export const bankActive=(state,id)=>state.banks?.has(id)&&productionControlled(state,id)&&population(state).free>=0;
 export const bankWorkers=state=>(state.banks?.size??0)*state.params.bankWorkers;
+export const bankCapacityFor=(state,id)=>Math.ceil(state.params.bankCapacity*(state.banks?.get(bankAt(state,id))?.upgrade==='capacity'?state.params.bankUpgradeCapacityMultiplier:1));
+// POI只列已发现、对应操作尚未完成的实体；临时缺钱或失控不移除目标。
+export const pendingBanks=(state,upgrade=false)=>state.sites.filter(p=>p.role==='bank').map(p=>key(p.x,p.y)).filter(id=>bankDiscovered(state,id)&&(upgrade?state.banks.has(id)&&!state.banks.get(id).upgrade:!state.banks.has(id)));
 export function bankFinance(state,balance=funds(state)){
-  const active=[...(state.banks?.keys()??[])].filter(id=>bankActive(state,id)).length,capacity=active*state.params.bankCapacity;
+  const ids=[...(state.banks?.keys()??[])].filter(id=>bankActive(state,id)),active=ids.length,capacity=ids.reduce((sum,id)=>sum+bankCapacityFor(state,id),0);
+  const count=kind=>ids.filter(id=>state.banks.get(id).upgrade===kind).length;
+  const depositPercent=Math.min(state.params.bankRateMaxPercent,state.params.bankDepositPercent+count('deposit')*state.params.bankUpgradeRatePoints);
+  const loanPercent=Math.max(state.params.bankLoanMinPercent,Math.min(state.params.bankRateMaxPercent,state.params.bankLoanPercent-count('loan')*state.params.bankUpgradeRatePoints));
   const debtCap=balance<0?state.debtInterestCap??0:0;
-  const interest=balance<0?-Math.min(-balance,debtCap)*state.params.bankLoanPercent/100:Math.min(balance,capacity)*state.params.bankDepositPercent/100;
-  return {active,capacity,debtCap,interest,credit:Math.max(0,capacity+Math.min(0,balance)),available:Math.max(0,balance+capacity)};
+  // 金币最小单位为1：存息向下取整，贷息向上取整；容差仅消除整数边界浮点误差。
+  const rawInterest=Math.min(Math.abs(balance),balance<0?debtCap:capacity)*(balance<0?loanPercent:depositPercent)/100;
+  const interest=rawInterest===0?0:balance<0?-Math.max(1,Math.ceil(rawInterest-1e-9)):Math.floor(rawInterest+1e-9);
+  return {active,capacity,debtCap,depositPercent,loanPercent,interest,credit:Math.max(0,capacity+Math.min(0,balance)),available:Math.max(0,balance+capacity)};
 }
 export const availableFunds=state=>bankFinance(state).available;
 export const canAfford=(state,cost)=>Number.isFinite(cost)&&cost>=0&&(cost===0||funds(state)-cost>=-bankFinance(state).capacity-1e-9);
@@ -257,7 +267,35 @@ export function restoreBank(state,id){
   state.banks.set(bank,{cost:state.params.bankRestoreCost,day:state.day});
   state.plotContents.set(bank,{status:'building',type:'bank'});return '';
 }
-// 利息保留小数而不逐日取整；正常夜末在经营收入之后调用，每日仅一次。
+// 报价先支付当前信用范围内的费用，再预览升级效果；不提前借用未来新增额度。
+export function bankUpgradeQuote(state,id,kind){
+  const bank=bankAt(state,id),record=state.banks.get(bank),cost=state.params.bankUpgradeCost,before=bankFinance(state);
+  const candidate={...state,banks:new Map(state.banks)};
+  if(record)candidate.banks.set(bank,{...record,cost:record.cost+cost,upgrade:kind});
+  if(funds(state)-cost<0)candidate.debtInterestCap=Math.max(funds(state)<0?state.debtInterestCap??0:0,before.capacity);
+  return {cost,balance:funds(state)-cost,before,after:bankFinance(candidate),localBefore:bankCapacityFor(state,id),localAfter:bankCapacityFor(candidate,id)};
+}
+export function bankUpgradeError(state,id,kind=null){
+  if(state.phase!=='build'||state.day<2)return '只能在白天升级银行。';
+  const bank=bankAt(state,id),record=state.banks.get(bank);
+  if(!record)return '请先恢复已发现的银行。';
+  if(record.upgrade)return '这座银行已完成升级。';
+  if(!bankActive(state,bank)||!bankDiscovered(state,bank))return '银行须受控并正常运营才能升级。';
+  if(!canAfford(state,state.params.bankUpgradeCost))return '金币与可用贷款不足，无法升级银行。';
+  if(kind!==null){
+    if(!['capacity','deposit','loan'].includes(kind))return '请选择一种银行升级。';
+    const q=bankUpgradeQuote(state,bank,kind),field=kind==='capacity'?'capacity':kind==='deposit'?'depositPercent':'loanPercent';
+    if(q.before[field]===q.after[field])return '该项已达上限或下限，升级不会生效。';
+  }else if(['capacity','deposit','loan'].every(k=>bankUpgradeError(state,bank,k)))return '当前没有可用的银行升级。';
+  return '';
+}
+export function upgradeBank(state,id,kind){
+  if(!['capacity','deposit','loan'].includes(kind))return '请选择一种银行升级。';
+  const error=bankUpgradeError(state,id,kind);if(error)return error;
+  recordBorrowing(state,state.params.bankUpgradeCost);const record=state.banks.get(bankAt(state,id));
+  record.cost+=state.params.bankUpgradeCost;record.upgrade=kind;return '';
+}
+// 正常夜末在经营收入之后结算整数利息，每日仅一次，不累计小数尾款。
 function settleBank(state){
   if(state.bankSettledDay===state.day)return;
   clearRepaidDebt(state);state.nightInterest=bankFinance(state).interest;
@@ -579,6 +617,7 @@ export function validateParams(params, state, checkLayout = true) {
   if(!['daySightMultiplier','nightSightMultiplier','eventSightMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=3))return '视野倍率须为 0–3，可使用小数。';
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
   if(!integer(params.bankRestoreCost,1,1000)||!integer(params.bankWorkers,0,100)||!integer(params.bankCapacity,1,10000)||!['bankDepositPercent','bankLoanPercent'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=100))return '银行恢复费用1–1000、用工0–100、额度1–10000为整数；利率0–100%，可用小数。';
+  if(!integer(params.bankUpgradeCost,1,1000)||!integer(params.bankUpgradeCapacityMultiplier,1,10)||!['bankUpgradeRatePoints','bankLoanMinPercent','bankRateMaxPercent'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=100)||params.bankLoanMinPercent>params.bankLoanPercent||params.bankLoanPercent>params.bankRateMaxPercent||params.bankDepositPercent>params.bankRateMaxPercent)return '银行升级费用1–1000、额度倍率1–10为整数；利率边界/升级百分点0–100%，贷款下限≤基础贷息≤利率上限，基础存息≤上限。';
   if(!integer(params.outpostWorkers,0,100))return '每座瞭望塔用工须为0–100人整数。';
   if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产、瞭望塔、银行用工或增加住房。';
   if(!integer(params.demolitionRefundPercent,0,100))return '拆除返还比例须为 0–100 整数。';
@@ -1071,7 +1110,7 @@ export function revealControl(state){
 // 测试台仅跳转到指定白天，不模拟略过的夜晚、不发奖励；独立偏移不污染收入账单。
 export function applyTestScenario(state,day,gold,people){
   if(!Number.isInteger(day)||day<1||day>(state.waves?.length??1))return '请选择现有波次范围内的日期。';
-  if(!Number.isFinite(gold)||gold< -1000000||gold>1000000||!Number.isInteger(people)||people<0||people>1000000)return '金币须为−1000000–1000000数值，人口须为0–1000000整数。';
+  if(!Number.isInteger(gold)||gold< -1000000||gold>1000000||!Number.isInteger(people)||people<0||people>1000000)return '金币须为−1000000–1000000整数，人口须为0–1000000整数。';
   const workers=population(state).working;if(people<workers)return `现有设施用工需要 ${workers} 人，不能设为更低人口。`;
   const sources=structuredClone(state.waves[day-1].filter(s=>!s.sourceId||state.enemySources.get(s.sourceId)?.hp!==0)),candidate={...state,sources};
   const error=validateSources(sources,candidate);if(error)return error;

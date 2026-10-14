@@ -42,7 +42,9 @@ export const DEFAULTS = {
   // 面积曲线：大地块产出密度逐渐趋近上限；同组参数在实验面板可调。
   productionBaseArea: 16, productionSmallCostFloor: 0.5, productionDensityGrowthArea: 9, productionMaxDensity: 2,
   // 银行POI固定恢复/用工；当前控制区即安全区，利率按每日百分比。
-  bankRestoreCost:25, bankWorkers:1, bankCapacity:60, bankDepositPercent:5, bankLoanPercent:10,
+  bankRestoreCost:25, bankWorkers:1, bankCapacity:100, bankDepositPercent:5, bankLoanPercent:10,
+  // 每座三选一；利率加成只在运营时叠加，全局上限与贷款下限同步开放实验。
+  bankUpgradeCost:25, bankUpgradeCapacityMultiplier:2, bankUpgradeRatePoints:2, bankLoanMinPercent:2, bankRateMaxPercent:100,
   // 架炮不占用施工人力；夜间只加收金币，倍率仍可调节。
   nightTowerCostMultiplier: 2,
   budget: 100, wallCost: 2, wallHP: 12, enemyPower: 1, defenseRepairPercent: 50, demolitionRefundPercent: 50, controlRadius: 9, campHP: 30, stepMs: 450,
