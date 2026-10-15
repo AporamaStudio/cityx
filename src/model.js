@@ -999,11 +999,12 @@ export function economyBuildAvailability(state,type){
 }
 // 建成方案只读真实选址条件；缺钱/缺工人仍可看效果，补建只标本次新增经营格。
 export function economyConstructionPreview(state,id,type){
-  if(!['production','housing'].includes(type)||!Number.isInteger(id))return null;
-  if((type==='housing'?housingError:productionError)(state,id,{ignoreResources:true}))return null;
+  if(!['production','housing','bank'].includes(type)||!Number.isInteger(id))return null;
+  const errorFor=type==='bank'?bankError:type==='housing'?housingError:productionError;
+  if(type==='bank'&&!bankDiscovered(state,id)||errorFor(state,id,{ignoreResources:true}))return null;
   const site=productionSite(id,state),plot=productionId(id,state);
   const existing=new Set((type==='housing'?state.housing:state.production).has(plot)?contentCells(state,id):[]);
-  const cells=availableCells(state,id).filter(cell=>!existing.has(cell)),w=site.width??site.size,h=site.height??site.size;
+  const cells=type==='bank'?productionCells(id,state):availableCells(state,id).filter(cell=>!existing.has(cell)),w=site.width??site.size,h=site.height??site.size;
   const mask=new Uint8Array(w*h);for(const cell of cells){const [x,y]=xy(cell);mask[(y-site.y)*w+x-site.x]=1;}
   return {id:plot,x:site.x,y:site.y,w,h,type,status:'plan',powered:false,cellMeters:state.params.cellMeters,cells,mask};
 }

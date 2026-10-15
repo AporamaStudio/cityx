@@ -1559,3 +1559,9 @@
 - 独立浏览器俯视：第3天1000金币/100人口，悬停3×3生产显示方案，移开恢复原废墟；正式点击后986金币/97工人、真实材质恢复，提示已完成。2×3空地切生产/住房对应不同完好模型，未消费；余额0/空闲0仍展示生产方案和缺17金币/2工人。
 - 斜视313%与自由透视均实际显示立体方案、虚线地基，无着色报错。建厂房后架炮、拆炮形成一格缺口，再在另一格保留炮，生产补建仅给缺口上方案色，报价2金币，已有厂房和炮保持原样；入夜0%暂停后方案/经营工具收起，实际厂房暖灯与炮位照明正常。
 - 317项全量测试、JS语法、本地Pages构建及diff检查通过。新增规则检查覆盖资源不足可看、选址限制、状态不变、单格补建；实际Three对象检查覆盖单色材质共用、原纹理/着色回调保留及蒙版关闭。浏览器无error/warn；截图：`/private/tmp/cityx-construction-preview-top.png`、`/private/tmp/cityx-construction-built.png`、`/private/tmp/cityx-construction-empty-housing.png`、`/private/tmp/cityx-construction-preview-oblique.png`、`/private/tmp/cityx-construction-preview-free.png`、`/private/tmp/cityx-construction-preview-partial.png`、`/private/tmp/cityx-construction-night-restored.png`。未运行Godot、提交、推送或发布；本轮不代表可玩性或稳定帧率验收。
+
+### 银行修缮共用3D方案（2026-10-15）
+
+- 恢复银行接入既有完好模型与蒙版，沿用生产/住房的浅青蓝单色、虚线地基和无运营灯光；颜色表示未执行的方案，特殊POI由模型/共享图标区别，不另增颜色。银行须完整发现、当前受控且未恢复；只跳过金币/工人条件，不提前授信或占用人口，升级不在本轮范围。
+- 独立浏览器默认地图第3天建瞭望塔后，75金币/5空闲工人，俯视与斜视悬停银行出现完整单色方案，移开恢复破损外观；改为0金币/0空闲仍显示方案和缺25金币/1工人。补足100金币/5空闲后实际恢复，余额75、空闲4、有效额度100，真实银行材质恢复，恢复工具隐藏、升级工具出现；无error/warn。
+- 318项全量测试、本地Pages构建与diff检查通过；新增检查覆盖未发现/区外/夜间/已恢复不显示、缺资源可看、状态不变和不提前授信。截图：`/private/tmp/cityx-bank-construction-preview-top.png`、`/private/tmp/cityx-bank-construction-preview-oblique.png`、`/private/tmp/cityx-bank-construction-original.png`、`/private/tmp/cityx-bank-construction-complete.png`。未运行Godot、提交、推送或发布。

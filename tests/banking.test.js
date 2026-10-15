@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
 import {MAP_DEFAULTS} from '../src/map-settings.js';
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
-import {createCampaign,key,funds,population,bankFinance,bankContribution,bankActive,bankDiscovered,bankCapacityFor,pendingBanks,bankUpgradeQuote,bankUpgradeError,upgradeBank,bankError,restoreBank,canAfford,availableFunds,changeWall,repairFacility,repairQuote,buildTower,buildProduction,clearPlot,productionControlled,productionCells,applyTestScenario,settleEconomy,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,finishIdleNight,lockAttacks,validateParams,removeOutpost,controlMask,placementError} from '../src/model.js';
+import {economyConstructionPreview,createCampaign,key,funds,population,bankFinance,bankContribution,bankActive,bankDiscovered,bankCapacityFor,pendingBanks,bankUpgradeQuote,bankUpgradeError,upgradeBank,bankError,restoreBank,canAfford,availableFunds,changeWall,repairFacility,repairQuote,buildTower,buildProduction,clearPlot,productionControlled,productionCells,applyTestScenario,settleEconomy,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,finishIdleNight,lockAttacks,validateParams,removeOutpost,controlMask,placementError} from '../src/model.js';
 import {createTowerOverlayCache} from '../src/tower-overlay.js';
 const first=key(12,23),second=key(18,23),plot=key(18,27);
 function setup(n=1,balance=100,params={}){
@@ -112,6 +112,18 @@ test('银行完整揭示才算发现，未控制仍可被发现；探索记忆�
   assert.equal(bankDiscovered(s,key(1,1)),false);
   s.params.campS01=0;
   assert.equal(bankDiscovered(restartCampaign(s),first),false);
+});
+
+test('银行修缮方案沿用单色预览，须已发现且受控；缺资源可看且不授信',()=>{
+  const s=setup(0,0);s.params.initialPopulation=0;const before=structuredClone(s);
+  const plan=economyConstructionPreview(s,first,'bank');assert.equal(plan.type,'bank');assert.equal(plan.status,'plan');assert.equal(plan.powered,false);
+  assert.deepEqual(plan.cells,productionCells(first,s));assert.deepEqual([...plan.mask],[1,1,1,1]);assert.deepEqual(s,before);assert.equal(bankFinance(s).capacity,0);
+  assert.equal(economyConstructionPreview(s,plot,'bank'),null);
+  s.explored=new Set([first]);assert.equal(economyConstructionPreview(s,first,'bank'),null);
+  for(const id of productionCells(first,s))s.explored.add(id);
+  s.params.controlRadius=1;assert.equal(economyConstructionPreview(s,first,'bank'),null);
+  s.params.controlRadius=DEFAULTS.controlRadius;s.phase='battle';assert.equal(economyConstructionPreview(s,first,'bank'),null);
+  s.phase='build';assert.equal(applyTestScenario(s,3,100,6),'');assert.equal(restoreBank(s,first),'');assert.equal(economyConstructionPreview(s,first,'bank'),null);
 });
 
 test('新默认每座100额度，存贷5/10不变；满额利息可以超出消费下限',()=>{
