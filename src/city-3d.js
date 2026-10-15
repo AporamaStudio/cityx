@@ -10,8 +10,9 @@ import {updateWater} from './city-water.js?v=3';
 import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {PLANT_MODELS} from './city-vegetation.js?v=2';
 import {groundGlow} from './model-preview-effects.js?v=4';
-import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=11';
-import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=17';
+import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=12';
+import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=18';
+import {createNightShaderWarmup} from './city-shader-warmup.js?v=1';
 import {createZombieCrowds} from './city-enemies.js?v=7';
 import {FACILITY_SVGS} from './icons.js?v=12';
 import {constructionAppearance,constructionMaskTexture,bindConstructionMask,setConstructionMask} from './city-construction-preview.js?v=1';
@@ -135,10 +136,20 @@ export function createCity3D(onReady){
   }
   const zombieCrowds=createZombieCrowds(enemies);
   const observation=createCityObservation(scene,renderer);
+  let currentNight=0;
+  const shaderWarmup=createNightShaderWarmup(renderer,scene,{enabled:()=>ready&&currentNight===0});
+  const warmupRoot=new THREE.Group();
+  function warmNight(camera,observer=false){
+    if(currentNight!==0)return;
+    // 编译容器只引用原根节点，不重新挂载；灯光仍从真实scene读取，排除短命战斗特效。
+    warmupRoot.children=[exterior,nature,buildings,facilities,streets,roads,...(terrain?[terrain]:[]),...(observer?[observation.warmupRoot()]:[])];
+    const lights=[...localLights,...effects.nightLights()];
+    shaderWarmup.request(`${geometryVersion}:${localLights.length}:${effects.nightLightSignature()}:${observer}`,warmupRoot,camera,lights);
+  }
   function capture(canvas){if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(renderer.domElement,0,0);return canvas;}
   Promise.all(Object.entries(files).map(async ([name,file])=>{models.set(name,(await loader.loadAsync(resource(file))).scene);})).then(()=>{ready=true;onReady();}).catch(error=>console.error('城市模型装载失败，保留原地图。',error));
   function release(entry){
-    geometryVersion++;entry.object.removeFromParent();const maps=new Set();entry.object.traverse(node=>{if(node.isMesh){if(node.material.map?.userData.cityOwned)maps.add(node.material.map);node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});for(const map of maps)map.dispose();
+    geometryVersion++;entry.object.removeFromParent();shaderWarmup.release(()=>{const maps=new Set();entry.object.traverse(node=>{if(node.isMesh){if(node.material.map?.userData.cityOwned)maps.add(node.material.map);node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});for(const map of maps)map.dispose();});
   }
   function build(plot){
     geometryVersion++;const {id,x,y,w,h,type,status,cellMeters}=plot,landmark=['hospital','bank'].includes(type);
@@ -172,7 +183,7 @@ export function createCity3D(onReady){
     renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats(),streetLights:localLights.length};renderer.info.autoReset=true;return stats;},
     isReady(){return ready;},
     observationPick(x,y,width,height,view){return ready?observation.pick(x,y,width,height,view):null;},
-    observationFrame(options){if(!ready)return null;if(terrain)terrain.visible=false;return observation.render({...options,objects:[exterior,nature,buildings,facilities,streets,roads],enemies,hasEnemies:zombieCrowds.stats().figures>0,geometryVersion,effects:effects.group});},
+    observationFrame(options){if(!ready)return null;if(terrain)terrain.visible=false;const image=observation.render({...options,objects:[exterior,nature,buildings,facilities,streets,roads],enemies,hasEnemies:zombieCrowds.stats().figures>0,geometryVersion,effects:effects.group});warmNight(observation.warmupCamera(),true);return image;},
     observationEnemiesFrame(){return ready?observation.enemiesFrame():null;},
     has(id){return ready&&(entries.has(id)||constructionEntry?.object.visible&&constructionEntry.id===id);},
     hasFacility(id){return ready&&props.has(id);},
@@ -189,6 +200,7 @@ export function createCity3D(onReady){
     },
     render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],dressing=[],plants=[],plantPreview=null,constructionPreview=null,naturalOccupied=[],roadCells=[],fx}){
       if(!ready)return null;
+      currentNight=night;
       const geographyChanged=natureLayout!==layout||natureMeters!==cellMeters;
       // 只读实际设施占格；道路上的墙/塔不重建林地，悬停预览不触发整片几何更新。
       const clearCells=naturalOccupied.filter(id=>layout.tiles[id]==='open'&&layout.natural?.regions.some(r=>id%layout.width>=r.x&&id%layout.width<r.x+r.w&&Math.floor(id/layout.width)>=r.y&&Math.floor(id/layout.width)<r.y+r.h)).sort((a,b)=>a-b),nextNature=clearCells.join(',');
@@ -338,6 +350,7 @@ export function createCity3D(onReady){
         }
         lastProps=signature;
       }
+      if(!fx.observer)warmNight(camera);
       return facilityCanvas;
     },
   };

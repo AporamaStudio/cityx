@@ -37,6 +37,8 @@ export function createCityObservation(scene,renderer){
     material.customProgramCacheKey=()=>key+':cityx-observe-fog';material.needsUpdate=true;
   });}
   return {
+    warmupRoot:()=>floor,
+    warmupCamera:()=>camera,
     enemiesFrame(){return hasEnemyFrame?enemyCanvas:null;},
     pick(x,y,width,height,view){
       setCamera(view);pointer.set(x/width*2-1,1-y/height*2);ray.setFromCamera(pointer,camera);pickMeshes.length=0;hits.length=0;
