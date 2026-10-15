@@ -24,3 +24,11 @@ test('玩法应用拒绝冲突与战斗中修改，失败不覆盖任何状态',
   const state=setup(),before=structuredClone(state);assert.match(applyExperimentParams(state,{...state.params,nightTicks:1},'gameplay'),/最后一批/);assert.deepEqual(state,before);
   state.phase='battle';const battle=structuredClone(state);assert.match(applyExperimentParams(state,{...state.params,killReward:4},'gameplay'),/白天/);assert.deepEqual(state,battle);
 });
+
+test('升级光流参数只影响视觉，支持关闭光幕且拒绝越界值',()=>{
+  const state=setup(),{params,...before}=structuredClone(state);
+  assert.equal(applyExperimentParams(state,{...params,upgradeFlowHeightMeters:0,upgradeFlowMinPx:20,upgradeFlowCycleMs:1800,upgradeFlowOpacity:60},'visual'),'');
+  const {params:after,...rest}=state;assert.deepEqual(rest,before);assert.equal(after.upgradeFlowHeightMeters,0);assert.equal(after.upgradeFlowOpacity,60);assert.equal(after.upgradeFlowMinPx,20);
+  const unchanged=structuredClone(state);
+  for(const change of [{upgradeFlowHeightMeters:13},{upgradeFlowMinPx:-1},{upgradeFlowMinPx:41},{upgradeFlowMinPx:1.5},{upgradeFlowCycleMs:0},{upgradeFlowOpacity:101}]){assert.match(applyExperimentParams(state,{...state.params,...change},'visual'),/升级光流/);assert.deepEqual(state,unchanged);}
+});

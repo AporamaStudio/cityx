@@ -126,6 +126,14 @@ test('银行修缮方案沿用单色预览，须已发现且受控；缺资源�
   s.phase='build';assert.equal(applyTestScenario(s,3,100,6),'');assert.equal(restoreBank(s,first),'');assert.equal(economyConstructionPreview(s,first,'bank'),null);
 });
 
+test('升级定位只跳过金币，不跳过控制、运营、发现和实际升级效果',()=>{
+  const s=setup(1,-60),before=structuredClone(s);
+  assert.match(bankUpgradeError(s,first),/不足/);assert.equal(bankUpgradeError(s,first,null,{ignoreResources:true}),'');assert.deepEqual(s,before);
+  s.params.controlRadius=1;assert.match(bankUpgradeError(s,first,null,{ignoreResources:true}),/受控/);
+  s.params.controlRadius=DEFAULTS.controlRadius;s.explored.clear();assert.match(bankUpgradeError(s,first,null,{ignoreResources:true}),/受控/);
+  const full=setup(1,100,{bankUpgradeCapacityMultiplier:1,bankUpgradeRatePoints:0});assert.match(bankUpgradeError(full,first,null,{ignoreResources:true}),/没有可用/);
+});
+
 test('新默认每座100额度，存贷5/10不变；满额利息可以超出消费下限',()=>{
   assert.equal(DEFAULTS.bankCapacity,100);assert.equal(DEFAULTS.bankUpgradeCost,25);
   const s=setup(1,100,{bankCapacity:100});assert.equal(bankFinance(s).interest,5);

@@ -155,3 +155,15 @@ test('空闲夜末收起配乐时钟，恢复战斗或白天时只恢复一个�
   s.sound.setScene('battle',false,false);assert.equal(s.timers.size,1);
   s.sound.setScene('build');assert.equal(s.timers.size,1);
 });
+
+test('独立进阶音约一秒收尾，短时去重且遵守音效音量、关闭和后台静音',async()=>{
+  const s=setup();s.sound.configure({music:false});await s.sound.unlock();s.sound.play('upgrade');
+  const first=[...s.calls];assert.ok(first.some(c=>c.kind==='noise'));assert.ok(first.some(c=>c.end-c.at>.6));
+  assert.ok(Math.max(...first.map(c=>c.end))>1);assert.ok(Math.max(...first.map(c=>c.end))<1.2);
+  s.sound.play('upgrade');assert.equal(s.calls.length,first.length);
+  s.ctx.currentTime=2;s.sound.configure({effectsVolume:0});s.sound.play('upgrade');assert.equal(s.calls.length,first.length);
+  s.sound.configure({effectsVolume:.5,effects:false});s.sound.play('upgrade');assert.equal(s.calls.length,first.length);
+  s.sound.configure({effects:true});s.sound.setHidden(true);s.sound.play('upgrade');assert.equal(s.calls.length,first.length);
+  s.sound.setHidden(false);await Promise.resolve();assert.equal(s.calls.length,first.length);
+  s.sound.play('upgrade');assert.ok(s.calls.length>first.length);
+});

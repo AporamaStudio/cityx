@@ -16,6 +16,7 @@ import {createNightShaderWarmup} from './city-shader-warmup.js?v=1';
 import {createZombieCrowds} from './city-enemies.js?v=7';
 import {FACILITY_SVGS} from './icons.js?v=12';
 import {constructionAppearance,constructionMaskTexture,bindConstructionMask,setConstructionMask} from './city-construction-preview.js?v=1';
+import {createUpgradePreview} from './city-upgrade-preview.js?v=2';
 
 // 俯视城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
@@ -121,6 +122,7 @@ export function createCity3D(onReady){
   let exterior=new THREE.Group();scene.add(exterior);
   const localLights=[];
   const effects=createCityEffects(scene),effectCanvas=document.createElement('canvas');
+  const upgradeEffects=createUpgradePreview(effects.group);
   const cityCanvas=document.createElement('canvas'),facilityCanvas=document.createElement('canvas'),enemyCanvas=document.createElement('canvas');
   const models=new Map(),entries=new Map(),props=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',lastProps='',pixels='',geometryVersion=0;
   let constructionEntry=null,constructionBase=null,constructionKey='';
@@ -320,6 +322,7 @@ export function createCity3D(onReady){
     },
     renderFacilities(items,night,fx){
       if(!ready)return null;
+      upgradeEffects.update(fx.upgrades??[],fx.time,fx.upgradeStyle,fx.reducedMotion);
       zombieCrowds.update(items.filter(item=>item.asset==='enemy'),fx);
       const active=new Set(items.map(p=>p.id));for(const [id,entry] of props)if(!active.has(id)){release(entry);props.delete(id);}
       for(const item of items){
@@ -339,7 +342,7 @@ export function createCity3D(onReady){
         animateFacility(props.get(item.id),item,fx);
         if(props.get(item.id).wreck)updateWreckDressing(props.get(item.id).wreck,fx.time,night,fx.reducedMotion);
       }
-      const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+JSON.stringify(fx.impacts)+JSON.stringify(fx.transitions)+`/${lastFrame}:${night}:${fx.time}:${fx.cameraKey}`;
+      const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+JSON.stringify(fx.impacts)+JSON.stringify(fx.transitions)+JSON.stringify(fx.upgrades)+JSON.stringify([fx.upgradeStyle.upgradeFlowHeightMeters,fx.upgradeStyle.upgradeFlowCycleMs,fx.upgradeStyle.upgradeFlowOpacity])+`/${lastFrame}:${night}:${fx.time}:${fx.cameraKey}`;
       if(signature!==lastProps){
         effects.updateDefense(fx.defenseHits??[],fx.time);
         effects.updateTransitions(fx.transitions??[],fx.time);effects.updateShots(fx.shots,fx.impacts??[],props,fx.time,fx.cell,fx.cellMeters,night,fx.pixelsAt);

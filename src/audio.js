@@ -220,6 +220,13 @@ export function createGameAudio(options={}) {
     }else if(name==='build'||name==='repair'){
       rustle(effects,at,.075,.1,1100);tone(effects,43,at,.16,.18,'sine',.005,65);
       [62,69,74].forEach((note,i)=>tone(effects,note,at+.055+i*.045,.16,.07,'triangle'));
+    }else if(name==='upgrade'){
+      // POI进阶共用：轻扣合、连续上扬与稳定暖和声；避开到账叮响和整局胜利长乐句。
+      rustle(effects,at,.035,.11,3200,1000,.003);
+      tone(effects,50,at+.015,.32,.13,'sine',.012);
+      tone(effects,57,at+.04,.36,.075,'triangle',.045,frequency(69));
+      [62,66,69].forEach((note,i)=>tone(effects,note,at+.28+i*.018,.72,.085,'sine',.065));
+      tone(effects,81,at+.32,.65,.035,'triangle',.08);
     }else if(name==='demolish'){
       // 拆除是可控作业：中频液压声缓慢用力、持续刮擦，尾部少量碎石；避开受击的低音猛撞和塌落。
       const motor=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();

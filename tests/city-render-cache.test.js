@@ -77,3 +77,16 @@ test('3D建设方案共用单色实体材质，蒙版可关闭并保留原楼材
  setConstructionMask(base,null);assert.equal(shader.uniforms.cityPlanActive.value,0);assert.equal(shader.uniforms.cityPlanCells.value,null);
  cells.dispose();a.material.dispose();texture.dispose();
 });
+
+test('升级光流只播放当前目标，复用几何材质，关闭/取消/减少动态均可恢复',async()=>{
+ const {createUpgradePreview}=await loadBrowserModule('city-upgrade-preview.js');
+ const parent=new THREE.Group(),effect=createUpgradePreview(parent),params={upgradeFlowHeightMeters:3,upgradeFlowCycleMs:2200,upgradeFlowOpacity:35};
+ const a={id:1,x:12,y:23,w:8,h:8,cellMeters:20,eligible:true,focused:true,pulse:0},b={...a,id:2,x:30,focused:false};
+ effect.update([a,b],1,params);const [first,second]=effect.group.children,mesh=first.children[1],ground=first.children[0];
+ assert.equal(mesh.visible,true);assert.equal(second.children[1].visible,false);assert.equal(mesh.scale.y,.15);assert.equal(mesh.castShadow,false);assert.equal(mesh.material.depthWrite,false);
+ assert.equal(ground.material.uniforms.flowing.value,1);assert.equal(second.children[0].material.uniforms.flowing.value,0);assert.equal(ground.material.uniforms.phase.value,1/2.2);assert.ok(ground.scale.y>.3);
+ effect.update([{...a,focused:false},{...b,focused:true}],2,params);assert.equal(effect.group.children[0],first);assert.equal(first.children[1],mesh);assert.equal(mesh.visible,false);assert.equal(second.children[1].visible,true);assert.equal(ground.geometry,second.children[0].geometry);
+ effect.update([a],3,{...params,upgradeFlowHeightMeters:0},true);assert.equal(mesh.visible,false);assert.equal(mesh.material.uniforms.still.value,1);assert.equal(mesh.material.uniforms.phase.value,0);assert.equal(effect.group.children.length,1);
+ assert.equal(ground.material.uniforms.flowing.value,0);assert.equal(ground.material.uniforms.phase.value,0);assert.equal(ground.material.uniforms.still.value,1);
+ effect.update([],4,params);assert.equal(effect.group.children.length,0);effect.dispose();assert.equal(parent.children.length,0);
+});

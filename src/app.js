@@ -4,7 +4,7 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
 import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=4';
-import {createCity3D} from './city-3d.js?v=69';
+import {createCity3D} from './city-3d.js?v=71';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -15,9 +15,9 @@ import {drawRoadTexture,drawBlockTexture,drawCitySilhouette,drawCitySurroundings
 import {cameraScale,limitZoom,limitPan,limitObservationPan} from './map-camera.js?v=4';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=12';
-import {createGameAudio} from './audio.js?v=10';
-import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=89';
-import {economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,bankContribution,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=113';
+import {createGameAudio} from './audio.js?v=11';
+import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=93';
+import {economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,bankContribution,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=117';
 import {generateCityMap} from './city-map.js?v=14';
 import {readMapSettings} from './map-settings.js?v=2';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -93,6 +93,7 @@ const canvas = $('map'), ctx = canvas.getContext('2d'), viewport = $('viewport')
 const city3D=createCity3D(()=>draw());
 let state = createCampaign(DEFAULTS,undefined,cityLayout), tool = 'wall', hover = null, dragging = null;
 let bankUpgradeTarget=null,bankUpgradeHover=null;
+let upgradePulse=null;
 let sourceDrafts=[],editingNight=1,editorSourcePreview=null;
 const blockedActionReasons=new Map();
 let toolResourceQuotes={},toolAvailability={};
@@ -533,6 +534,64 @@ function constructionPlan(view){
   }
   return view.constructionPreview;
 }
+// 资格与支付分开：缺钱仍定位待升级银行，停业/区外仅保留弱标记，不误染红。
+function upgradePlan(view){
+  if(state.phase!=='build'||state.result||view.dirty)return [];
+  const choosing=tool==='bankUpgrade'||bankUpgradeTarget!==null,focused=bankUpgradeTarget??(tool==='bankUpgrade'&&hover!==null?productionId(hover,state):null);
+  if(!choosing&&!upgradePulse)return [];
+  view.upgradeCandidates??=pendingBanks(state,true).map(id=>{
+    const p=productionSite(id,state);return {id,x:p.x,y:p.y,w:p.width??p.size,h:p.height??p.size,cellMeters:view.controlState.params.cellMeters,eligible:!bankUpgradeError(state,id,null,{ignoreResources:true})};
+  }).filter(item=>cellsVisibleBank(productionSite(item.id,state),view.towers.plots.get(item.id)));
+  const items=choosing?view.upgradeCandidates.map(item=>({...item,focused:item.id===focused&&item.eligible,pulse:0})):[];
+  if(upgradePulse){
+    const p=productionSite(upgradePulse.id,state),overlay=view.towers.plots.get(upgradePulse.id);
+    if(p&&cellsVisibleBank(p,overlay))items.push({id:upgradePulse.id,x:p.x,y:p.y,w:p.width??p.size,h:p.height??p.size,cellMeters:view.controlState.params.cellMeters,eligible:true,focused:false,pulse:Math.max(0,1-(performance.now()-upgradePulse.at)/800)});
+  }
+  return items;
+}
+// 定位框与楼体装饰错开；俯视看不见竖直面时，投影光带仍保持可读的上升距离。
+function drawUpgradeOutlines(items,project,params){
+  ctx.save();
+  ctx.lineJoin='round';ctx.lineCap='round';
+  for(const item of items){
+    const pad=1.2/item.cellMeters,points=[[item.x-pad,item.y-pad],[item.x+item.w+pad,item.y-pad],[item.x+item.w+pad,item.y+item.h+pad],[item.x-pad,item.y+item.h+pad]].map(([x,y])=>project(x,y,.035));
+    if(points.some(p=>p.hidden))continue;
+    const cx=points.reduce((sum,p)=>sum+p.x,0)/4,cy=points.reduce((sum,p)=>sum+p.y,0)/4;
+    for(const p of points){const d=Math.hypot(p.x-cx,p.y-cy)||1;p.x+=(p.x-cx)/d*4;p.y+=(p.y-cy)/d*4;}
+    const focused=item.focused||item.pulse>0;
+    const contour=(lift=0)=>{ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p.x,p.y-lift):ctx.moveTo(p.x,p.y-lift));ctx.closePath();};
+    ctx.setLineDash(item.eligible?[]:[4,4]);contour();
+    ctx.strokeStyle=item.eligible?'#efba5550':'#939d9a30';ctx.lineWidth=focused?12:9;ctx.stroke();
+    ctx.strokeStyle='#513a20';ctx.lineWidth=focused?6:5;ctx.stroke();
+    ctx.strokeStyle=item.eligible?'#ffe1a0':'#939d9a';ctx.lineWidth=focused?3:2;ctx.stroke();
+    if(!item.eligible)continue;
+    // 四角短括号区别于道路/控制线，选工具后无需先把鼠标移到银行上。
+    ctx.setLineDash([]);ctx.beginPath();
+    points.forEach((p,i)=>{
+      for(const next of [points[(i+3)%4],points[(i+1)%4]]){const d=Math.hypot(next.x-p.x,next.y-p.y),leg=Math.min(14,d*.25);ctx.moveTo(p.x,p.y);ctx.lineTo(p.x+(next.x-p.x)/d*leg,p.y+(next.y-p.y)/d*leg);}
+    });ctx.strokeStyle='#fff5d4';ctx.lineWidth=4;ctx.stroke();
+    if(!focused||params.upgradeFlowHeightMeters<=0||params.upgradeFlowOpacity<=0)continue;
+    const ground=project(item.x+item.w/2,item.y+item.h/2,0),raised=project(item.x+item.w/2,item.y+item.h/2,params.upgradeFlowHeightMeters/item.cellMeters);
+    const rise=Math.max(params.upgradeFlowMinPx,Math.hypot(raised.x-ground.x,raised.y-ground.y)),strength=params.upgradeFlowOpacity/100;
+    const phase=reducedMotion.matches?0:effectTime/(params.upgradeFlowCycleMs/1000);
+    for(let i=0;i<4;i++){
+      const a=points[i],b=points[(i+1)%4],y=(a.y+b.y)/2;
+      const glow=ctx.createLinearGradient(0,y,0,y-Math.max(1,rise));glow.addColorStop(0,`rgba(255,210,116,${strength*.3})`);glow.addColorStop(1,'rgba(255,237,183,0)');
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineTo(b.x,b.y-rise);ctx.lineTo(a.x,a.y-rise);ctx.closePath();ctx.fillStyle=glow;ctx.fill();
+    }
+    for(let i=0;i<3;i++){
+      const t=reducedMotion.matches?(i+1)/4:(phase+i/3)%1;
+      ctx.globalAlpha=strength*(1-t);contour(rise*t);ctx.strokeStyle='#fff0b4';ctx.lineWidth=2;ctx.stroke();
+    }
+    // 固定在外沿的短光丝向上爬升，比整圈平行细线更容易读出流向。
+    if(!reducedMotion.matches)for(let i=0;i<4;i++)for(let j=1;j<=3;j++){
+      const a=points[i],b=points[(i+1)%4],t=(phase+i*.17+j*.23)%1,x=a.x+(b.x-a.x)*j/4,y=a.y+(b.y-a.y)*j/4-rise*t;
+      ctx.globalAlpha=strength*Math.sin(t*Math.PI);ctx.strokeStyle='#fff8dc';ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(x,y+3);ctx.lineTo(x,y-3);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+  ctx.restore();
+}
 function paintMap() {
   ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   ctx.clearRect(0, 0, width, height);
@@ -657,10 +716,11 @@ function paintMap() {
   showLoanPreview(goldDelta);
   const {cityPlots,streetLamps,wrecks,streetDressing,emptyPlots,debris,roadCells}=view.cityScene??=citySceneDescriptor(view);
   const constructionPreview=constructionPlan(view);
+  const upgrades=upgradePlan(view);
   cityTransitions=cityTransitions.filter(event=>effectTime-event.at<.8&&currentlyVisible(event.cell));
   const effectView=cameraView();
   defenseHits=defenseHits.filter(hit=>effectTime-hit.at<.65&&currentlyVisible(hit.cell));
-  const fx={hazeColor:backdrop,defenseHits:reducedMotion.matches||state.phase!=='battle'?[]:defenseHits.map(hit=>({...hit,ground:naturalGroundAt(state.layout,hit.x,hit.y,controlState.params.cellMeters),alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),night:nightMix,enemyFiguresPerGroup:controlState.params.enemyFiguresPerGroup,cameraKey:JSON.stringify(effectView),time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),pixelsAt:(x,y,z)=>viewPixelScale(x,y,z,effectView),observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
+  const fx={upgrades,upgradeStyle:controlState.params,hazeColor:backdrop,defenseHits:reducedMotion.matches||state.phase!=='battle'?[]:defenseHits.map(hit=>({...hit,ground:naturalGroundAt(state.layout,hit.x,hit.y,controlState.params.cellMeters),alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),night:nightMix,enemyFiguresPerGroup:controlState.params.enemyFiguresPerGroup,cameraKey:JSON.stringify(effectView),time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),pixelsAt:(x,y,z)=>viewPixelScale(x,y,z,effectView),observer:viewMode!=='top',reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
   const plantKey=(hover!==null&&tool==='wall'?'wall:'+hover:'')+(postGhost?'post:'+hover:'');
@@ -1079,6 +1139,7 @@ function paintMap() {
   }
   ctx.restore();
   // 信息随倍率分层；报价用屏幕字号，空间不足不再把多行缩成难读的小字。
+  drawUpgradeOutlines(upgrades,(x,y)=>({x:panX+x*size,y:panY+y*size}),controlState.params);
   const labelEnemies=[];
   const movingT=motion?Math.min(1,motion.elapsed/moveDuration()):0,movingEase=movingT*movingT*(3-2*movingT);
   for(const enemy of motion?.actors??state.enemies){
@@ -1282,7 +1343,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
       for(const id of coverage(hover,selectedWeapon().range,selectedWeapon().shape))if(currentlyVisible(id)){const [x,y]=xy(id),path=polygon(x,y,1,1,.035);if(path){ctx.fill(path);ctx.stroke(path);}}ctx.restore();
     }
   }
-  if(directBuild&&state.phase==='build'&&!view.dirty&&['production','housing','bank','bankUpgrade'].includes(tool)){
+  if(directBuild&&state.phase==='build'&&!view.dirty&&['production','housing','bank'].includes(tool)){
     // 资格随状态缓存；镜头重画只投影，不反复计算整城的经营/劳动力校验。
     view.economyCandidates??=new Map();
     if(!view.economyCandidates.has(tool))view.economyCandidates.set(tool,[...view.towers.plots].filter(([id,p])=>p.cells.some(cell=>view.raw.has(cell))&&p.cells.every(visibleCell)&&!(tool==='housing'?housingError(state,id):tool==='bank'?bankError(state,id):tool==='bankUpgrade'?bankUpgradeError(state,id):productionError(state,id))).map(([id,p])=>({id,site:p.site})));
@@ -1383,7 +1444,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     const [hx,hy]=xy(hover),x=whole?site.x:hx,y=whole?site.y:hy,w=whole?(site.width??site.size):1,h=whole?(site.height??site.size):1;
     const z=['build','long'].includes(tool)?(city3D.roofAt(productionId(hover,state),hx+.5,hy+.5)??0)+.03:.03;
     const corners=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(([x,y])=>point(x,y,z));
-    if(corners.every(p=>!p.hidden)&&!view.constructionPreview){ctx.save();ctx.beginPath();ctx.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));ctx.closePath();ctx.fillStyle=operationValid?'#92ffd42b':'#ff77662b';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=operationValid?'#b9f0d1':'#ff9a8c';ctx.stroke();ctx.restore();}
+    if(corners.every(p=>!p.hidden)&&!view.constructionPreview&&tool!=='bankUpgrade'){ctx.save();ctx.beginPath();ctx.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));ctx.closePath();ctx.fillStyle=operationValid?'#92ffd42b':'#ff77662b';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=operationValid?'#b9f0d1':'#ff9a8c';ctx.stroke();ctx.restore();}
     const center=point(x+w/2,y+h/2,z);
     if(!center.hidden&&weaponSelected){const ground=point(hx+.5,hy+.5,.025);ctx.save();ctx.strokeStyle='#d3eed7b0';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(ground.x,ground.y);ctx.lineTo(center.x,center.y);ctx.stroke();ctx.restore();}
     if(site&&['production','housing'].includes(tool)&&(operationValid||view.constructionPreview)){const q=economyBuildQuote(state,hover,tool);metricBadge(tool==='housing'?'residents':'coin','+'+(tool==='housing'?q.residents:q.income),center.x,center.y-17,tool==='housing'?'#f4d3a2':'#bff5ce');}
@@ -1392,6 +1453,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     ctx.save();ctx.strokeStyle='#b5e3ed';ctx.lineWidth=2;ctx.setLineDash([5,4]);ctx.beginPath();
     for(const [x,y,nx,ny] of controlBoundary(new Set(view.constructionPreview.cells))){const a=point(x,y,.035),b=point(nx,ny,.035);if(!a.hidden&&!b.hidden){ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);}}ctx.stroke();ctx.restore();
   }
+  drawUpgradeOutlines(fx.upgrades,point,view.controlState.params);
   // 自由/斜视建设也给出同一笔真实结果，反馈随世界位置投影，不把画面回正。
   if(placementFx){
     const f=placementFx,t=Math.min(1,(performance.now()-f.start)/750),[x,y]=xy(f.id),z=city3D.roofAt(productionId(f.id,state),x+f.size/2,y+(f.height??f.size)/2)+.04;
@@ -1678,7 +1740,7 @@ function openBankUpgrade(id){
     const number=document.createElement('span');number.textContent=kind==='capacity'?`${money(q.before.capacity)} → ${money(q.after.capacity)}`:kind==='deposit'?`${q.before.depositPercent}% → ${q.after.depositPercent}%`:`${q.before.loanPercent}% → ${q.after.loanPercent}%`;value.append(number);
     button.disabled=!!error;button.title='';blockedActionReasons.set(button.id,error);
   }
-  closeResourceDetails();$('bankUpgradeDialog').showModal();$('bankUpgradeCancel').focus();draw();
+  closeResourceDetails();$('bankUpgradeDialog').showModal();$('bankUpgradeCancel').focus();sound.play('switchOn');draw();
 }
 // 取消不支付、不选默认项；关闭后退出升级工具并清除费用预览。
 function finishBankUpgradeClose(){bankUpgradeTarget=bankUpgradeHover=null;tool=null;hover=null;pointerSample=null;canvas.focus({preventScroll:true});update();}
@@ -1699,7 +1761,8 @@ for(const button of document.querySelectorAll('[data-bank-upgrade]')){
     if(bankUpgradeTarget===null)return;
     const id=bankUpgradeTarget,error=paramsDirty()?'请先应用或取消实验参数预览。':upgradeBank(state,id,button.dataset.bankUpgrade);
     if(error){showTopNotice(error);return;}
-    sound.play('build');cancelBankUpgrade();notify('银行升级完成。');pulse($('budget'),'#ffe1a0');update();
+    upgradePulse=reducedMotion.matches?null:{id,at:performance.now()};
+    sound.play('upgrade');cancelBankUpgrade();notify('银行升级完成。');pulse($('budget'),'#ffe1a0');update();
   };
 }
 function updateBankDetails(){
@@ -1891,7 +1954,7 @@ function paramsEditor(params,scope='all') {
       const choices=name==='shape'?[['square','方形'],['diamond','菱形']]:name==='freeProjection'?[['orthographic','正交'],['perspective','透视']]:['returnToTopOnAction','showRenderStats'].includes(name)?[['true','开启'],['false','关闭']]:null;
       const input=document.createElement(choices?'select':'input');
       if(choices)for(const [value,text] of choices){const option=document.createElement('option');option.value=value;option.textContent=text;input.append(option);}
-      else{input.type='number';input.min=min;input.max=max;input.step=['productionIncomePerCell','productionSmallCostFloor','productionMaxDensity','bankDepositPercent','bankLoanPercent','bankUpgradeRatePoints','bankLoanMinPercent','bankRateMaxPercent','enemyFogFadeCells','controlBorderInnerCells','controlBorderOuterCells','controlBorderLinePx'].includes(name)||name.endsWith('Multiplier')?0.1:1;}
+      else{input.type='number';input.min=min;input.max=max;input.step=['productionIncomePerCell','productionSmallCostFloor','productionMaxDensity','bankDepositPercent','bankLoanPercent','bankUpgradeRatePoints','bankLoanMinPercent','bankRateMaxPercent','enemyFogFadeCells','controlBorderInnerCells','controlBorderOuterCells','controlBorderLinePx','upgradeFlowHeightMeters'].includes(name)||name.endsWith('Multiplier')?0.1:1;}
       if(name==='bankUpgradeCapacityMultiplier')input.step=1;
       input.value=String(values[name]);input.dataset.param=prefix+name;input.setAttribute('aria-label',`${title} ${label}`);
       input.addEventListener('input',()=>refreshParams(target==='visualParams'?'visual':'gameplay'));wrap.append(input);row.append(wrap);
@@ -1911,6 +1974,7 @@ function paramsEditor(params,scope='all') {
   fields('瞭望塔',params,'',[['outpostCost','造价',1,1000],['outpostWorkers','每座用工',0,100],['outpostRadius','半径',1,30],['outpostMinDistance','最小间距',1,30]]);
   for(const type of ['A','B'])fields(`武器 ${type}`,params.weapons[type],type+'.',[['shape','范围形状'],['range','半径',1,8],['power','每拍火力',1,99],['cost','价格',1,1000]]);
   fields('城市照明',params,'',[['streetLightBudget','真实路灯预算（盏，0关闭）',0,64]],'visualParams');
+  fields('升级预览',params,'',[['upgradeFlowHeightMeters','光流高度（米，0关闭光幕）',0,12],['upgradeFlowMinPx','投影最小上流距离（像素）',0,40],['upgradeFlowCycleMs','上流周期（毫秒）',500,6000],['upgradeFlowOpacity','光流强度%',0,100]],'visualParams');
   fields('地图比例尺',params,'',[['cellMeters','每格距离（米）',1,1000],['mapMaxCellPx','最大格宽（像素）',48,256]],'visualParams');
   fields('观察镜头',params,'',[['obliqueElevationDegrees','斜视俯仰角（度）',25,80],['freeProjection','自由投影'],['returnToTopOnAction','操作返回俯视'],['freePerspectiveFovDegrees','透视FOV（度）',20,60]],'visualParams');
   fields('键盘镜头',params,'',[['keyboardPanSpeedPx','WASD速度（像素/秒，0关闭）',0,1200]],'visualParams');
@@ -1946,6 +2010,7 @@ function refreshParams(scope='all'){
 }
 function clearPlayback() {
   cancelDayEnd();
+  upgradePulse=null;
   dayEndReturn=null;
   nightVisualTick=0;
   forecastPointerSource=null;forecastFocusSource=null;mapPointerSource=null;
@@ -2482,6 +2547,7 @@ function frame(now){
   if(receiptUntil&&now>=receiptUntil){receiptUntil=0;$('economyReceipt').hidden=true;}
   if(gainUntil&&now>=gainUntil){gainUntil=0;recentGain=0;$('moneyGain').textContent='';}
   if(placementFx){if(now-placementFx.start>=750)placementFx=null;draw();}
+  if(upgradePulse){if(now-upgradePulse.at>=800)upgradePulse=null;draw();}
   if(impactAge<IMPACT_MS){impactAge=Math.min(IMPACT_MS,impactAge+dt);draw();}
   if(!nightOutro&&state.phase==='battle'&&(!paused||motion?.singleStep)){
     if(motion){motion.elapsed+=dt;if(motion.elapsed>=moveDuration())advance();else draw();}

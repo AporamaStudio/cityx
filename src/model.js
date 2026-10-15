@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=89';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=93';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -290,18 +290,18 @@ export function bankUpgradeQuote(state,id,kind){
   if(funds(state)-cost<0)candidate.debtInterestCap=Math.max(funds(state)<0?state.debtInterestCap??0:0,before.capacity);
   return {cost,balance:funds(state)-cost,before,after:bankFinance(candidate),localBefore:bankCapacityFor(state,id),localAfter:bankCapacityFor(candidate,id)};
 }
-export function bankUpgradeError(state,id,kind=null){
+export function bankUpgradeError(state,id,kind=null,{ignoreResources=false}={}){
   if(state.phase!=='build'||state.day<2)return '只能在白天升级银行。';
   const bank=bankAt(state,id),record=state.banks.get(bank);
   if(!record)return '请先恢复已发现的银行。';
   if(record.upgrade)return '这座银行已完成升级。';
   if(!bankActive(state,bank)||!bankDiscovered(state,bank))return '银行须受控并正常运营才能升级。';
-  if(!canAfford(state,state.params.bankUpgradeCost))return buildResourceStatus(state,state.params.bankUpgradeCost).message;
+  if(!ignoreResources&&!canAfford(state,state.params.bankUpgradeCost))return buildResourceStatus(state,state.params.bankUpgradeCost).message;
   if(kind!==null){
     if(!['capacity','deposit','loan'].includes(kind))return '请选择一种银行升级。';
     const q=bankUpgradeQuote(state,bank,kind),field=kind==='capacity'?'capacity':kind==='deposit'?'depositPercent':'loanPercent';
     if(q.before[field]===q.after[field])return '该项已达上限或下限，升级不会生效。';
-  }else if(['capacity','deposit','loan'].every(k=>bankUpgradeError(state,bank,k)))return '当前没有可用的银行升级。';
+  }else if(['capacity','deposit','loan'].every(k=>bankUpgradeError(state,bank,k,{ignoreResources})))return '当前没有可用的银行升级。';
   return '';
 }
 export function upgradeBank(state,id,kind){
@@ -608,6 +608,9 @@ export function validateVisualParams(params){
   if(!['controlBorderInnerCells','controlBorderOuterCells'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=2))return '控制边缘内/外渐隐宽度须为 0–2 格，0 关闭，可使用小数。';
   if(!integer(params.controlBorderInnerOpacity,0,60)||!integer(params.controlBorderOuterOpacity,0,60))return '控制边缘内/外色带强度须为 0–60% 整数。';
   if(!Number.isFinite(params.controlBorderLinePx)||params.controlBorderLinePx<1||params.controlBorderLinePx>6)return '控制边缘主线粗细须为 1–6 像素，可使用小数。';
+  if(!Number.isFinite(params.upgradeFlowHeightMeters)||params.upgradeFlowHeightMeters<0||params.upgradeFlowHeightMeters>12)return '升级光流高度须为0–12米，0关闭光幕。';
+  if(!integer(params.upgradeFlowMinPx,0,40))return '升级光流投影最小距离须为0–40像素整数。';
+  if(!integer(params.upgradeFlowCycleMs,500,6000)||!integer(params.upgradeFlowOpacity,0,100))return '升级光流周期须为500–6000毫秒，强度为0–100%整数。';
   if(!integer(params.campWarningPercent,0,100))return '火光危急阈值须为 0–100% 整数，0 关闭持续警示。';
   if(!Number.isFinite(params.cloudSpeedMultiplier)||params.cloudSpeedMultiplier<0||params.cloudSpeedMultiplier>3)return '云层流速倍率须为 0–3，0 静止。';
   if(!integer(params.fogS12,1,20)||!integer(params.fogS23,1,20))return 'S12/S23 雾带距离须为 1–20 格整数。';
