@@ -4,7 +4,7 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
 import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=4';
-import {createCity3D} from './city-3d.js?v=67';
+import {createCity3D} from './city-3d.js?v=68';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -17,7 +17,7 @@ import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawCo
 import {drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=12';
 import {createGameAudio} from './audio.js?v=10';
 import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=89';
-import {buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,bankContribution,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=111';
+import {economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,bankContribution,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=112';
 import {generateCityMap} from './city-map.js?v=14';
 import {readMapSettings} from './map-settings.js?v=2';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -523,6 +523,16 @@ function citySceneDescriptor(view){
   const roadCells=state.layout.tiles.flatMap((type,id)=>type==='road'&&visibleCell(id)?[id]:[]);
   return {cityPlots,streetLamps,wrecks,streetDressing,emptyPlots,debris,roadCells};
 }
+// 方案只读实际选址，按地块/工具缓存；不把预览写进控制、经营、照明或寻路状态。
+function constructionPlan(view){
+  const plot=hover===null?null:productionId(hover,state),cacheKey=tool+':'+plot;
+  if(view.constructionKey!==cacheKey){
+    const overlay=view.towers.plots.get(plot);
+    view.constructionPreview=!view.dirty&&!state.result&&overlay?.cells.every(visibleCell)&&overlay.cells.some(currentlyVisible)?economyConstructionPreview(state,hover,tool):null;
+    view.constructionKey=cacheKey;
+  }
+  return view.constructionPreview;
+}
 function paintMap() {
   ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   ctx.clearRect(0, 0, width, height);
@@ -646,6 +656,7 @@ function paintMap() {
   for(const frame of enemyFrames){frame.ground=naturalGroundAt(state.layout,frame.x+.5,frame.y+.5,controlState.params.cellMeters);frame.fogAlpha=mapFogEnabled()?view.visibility.enemyAlpha(frame.rawX+.5,frame.rawY+.5):1;frame.alpha*=frame.fogAlpha;if(frame.enemy.hp===0&&!currentlyVisible(frame.enemy.id))frame.alpha=0;}
   showLoanPreview(goldDelta);
   const {cityPlots,streetLamps,wrecks,streetDressing,emptyPlots,debris,roadCells}=view.cityScene??=citySceneDescriptor(view);
+  const constructionPreview=constructionPlan(view);
   cityTransitions=cityTransitions.filter(event=>effectTime-event.at<.8&&currentlyVisible(event.cell));
   const effectView=cameraView();
   defenseHits=defenseHits.filter(hit=>effectTime-hit.at<.65&&currentlyVisible(hit.cell));
@@ -658,8 +669,8 @@ function paintMap() {
     view.plants=emptyLandPlants(emptyPlots,{width:SIZE,cellMeters:controlState.params.cellMeters,visible:visibleCell,occupied:plantOccupied});view.plantKey=plantKey;
   }
   const plants=view.plants;
-  const plantPreview=hover!==null&&['production','housing'].includes(tool)?productionId(hover,state):null;
-  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,plants,plantPreview,naturalOccupied:[...state.playerWalls,...state.outposts.keys()],roadCells,fx});
+  const plantPreview=constructionPreview?.id??null;
+  const cityFrame=city3D?.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,plants,plantPreview,constructionPreview,naturalOccupied:[...state.playerWalls,...state.outposts.keys()],roadCells,fx});
   const eligibleCells=viewMode==='top'&&weaponPlacementReady?view.towers.eligible(weaponType()):new Set();
   if(viewMode==='top'){
   // 真正的外围模型只画在行动地图外；未知城内继续受原信息遮罩约束。
@@ -754,6 +765,7 @@ function paintMap() {
     if(view.sourceSites.has(id)){if(cityFrame&&city3D.has(id)){ctx.save();ctx.beginPath();ctx.rect(x,y,n,m);ctx.clip();ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}else{ctx.fillStyle=nightMix>.5?'#322c36':'#67504f';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);}continue;}
     if(p.role==='camp'){if(!drawCityFacility('camp-plaza',x,y,n,m)){ctx.fillStyle=nightMix>.5?'#49433a':'#ad9468';ctx.fillRect(x+.08,y+.08,n-.16,m-.16);}ctx.strokeStyle='#e8c481';ctx.lineWidth=.10;ctx.strokeRect(x+.12,y+.12,n-.24,m-.24);continue;}
     if(empty){
+      if(constructionPreview?.id===id&&cityFrame){ctx.save();ctx.beginPath();for(const cell of constructionPreview.cells){const [cx,cy]=xy(cell);ctx.rect(cx,cy,1,1);}ctx.clip();ctx.drawImage(cityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
       if(facilityFrame){ctx.save();ctx.beginPath();for(const cell of overlay.cells)if(visibleCell(cell)){const [cx,cy]=xy(cell);ctx.rect(cx,cy,1,1);}ctx.clip();ctx.drawImage(facilityFrame,-panX/size,-panY/size,width/size,height/size);ctx.restore();}
       ctx.strokeStyle=selected?'#fff0ae':'#a8d5ad';ctx.lineWidth=selected?.12:.06;ctx.setLineDash([.2,.12]);ctx.strokeRect(x+.08,y+.08,n-.16,m-.16);ctx.setLineDash([]);continue;}
     // 按物理 footprint 画建筑，屋顶炮位保留建筑底色；经营面积独立计算。
@@ -878,6 +890,10 @@ function paintMap() {
       }
     }
     const [x,y] = xy(hover); ctx.strokeStyle = error ? '#ff8078' : '#d8f9e8'; ctx.lineWidth = .08; ctx.strokeRect(x+.04,y+.04,.92,.92);
+  }
+  if(constructionPreview&&cityFrame){
+    ctx.save();ctx.strokeStyle='#b5e3ed';ctx.lineWidth=2/size;ctx.setLineDash([5/size,4/size]);ctx.beginPath();
+    for(const [x,y,nx,ny] of controlBoundary(new Set(constructionPreview.cells))){ctx.moveTo(x,y);ctx.lineTo(nx,ny);}ctx.stroke();ctx.restore();
   }
   const label = (text,x,y,color,font=.4) => {ctx.fillStyle=color;ctx.font=`600 ${font}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,x,y);};
   const fullFire=$('fullFire').checked,numbersVisible=fullFire||size>=controlState.params.fireNumbersMinCellPx;
@@ -1367,10 +1383,14 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
     const [hx,hy]=xy(hover),x=whole?site.x:hx,y=whole?site.y:hy,w=whole?(site.width??site.size):1,h=whole?(site.height??site.size):1;
     const z=['build','long'].includes(tool)?(city3D.roofAt(productionId(hover,state),hx+.5,hy+.5)??0)+.03:.03;
     const corners=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(([x,y])=>point(x,y,z));
-    if(corners.every(p=>!p.hidden)){ctx.save();ctx.beginPath();ctx.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));ctx.closePath();ctx.fillStyle=operationValid?'#92ffd42b':'#ff77662b';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=operationValid?'#b9f0d1':'#ff9a8c';ctx.stroke();ctx.restore();}
+    if(corners.every(p=>!p.hidden)&&!view.constructionPreview){ctx.save();ctx.beginPath();ctx.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));ctx.closePath();ctx.fillStyle=operationValid?'#92ffd42b':'#ff77662b';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=operationValid?'#b9f0d1':'#ff9a8c';ctx.stroke();ctx.restore();}
     const center=point(x+w/2,y+h/2,z);
     if(!center.hidden&&weaponSelected){const ground=point(hx+.5,hy+.5,.025);ctx.save();ctx.strokeStyle='#d3eed7b0';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(ground.x,ground.y);ctx.lineTo(center.x,center.y);ctx.stroke();ctx.restore();}
-    if(site&&['production','housing'].includes(tool)&&operationValid){const q=economyBuildQuote(state,hover,tool);metricBadge(tool==='housing'?'residents':'coin','+'+(tool==='housing'?q.residents:q.income),center.x,center.y-17,tool==='housing'?'#f4d3a2':'#bff5ce');}
+    if(site&&['production','housing'].includes(tool)&&(operationValid||view.constructionPreview)){const q=economyBuildQuote(state,hover,tool);metricBadge(tool==='housing'?'residents':'coin','+'+(tool==='housing'?q.residents:q.income),center.x,center.y-17,tool==='housing'?'#f4d3a2':'#bff5ce');}
+  }
+  if(view.constructionPreview){
+    ctx.save();ctx.strokeStyle='#b5e3ed';ctx.lineWidth=2;ctx.setLineDash([5,4]);ctx.beginPath();
+    for(const [x,y,nx,ny] of controlBoundary(new Set(view.constructionPreview.cells))){const a=point(x,y,.035),b=point(nx,ny,.035);if(!a.hidden&&!b.hidden){ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);}}ctx.stroke();ctx.restore();
   }
   // 自由/斜视建设也给出同一笔真实结果，反馈随世界位置投影，不把画面回正。
   if(placementFx){

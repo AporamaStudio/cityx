@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {buildResourceStatus,economyBuildAvailability,population,createCampaign,key,productionCells,productionQuote,housingQuote,economyBuildQuote,buildProduction,buildHousing,clearPlot,buildTower,removeTower,changeWall,embeddingQuote,funds,demolitionQuote,validateParams,beginBattle,restoreNight} from '../src/model.js';
+import {economyConstructionPreview,buildResourceStatus,economyBuildAvailability,population,createCampaign,key,productionCells,productionQuote,housingQuote,economyBuildQuote,buildProduction,buildHousing,clearPlot,buildTower,removeTower,changeWall,embeddingQuote,funds,demolitionQuote,validateParams,beginBattle,restoreNight} from '../src/model.js';
 
 const id=key(15,22);
 function setup(width=2,height=2,type='production',kind='building'){
@@ -122,4 +122,25 @@ test('资源提示同时列出钱与工人缺口，钱或人补足后独立消�
  assert.match(availability.reason,/工人不足/);assert.doesNotMatch(availability.reason,/资金不足/);
  s.params.initialPopulation=q.labor;assert.equal(economyBuildAvailability(s,'production').enabled,true);
  assert.equal(population(s).free,q.labor);assert.equal(buildResourceStatus(s,q.cost,q.labor).message,'');
+});
+
+test('3D建成方案只跳过资源条件，预览不改变城市；空地随工具切换用途',()=>{
+ const s=setup();s.params.budget=0;s.params.initialPopulation=0;const before=structuredClone(s);
+ const plan=economyConstructionPreview(s,id,'production');
+ assert.equal(plan.status,'plan');assert.equal(plan.powered,false);assert.equal(plan.cells.length,4);assert.deepEqual([...plan.mask],[1,1,1,1]);
+ assert.deepEqual(s,before);assert.equal(economyConstructionPreview(s,id,'housing'),null);
+ const open=setup(2,2,'production','open');
+ assert.equal(economyConstructionPreview(open,id,'production').type,'production');assert.equal(economyConstructionPreview(open,id,'housing').type,'housing');
+ s.params.controlRadius=1;assert.equal(economyConstructionPreview(s,id,'production'),null);
+ open.params.controlRadius=6;assert.equal(economyConstructionPreview(open,id,'housing'),null);
+ open.day=1;assert.equal(economyConstructionPreview(open,id,'housing'),null);
+ assert.equal(economyConstructionPreview(open,id,null),null);assert.equal(economyConstructionPreview(open,null,'production'),null);
+});
+
+test('3D补建方案只覆盖新增格，不染已有经营与炮位，完成后收起',()=>{
+ const s=setup(3,3);assert.equal(buildProduction(s,id),'');assert.equal(economyConstructionPreview(s,id,'production'),null);
+ assert.equal(buildTower(s,id,'A'),'');assert.equal(removeTower(s,id),'');
+ const cannon=key(17,22);assert.equal(buildTower(s,cannon,'A'),'');
+ const plan=economyConstructionPreview(s,id,'production');assert.deepEqual(plan.cells,[id]);assert.deepEqual([...plan.mask],[1,0,0,0,0,0,0,0,0]);
+ assert.equal(buildProduction(s,id),'');assert.equal(economyConstructionPreview(s,id,'production'),null);assert.equal(s.towers.get(cannon),'A');
 });

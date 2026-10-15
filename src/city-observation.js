@@ -41,7 +41,7 @@ export function createCityObservation(scene,renderer){
     pick(x,y,width,height,view){
       setCamera(view);pointer.set(x/width*2-1,1-y/height*2);ray.setFromCamera(pointer,camera);pickMeshes.length=0;hits.length=0;
       // 在检测三角面之前排除透明特效/装饰；根层为分层合成临时隐藏，不能据此排除楼体。
-      for(const node of pickCandidates)if(!node.material.transparent&&(!node.userData.cityDecoration||node.userData.cityGroundSurface))pickMeshes.push(node);
+      for(const node of pickCandidates)if(!node.userData.cityConstructionPreview&&!node.material.transparent&&(!node.userData.cityDecoration||node.userData.cityGroundSurface))pickMeshes.push(node);
       const hit=ray.intersectObjects(pickMeshes,false,hits)[0];return hit?{x:hit.point.x,y:hit.point.z}:null;
     },
     render({ground,groundVersion,geometryVersion,mist,mistBounds,view,background,objects,enemies,hasEnemies,effects}){

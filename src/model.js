@@ -997,6 +997,16 @@ export function economyBuildAvailability(state,type){
   const shortage=gold&&workers?'资金与工人不足':gold?'资金不足':workers?'工人不足':'金币与工人条件未同时满足';
   return {enabled,target,reason:enabled?'':target?`有可建${name}地块，但${shortage}`:`控制区内没有可建${name}的地块`};
 }
+// 建成方案只读真实选址条件；缺钱/缺工人仍可看效果，补建只标本次新增经营格。
+export function economyConstructionPreview(state,id,type){
+  if(!['production','housing'].includes(type)||!Number.isInteger(id))return null;
+  if((type==='housing'?housingError:productionError)(state,id,{ignoreResources:true}))return null;
+  const site=productionSite(id,state),plot=productionId(id,state);
+  const existing=new Set((type==='housing'?state.housing:state.production).has(plot)?contentCells(state,id):[]);
+  const cells=availableCells(state,id).filter(cell=>!existing.has(cell)),w=site.width??site.size,h=site.height??site.size;
+  const mask=new Uint8Array(w*h);for(const cell of cells){const [x,y]=xy(cell);mask[(y-site.y)*w+x-site.x]=1;}
+  return {id:plot,x:site.x,y:site.y,w,h,type,status:'plan',powered:false,cellMeters:state.params.cellMeters,cells,mask};
+}
 export function buildProduction(state,id) {
   const error=productionError(state,id);if(error)return error;
   const plot=productionId(id,state),q=economyBuildQuote(state,id,'production');recordBorrowing(state,q.cost);addEconomyInvestment(state,id,'production',q);

@@ -59,3 +59,21 @@ test('静态变换保留屋顶拾取和包围盒，镜头帧不重算矩阵，�
   root.removeFromParent();const replacement=new THREE.Group();replacement.position.set(12,0,4);replacement.add(new THREE.Mesh(new THREE.BoxGeometry(2,2,2),new THREE.MeshStandardMaterial()));scene.add(replacement);freezeCityTransforms(replacement);
   assert.equal(new THREE.Box3().setFromObject(replacement).getCenter(new THREE.Vector3()).x,12);
 });
+
+test('3D建设方案共用单色实体材质，蒙版可关闭并保留原楼材质与着色回调',async()=>{
+ const {constructionAppearance,constructionMaskTexture,bindConstructionMask,setConstructionMask}=await loadBrowserModule('city-construction-preview.js');
+ const root=new THREE.Group(),texture=new THREE.Texture(),old=new THREE.MeshStandardMaterial({map:texture,color:'#aabbcc'});
+ root.add(new THREE.Mesh(new THREE.BoxGeometry(),old),new THREE.Mesh(new THREE.BoxGeometry(),old));
+ let disposed=0;old.addEventListener('dispose',()=>disposed++);
+ const mask=constructionAppearance(root),[a,b]=root.children;
+ assert.equal(disposed,1);assert.equal(a.material,b.material);assert.equal(a.material.map,null);assert.equal(a.material.transparent,false);assert.equal(a.material.opacity,1);assert.equal(a.castShadow,false);assert.equal(a.userData.cityConstructionPreview,true);
+ const plan={x:15,y:22,w:2,h:2,mask:new Uint8Array([1,0,0,1])},cells=constructionMaskTexture(plan);
+ assert.deepEqual([...cells.image.data],[255,0,0,255,0,0,0,255,0,0,0,255,255,0,0,255]);
+ setConstructionMask(mask,plan,cells);assert.equal(mask.active.value,1);assert.equal(mask.cells.value,cells);assert.deepEqual(mask.bounds.value.toArray(),[15,22,2,2]);
+ const original=new THREE.Mesh(new THREE.BoxGeometry(),old);let previousCalled=false;old.onBeforeCompile=()=>{previousCalled=true;};
+ const base=bindConstructionMask(original,false),shader={uniforms:{},vertexShader:'#include <begin_vertex>',fragmentShader:'#include <clipping_planes_fragment>'};
+ old.onBeforeCompile(shader);assert.equal(previousCalled,true);assert.equal(old.map,texture);assert.equal(shader.uniforms.cityPlanSide.value,0);assert.equal(old.transparent,false);
+ setConstructionMask(base,plan,cells);assert.equal(shader.uniforms.cityPlanActive.value,1);
+ setConstructionMask(base,null);assert.equal(shader.uniforms.cityPlanActive.value,0);assert.equal(shader.uniforms.cityPlanCells.value,null);
+ cells.dispose();a.material.dispose();texture.dispose();
+});
