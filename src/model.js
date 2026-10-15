@@ -256,18 +256,25 @@ export function bankContribution(state,id){
     before:kind==='deposit'?baseline.depositPercent:baseline.loanPercent,after:kind==='deposit'?finance.depositPercent:finance.loanPercent};
 }
 export const canAfford=(state,cost)=>Number.isFinite(cost)&&cost>=0&&(cost===0||funds(state)-cost>=-bankFinance(state).capacity-1e-9);
+// 报价与拒绝原因共用资源缺口；金币包含当前可用信用，两种不足同时说明。
+export function buildResourceStatus(state,cost,labor=0){
+  const available=availableFunds(state),free=population(state).free,gold=cost>0&&!canAfford(state,cost),workers=free<labor;
+  const reasons=[];
+  if(gold)reasons.push(`资金不足：需 ${cost} 金币，可用 ${available}，缺 ${Math.max(0,cost-available)}`);
+  if(workers)reasons.push(`劳动力不足：需 ${labor} 工人，空闲 ${free}，缺 ${labor-free}`);
+  return {gold,workers,cost,labor,available,free,message:reasons.join('；')};
+}
 // 每次主动借款记录该债务周期实际使用过的额度，停业不会让贷款变免息；还清后重新起算。
 function recordBorrowing(state,cost){
   const balance=funds(state);if(balance-cost<0)state.debtInterestCap=Math.max(balance<0?state.debtInterestCap??0:0,bankFinance(state).capacity);
 }
 function clearRepaidDebt(state){if(funds(state)>=0)state.debtInterestCap=0;}
-export function bankError(state,id){
+export function bankError(state,id,{ignoreResources=false}={}){
   if(state.phase!=='build'||state.day<2)return '第2天起可在白天恢复银行。';
   const bank=bankAt(state,id);if(bank===null)return '请选择地图上已有的银行。';
   if(!isExplored(state,id)||!productionControlled(state,bank))return '银行须进入控制区才能恢复。';
   if(state.banks.has(bank))return '银行已经恢复。';
-  if(population(state).free<state.params.bankWorkers)return '工人不足，无法恢复银行。';
-  return canAfford(state,state.params.bankRestoreCost)?'':'金币与可用贷款不足，无法恢复银行。';
+  return ignoreResources?'':buildResourceStatus(state,state.params.bankRestoreCost,state.params.bankWorkers).message;
 }
 export function restoreBank(state,id){
   const error=bankError(state,id);if(error)return error;
@@ -289,7 +296,7 @@ export function bankUpgradeError(state,id,kind=null){
   if(!record)return '请先恢复已发现的银行。';
   if(record.upgrade)return '这座银行已完成升级。';
   if(!bankActive(state,bank)||!bankDiscovered(state,bank))return '银行须受控并正常运营才能升级。';
-  if(!canAfford(state,state.params.bankUpgradeCost))return '金币与可用贷款不足，无法升级银行。';
+  if(!canAfford(state,state.params.bankUpgradeCost))return buildResourceStatus(state,state.params.bankUpgradeCost).message;
   if(kind!==null){
     if(!['capacity','deposit','loan'].includes(kind))return '请选择一种银行升级。';
     const q=bankUpgradeQuote(state,bank,kind),field=kind==='capacity'?'capacity':kind==='deposit'?'depositPercent':'loanPercent';
@@ -503,8 +510,7 @@ export function outpostError(state,id) {
   if(state.towers.has(id)||state.playerWalls.has(id)||state.outposts.has(id)||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '该格已有设施或保留目标。';
   const [x,y]=xy(id),distance=state.params.outpostMinDistance;
   if([...state.outposts.keys()].some(anchor=>{const [ax,ay]=xy(anchor);return Math.hypot(x-ax,y-ay)<distance;}))return `瞭望塔间距至少 ${distance} 格。`;
-  if(population(state).free<state.params.outpostWorkers)return `劳动力不足：瞭望塔需要 ${state.params.outpostWorkers} 人，空闲 ${population(state).free} 人；请先建设住房。`;
-  return !canAfford(state,state.params.outpostCost)?'资金不足，无法建造瞭望塔。':'';
+  return buildResourceStatus(state,state.params.outpostCost,state.params.outpostWorkers).message;
 }
 export function buildOutpost(state,id) {
   const error=outpostError(state,id);if(error)return error;
@@ -552,7 +558,7 @@ export function placementError(state, id, type = 'A', {ignoreFunds=false}={}) {
   const siteError=towerSiteError(state,id);if(siteError)return siteError;
   const embed=embeddingError(state,id);if(embed)return embed;
   // 建造资格共用现金与当前银行信用，夜间包含加急费。
-  if (!ignoreFunds&&!canAfford(state,towerBuildCost(state,type))) return '预算不足，无法架设炮台。';
+  if (!ignoreFunds&&!canAfford(state,towerBuildCost(state,type))) return '预算不足；'+buildResourceStatus(state,towerBuildCost(state,type)).message;
   return '';
 }
 
@@ -569,7 +575,7 @@ export function wallPreview(state, id, remove = false) {
   else if (!remove && (state.towers.has(id)||state.outposts.has(id))) error = '这里已有炮塔或瞭望塔，不能叠建墙。';
   else if (!remove && (state.walls.has(id)||state.playerWalls.has(id))) error = '这里已有墙或墙的废墟，请选择修复或拆除。';
   else if (!remove && (id === state.camp || reservedSources(state).some(s=>key(s.x,s.y)===id))) error = '不能覆盖篝火或敌人源头。';
-  else if (!remove && !canAfford(state,state.params.wallCost)) error = '资金不足，墙与炮台共用资金。';
+  else if (!remove && !canAfford(state,state.params.wallCost)) error = buildResourceStatus(state,state.params.wallCost).message;
   if (error) return { error, field: state.field };
   const walls = new Set(state.walls);
   if (remove) walls.delete(id); else walls.add(id);
@@ -930,14 +936,14 @@ export function population(state){
   const working=[...state.production.keys()].reduce((n,id)=>n+productionLabor(state,id),0)+state.outposts.size*state.params.outpostWorkers+bankWorkers(state);
   return {total,working,free:total-working};
 }
-export function housingError(state,id){
+export function housingError(state,id,{ignoreResources=false}={}){
   if(state.phase!=='build'||state.day<2)return '第 2 天起可在白天建设住房。';
   const error=plotBuildError(state,id);if(error)return error;
   if(plotContent(state,id).type&&plotContent(state,id).type!=='housing')return '该街区已有其他设施或生产废墟；请先清空原用途。';
   if(economyBuildQuote(state,id,'housing').added<=0)return '该街区已有完整住房，或没有可用空位。';
   if(plotContent(state,id).status==='ruin'&&plotContent(state,id).type!=='housing')return '生产废墟只能恢复生产；如需换建住房，请先拆成空地。';
   if(!productionControlled(state,id))return plotContent(state,id).status==='empty'?'空地须逐格完整受控，才能新建住房。':'基础控制范围须碰到建筑至少一格，才能恢复住房。';
-  return !canAfford(state,economyBuildQuote(state,id,'housing').cost)?'资金不足，无法建设住房。':'';
+  return ignoreResources?'':buildResourceStatus(state,economyBuildQuote(state,id,'housing').cost).message;
 }
 export function buildHousing(state,id){
   const error=housingError(state,id);if(error)return error;
@@ -965,7 +971,7 @@ export function productionControlled(state,id) {
 }
 export const productionActive=(state,id)=>productionControlled(state,id);
 export const expectedIncome=state=>[...state.production.keys()].filter(id=>productionActive(state,id)).reduce((sum,id)=>sum+productionQuote(state,id).income,0);
-export function productionError(state,id) {
+export function productionError(state,id,{ignoreResources=false}={}) {
   if(state.phase!=='build')return '只能在建设阶段恢复生产。';
   if(state.day<2)return '第 2 天开放经营与地块拆除。';
   const error=plotBuildError(state,id);if(error)return error;
@@ -973,9 +979,23 @@ export function productionError(state,id) {
   if(['outpost','housing'].includes(plotContent(state,id).type))return '该地块已有其他设施，请先拆除。';
   if(economyBuildQuote(state,id,'production').added<=0)return '该地点已经恢复生产，或没有可用空位。';
   if(!productionControlled(state,id))return plotContent(state,id).status==='empty'?'空地须逐格完整受控，才能新建生产。':'基础控制范围须碰到建筑至少一格，才能恢复生产。';
-  const required=economyBuildQuote(state,id,'production').labor,available=population(state).free;
-  if(available<required)return `劳动力不足：需要 ${required} 人，空闲 ${available} 人；请先建设住房。`;
-  return !canAfford(state,economyBuildQuote(state,id,'production').cost)?'资金不足，无法恢复生产。':'';
+  const q=economyBuildQuote(state,id,'production');
+  return ignoreResources?'':buildResourceStatus(state,q.cost,q.labor).message;
+}
+// 按真实受控、已探索和剩余空间筛选；区外低价地块不能让经营按钮保持可用。
+export function economyBuildAvailability(state,type){
+  const errorFor=type==='housing'?housingError:productionError,candidates=[];
+  for(const p of state.sites){
+    const id=key(p.x,p.y);if(errorFor(state,id,{ignoreResources:true}))continue;
+    const quote=economyBuildQuote(state,id,type),resources=buildResourceStatus(state,quote.cost,quote.labor);
+    candidates.push({id,quote,resources});
+  }
+  // 全局只回答有没有可执行目标，不把某块最低报价当成工具的固定成本。
+  const target=candidates.find(candidate=>!candidate.resources.gold&&!candidate.resources.workers)??candidates[0]??null,enabled=!!target&&!target.resources.gold&&!target.resources.workers;
+  const name=type==='housing'?'住房':'生产';
+  const gold=candidates.every(candidate=>candidate.resources.gold),workers=candidates.every(candidate=>candidate.resources.workers);
+  const shortage=gold&&workers?'资金与工人不足':gold?'资金不足':workers?'工人不足':'金币与工人条件未同时满足';
+  return {enabled,target,reason:enabled?'':target?`有可建${name}地块，但${shortage}`:`控制区内没有可建${name}的地块`};
 }
 export function buildProduction(state,id) {
   const error=productionError(state,id);if(error)return error;

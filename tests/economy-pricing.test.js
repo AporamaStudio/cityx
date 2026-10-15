@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {createCampaign,key,productionCells,productionQuote,housingQuote,economyBuildQuote,buildProduction,buildHousing,clearPlot,buildTower,removeTower,changeWall,embeddingQuote,funds,demolitionQuote,validateParams,beginBattle,restoreNight} from '../src/model.js';
+import {buildResourceStatus,economyBuildAvailability,population,createCampaign,key,productionCells,productionQuote,housingQuote,economyBuildQuote,buildProduction,buildHousing,clearPlot,buildTower,removeTower,changeWall,embeddingQuote,funds,demolitionQuote,validateParams,beginBattle,restoreNight} from '../src/model.js';
 
 const id=key(15,22);
 function setup(width=2,height=2,type='production',kind='building'){
@@ -90,4 +90,36 @@ test('夜间改建扣完整加急造价；重试恢复投资与余额，战前�
  const next=restoreNight(beginBattle(retry));assert.equal(funds(next),cash-10);
  assert.equal(removeTower(next,id),'');assert.equal(funds(next),cash);
  assert.equal(buildProduction(next,id),'');assert.equal(funds(next),cash-replacement);
+});
+
+
+test('经营按钮只认真实可建目标，建满后禁用；拆除后恢复',()=>{
+ const s=setup(),before=structuredClone(s);
+ assert.equal(economyBuildAvailability(s,'production').enabled,true);assert.deepEqual(s,before);
+ assert.equal(buildProduction(s,id),'');
+ assert.equal(economyBuildAvailability(s,'production').enabled,false);
+ assert.match(economyBuildAvailability(s,'production').reason,/控制区内没有可建生产/);
+ assert.equal(clearPlot(s,id),'');assert.equal(economyBuildAvailability(s,'production').enabled,true);
+});
+
+test('区外与半受控空地不维持经营按钮，边缘建筑仍可整栋修缮',()=>{
+ const building=setup(),empty=setup(2,2,'production','open');
+ building.params.controlRadius=6;empty.params.controlRadius=6;
+ assert.equal(economyBuildAvailability(building,'production').enabled,true);
+ assert.equal(economyBuildAvailability(empty,'production').enabled,false);
+ building.params.controlRadius=1;
+ assert.equal(economyBuildAvailability(building,'production').enabled,false);
+ assert.equal(economyBuildAvailability(building,'housing').enabled,false);
+});
+
+test('资源提示同时列出钱与工人缺口，钱或人补足后独立消除',()=>{
+ const s=setup();s.params.budget=0;s.params.initialPopulation=0;
+ let availability=economyBuildAvailability(s,'production'),q=availability.target.quote;
+ assert.equal(availability.enabled,false);assert.equal(availability.target.resources.gold,true);assert.equal(availability.target.resources.workers,true);
+ assert.match(availability.reason,/有可建生产地块，但资金与工人不足/);assert.match(availability.target.resources.message,/资金不足.*缺.*劳动力不足.*缺/);
+ s.params.budget=q.cost;availability=economyBuildAvailability(s,'production');
+ assert.equal(availability.target.resources.gold,false);assert.equal(availability.target.resources.workers,true);
+ assert.match(availability.reason,/工人不足/);assert.doesNotMatch(availability.reason,/资金不足/);
+ s.params.initialPopulation=q.labor;assert.equal(economyBuildAvailability(s,'production').enabled,true);
+ assert.equal(population(s).free,q.labor);assert.equal(buildResourceStatus(s,q.cost,q.labor).message,'');
 });
