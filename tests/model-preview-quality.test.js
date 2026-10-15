@@ -24,3 +24,19 @@ test('品质样板的PBR贴图内嵌GLB，玻璃与灯具可独立控制发光',
   for(const name of ['cityhall_glass_lit','cityhall_glass_dark','cityhall_lamp'])assert.ok(doc.materials.some(m=>m.name===name));
   for(const mesh of doc.meshes)for(const primitive of mesh.primitives){assert.ok(Number.isInteger(primitive.attributes.POSITION));assert.ok(Number.isInteger(primitive.attributes.NORMAL));assert.ok(doc.accessors[primitive.attributes.POSITION].count>0);}
 });
+
+test('废弃市政厅是同址独立GLB，保留真实破口资料且没有运营光源',()=>{
+  const bytes=readFileSync(new URL('city-hall-abandoned.glb',root));
+  assert.equal(bytes.readUInt32LE(0),0x46546c67);assert.equal(bytes.readUInt32LE(8),bytes.length);
+  const abandoned=JSON.parse(bytes.subarray(20,20+bytes.readUInt32LE(12)).toString());
+  const extras=abandoned.nodes.find(node=>node.extras?.qualitySample)?.extras;
+  assert.deepEqual(extras.footprintMeters,[120,140]);assert.equal(extras.state,'abandoned');
+  assert.deepEqual(extras.cityhallLights,[]);assert.equal(extras.roofDamage.wing,'right');
+  assert.ok(extras.roofDamage.floorZ<extras.roofDamage.roofBaseZ-2);
+  assert.ok(abandoned.materials.some(mat=>mat.name==='abandoned_roof_timber'));
+  assert.ok(abandoned.materials.some(mat=>mat.name==='abandoned_fountain_sediment'));
+  for(const mat of abandoned.materials)assert.ok(!mat.emissiveFactor||mat.emissiveFactor.every(value=>value===0));
+  assert.ok(!abandoned.materials.some(mat=>mat.name?.includes('visitor_')));
+  const blend=readFileSync(new URL('city-hall-abandoned.blend',root));
+  assert.ok(blend.subarray(0,7).toString()==='BLENDER'||blend.readUInt32LE(0)===0xfd2fb528);
+});

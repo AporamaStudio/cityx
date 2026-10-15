@@ -25,7 +25,12 @@ args = argparse.ArgumentParser()
 args.add_argument('--render', action='store_true')
 args.add_argument('--samples', type=int, default=96)
 args.add_argument('--size', type=int, default=1440)
+args.add_argument('--variant', choices=('intact', 'abandoned'), default='intact')
 options = args.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
+stem = 'city-hall-abandoned' if options.variant == 'abandoned' else 'city-hall'
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.dont_write_bytecode = True
+from cityhall_abandoned import apply_abandoned, configure_viewport
 started = time.monotonic()
 random.seed(24)
 bpy.ops.object.select_all(action='SELECT')
@@ -476,6 +481,10 @@ for x, y, c in [(-9, -6, '#727f89'), (7, -18, '#9b8b72'), (19, -37, '#899577'), 
 lights.extend([[-6, 4, -6, 500, 20], [6, 4, -6, 500, 20], [0, 2, 33, 120, 14]])
 root['cityhallLights'] = lights
 
+variant_stats = {}
+if options.variant == 'abandoned':
+    variant_stats = apply_abandoned(source, root, own, box, beam, cylinder, material, rgb)
+
 print('CITYX_PHASE source',len(source.objects),flush=True)
 # 源文件保留分件与修饰器；导出副本按材质合并并固化小倒角，不损坏可编辑源。
 scene.world = bpy.data.worlds.new('柔和环境')
@@ -514,7 +523,8 @@ scene.view_settings.view_transform = 'AgX'
 scene.view_settings.exposure=.35
 scene.render.film_transparent = False
 scene.render.image_settings.color_mode = 'RGBA'
-bpy.ops.wm.save_as_mainfile(filepath=str(OUT/'city-hall.blend'))
+configure_viewport(scene)
+bpy.ops.wm.save_as_mainfile(filepath=str(OUT/(stem+'.blend')))
 
 export = bpy.data.collections.new('GLB_合并副本')
 scene.collection.children.link(export)
@@ -546,31 +556,31 @@ bpy.ops.object.select_all(action='DESELECT')
 for obj in export.objects:
     obj.select_set(True)
 print('CITYX_PHASE export',flush=True)
-bpy.ops.export_scene.gltf(filepath=str(OUT/'city-hall.glb'), export_format='GLB', use_selection=True, export_extras=True, export_apply=False, export_lights=False, export_cameras=False)
+bpy.ops.export_scene.gltf(filepath=str(OUT/(stem+'.glb')), export_format='GLB', use_selection=True, export_extras=True, export_apply=False, export_lights=False, export_cameras=False)
 triangles = sum(len(o.data.loop_triangles) for o in export.objects if o.type == 'MESH')
-stats = {'units':'meters', 'footprint':[120,140], 'materials':len(batches), 'sourceObjects':len(source.objects), 'triangles':triangles, 'glbBytes':(OUT/'city-hall.glb').stat().st_size, 'elapsedSeconds':round(time.monotonic()-started,1), 'blender':bpy.app.version_string}
-(OUT/'build-info.json').write_text(json.dumps(stats, ensure_ascii=False, indent=2)+'\n')
+stats = {'units':'meters', 'footprint':[120,140], 'materials':len(batches), 'sourceObjects':len(source.objects), 'triangles':triangles, 'glbBytes':(OUT/(stem+'.glb')).stat().st_size, 'elapsedSeconds':round(time.monotonic()-started,1), 'blender':bpy.app.version_string, **variant_stats}
+(OUT/('abandoned-build-info.json' if variant_stats else 'build-info.json')).write_text(json.dumps(stats, ensure_ascii=False, indent=2)+'\n')
 print('CITYX_BUILD', json.dumps(stats))
 export.hide_render = True
 
 if options.render:
-    scene.render.filepath = str(OUT/'renders'/'city-hall-day.png')
+    scene.render.filepath = str(OUT/'renders'/(stem+'-day.png'))
     bpy.ops.render.render(write_still=True)
     backdrop.inputs[0].default_value=(.025,.045,.06,1);backdrop.inputs[1].default_value=1
     sun.data.energy = .35
     sun.data.color = (.55, .68, 1)
     scene.world.node_tree.nodes['Background'].inputs[0].default_value = (.12, .20, .27, 1)
     scene.world.node_tree.nodes['Background'].inputs[1].default_value = .28
-    for mat in (litglass, lamp):
+    for mat in (() if variant_stats else (litglass, lamp)):
         shader = mat.node_tree.nodes.get('Principled BSDF')
         shader.inputs['Emission Color'].default_value = (*rgb('#ffd49b'), 1)
         shader.inputs['Emission Strength'].default_value = .9 if mat == litglass else 3
-    for x, z, ny, power, reach in lights:
+    for x, z, ny, power, reach in ([] if variant_stats else lights):
         bpy.ops.object.light_add(type='POINT', location=(x, -ny, z))
         obj = bpy.context.object
         obj.data.color = (1, .70, .37)
         obj.data.energy = power*5
         obj.data.shadow_soft_size = .4
-    scene.render.filepath = str(OUT/'renders'/'city-hall-night.png')
+    scene.render.filepath = str(OUT/'renders'/(stem+'-night.png'))
     bpy.ops.render.render(write_still=True)
 print('CITYX_DONE', round(time.monotonic()-started, 1))

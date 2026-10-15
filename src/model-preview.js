@@ -18,7 +18,7 @@ const assets=[
   ['apartment','城市公寓','building','commercial/building-a',3.7,'中等高度建筑，测试斜视时对道路和屋顶炮位的遮挡。'],
   ['shop','商住楼','building','commercial/building-d',3.9,'作为商业经营外观候选，不意味着新增一种经营机制。'],
   ['landmark','中型商业楼','building','commercial/building-j',5.1,'通用中型商业建筑，用于与医院、银行对比体量。'],
-  ['city-hall','市政厅品质样板','building','city-hall-quality',14,'Blender制作的120×140m市政厅园区：分层石立面、凹入窗框、立缝坡屋顶、玻璃门厅、台阶广场、喷泉、停车与绿化；先验证完好/运营，不接入主游戏。'],
+  ['city-hall','市政厅品质样板','building','city-hall-quality',14,'Blender制作的120×140m市政厅园区：完好、废弃与恢复运营同址对照；废弃版保留主楼，右配楼屋顶局部坍塌，广场失养、喷泉停用。'],
   ['hospital','医院园区','building','hospital',12,'10×12格：中央门诊、两栋病房楼、急诊与配套连廊；庭院仅作构图，仍是一个医院对象。'],
   ['bank','大型银行','building','bank',8,'8×8格选型体量：单体大楼、中央退台屋顶与银行徽记；地图位置和银行玩法尚未接入。'],
   ['factory','生产厂房','building','industrial/building-a',4.8,'平屋顶与厂房体量适合生产地块，保留清楚的临街边缘。'],
@@ -184,7 +184,7 @@ function setPower(object,powered){
 function ruinedModel(asset,width=asset.width){
   // 每栋普通楼与特殊楼都有固定破损GLB，保留原占地、UV和门窗；不再运行时切楼。
   const object=cloneModel(asset,width,false,true);
-  if(!asset.landmark)object.traverse(node=>{if(!node.isMesh||!node.material.map)return;node.material.color.set('#a29c87');node.material.roughness=1;
+  if(!asset.landmark&&!asset.quality)object.traverse(node=>{if(!node.isMesh||!node.material.map)return;node.material.color.set('#a29c87');node.material.roughness=1;
     node.material.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\ndiffuseColor.rgb=mix(diffuseColor.rgb,vec3(dot(diffuseColor.rgb,vec3(.2126,.7152,.0722))),.82);');};
     node.material.customProgramCacheKey=()=> 'cityx-preview-ruins';
   });
@@ -291,6 +291,14 @@ function updateSingleState(){
   setPower(singleVariants.normal,isBuilding(selected)?singleState==='operating':true);
   for(const button of document.querySelectorAll('[data-state]'))button.classList.toggle('active',button.dataset.state===singleState);
   if(selected.landmark||selected.paired){$('download').href=root+(selected.local?'generated/':'kenney/')+selected.file+(singleState==='ruined'?'-ruined':'')+'.glb?v=7';$('download').textContent=singleState==='ruined'?'下载破损模型 ↓':'下载完好模型 ↓';}
+  if(selected.quality){
+    const abandoned=singleState==='ruined';
+    $('download').href=root+'cityhall-quality/city-hall'+(abandoned?'-abandoned':'')+'.glb?v=2';
+    $('download').textContent=abandoned?'下载废弃模型 ↓':'下载完好模型 ↓';
+    $('qualityBlend').href=root+'cityhall-quality/city-hall'+(abandoned?'-abandoned':'')+'.blend';
+    $('qualityReference').href=root+'concepts/poi-2026-10-14/01-civic-life'+(abandoned?'-abandoned':'')+'.png';
+    for(const period of ['day','night'])$('quality'+(period==='day'?'Day':'Night')).href=root+'cityhall-quality/renders/city-hall'+(abandoned?'-abandoned':'')+'-'+period+'.png';
+  }
   if(mode==='single')$('sceneSubtitle').textContent=isBuilding(selected)?({intact:'完好 · 尚未运营',ruined:'原建筑局部塌损 · 占地与门窗保留',operating:'恢复运营 · 窗户与屋顶亮灯'})[singleState]:(selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0');
 }
 function setMode(next){
@@ -301,15 +309,16 @@ function setMode(next){
   $('fireShot').hidden=['roads','rural'].includes(mode)||mode!=='district'&&!selected.id.startsWith('cannon-');
 }
 function selectAsset(asset,show=true){
-  selected=asset;if(asset.quality&&singleState==='ruined')singleState='intact';document.querySelector('[data-state=ruined]').disabled=asset.quality;
+  selected=asset;document.querySelector('[data-state=ruined]').disabled=false;
+  document.querySelector('[data-state=ruined]').textContent=asset.quality?'废弃':'废墟';
   if(singleVariants){effects.remove(singleVariants.normal);wreckDressing.delete(singleVariants.normal);previewCrowds.delete(singleVariants.normal);}
   single.traverse(node=>{if(node.isMesh||node.isLine||node.isSprite){if(node.isInstancedMesh)node.dispose();node.material.dispose();if(node.userData.previewGeometry)node.geometry.dispose();}});single.clear();
-  const width=asset.quality||asset.landmark||asset.id==='enemy-squad'?asset.width:Math.min(asset.width,4.8),normal=cloneModel(asset,width),ruined=isBuilding(asset)&&!asset.quality?ruinedModel(asset,width):null;
+  const width=asset.quality||asset.landmark||asset.id==='enemy-squad'?asset.width:Math.min(asset.width,4.8),normal=cloneModel(asset,width),ruined=isBuilding(asset)?ruinedModel(asset,width):null;
   single.add(normal);if(ruined)single.add(ruined);singleVariants={normal,ruined};
   $('vehicleColors').hidden=!['civil-car','damaged-car','burnt-car'].includes(asset.id);
   $('buildingStates').hidden=!isBuilding(asset);updateSingleState();
   $('assetTitle').textContent=asset.name;$('assetOrigin').textContent=asset.local?'自制样件':'Kenney · CC0';$('assetDescription').textContent=asset.description;
-  const path=asset.quality?root+'cityhall-quality/city-hall.glb?v=1':root+(asset.local?'generated/':'kenney/')+asset.file+'.glb?v=7';$('download').href=path;$('download').textContent='下载原模型 ↓';
+  if(!asset.quality){$('download').href=root+(asset.local?'generated/':'kenney/')+asset.file+'.glb?v=7';$('download').textContent='下载原模型 ↓';}
   $('source').href=asset.local?'assets/model-preview/ATTRIBUTION.md':kenney+({suburban:'city-kit-suburban',commercial:'city-kit-commercial',industrial:'city-kit-industrial'}[asset.file.split('/')[0]]);
   for(const btn of $('catalog').children)btn.classList.toggle('selected',btn.dataset.id===asset.id);
   if(show)setMode('single');else updateSingleState();
@@ -351,9 +360,9 @@ for(const [index,color] of VEHICLE_PALETTE.entries()){
 new ResizeObserver(resize).observe($('viewer'));catalog();setLight();frame();
 const loader=new GLTFLoader();let loaded=0;
 try{
-  const files=assets.flatMap(asset=>[{asset,id:asset.id,file:asset.file},...(asset.landmark||asset.paired?[{asset,id:asset.id+'-ruined',file:asset.file+'-ruined'}]:[])]);
+  const files=assets.flatMap(asset=>[{asset,id:asset.id,file:asset.file},...(asset.landmark||asset.paired||asset.quality?[{asset,id:asset.id+'-ruined',file:asset.file+'-ruined'}]:[])]);
   await Promise.all(files.map(async ({asset,id,file})=>{
-    const url=asset.quality?root+'cityhall-quality/city-hall.glb?v=1':root+(asset.local?'generated/':'kenney/')+file+'.glb?v=7';const gltf=await loader.loadAsync(url);models.set(id,gltf.scene);
+    const url=asset.quality?root+'cityhall-quality/city-hall'+(id.endsWith('-ruined')?'-abandoned':'')+'.glb?v=2':root+(asset.local?'generated/':'kenney/')+file+'.glb?v=7';const gltf=await loader.loadAsync(url);models.set(id,gltf.scene);
     loaded++;$('loading').textContent=`正在装载模型… ${loaded}/${files.length}`;
   }));
   ready=true;buildDistrict();buildRoadPreview();buildRuralPreview();selectAsset(selected,false);catalog();setMode(selected.quality?'single':'district');syncMotion();$('loading').hidden=true;$('loadStatus').textContent=`${assets.length} 个模型已就绪`;

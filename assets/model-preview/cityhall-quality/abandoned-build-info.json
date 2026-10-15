@@ -1,0 +1,16 @@
+{
+  "units": "meters",
+  "footprint": [
+    120,
+    140
+  ],
+  "materials": 37,
+  "sourceObjects": 5456,
+  "triangles": 438652,
+  "glbBytes": 29763576,
+  "elapsedSeconds": 28.2,
+  "blender": "5.2.0 LTS",
+  "state": "abandoned",
+  "cavityFloorMeters": 11.2,
+  "reference": "01-civic-life-abandoned.png"
+}

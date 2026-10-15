@@ -101,7 +101,7 @@ Three.js **0.180.0**，MIT，来自官方npm包 `three`。仅保留预览所需�
 
 ## Blender市政厅品质样板（2026-10-14）
 
-用户确定首件为City Hall，先只放3D视觉实验，保真度优先，未接入主游戏。参考为项目生成的 `concepts/poi-2026-10-14/01-civic-life.png` 左上角；参考图是构图与风格目标，不是可量尺的施工图。样板园区120×140m，主体约66×33m、最高约22m；保留对称三段楼体、中央玻璃门厅、四坡长脊屋面、公共广场和喷泉，并补足侧面/背面、路缘、停车、车辆、树冠和家具。首先验证完好/恢复运营两态；用户已认可基础品质，破损模型仍暂不制作，废弃概念图不自动转为建模任务。
+用户确定首件为City Hall，先只放3D视觉实验，保真度优先，未接入主游戏。参考为项目生成的 `concepts/poi-2026-10-14/01-civic-life.png` 左上角；参考图是构图与风格目标，不是可量尺的施工图。样板园区120×140m，主体约66×33m、最高约22m；保留对称三段楼体、中央玻璃门厅、四坡长脊屋面、公共广场和喷泉，并补足侧面/背面、路缘、停车、车辆、树冠和家具。基础品质已获用户认可；2026-10-15按用户另行确认，参考同目录 `01-civic-life-abandoned.png` 左上角制作配套废弃变体。
 
 ### 制作pipeline
 
@@ -112,12 +112,17 @@ Three.js **0.180.0**，MIT，来自官方npm包 `three`。仅保留预览所需�
 - 渲染：`cityhall-quality/renders/city-hall-day.png` 与 `city-hall-night.png` 为同一源模型的Cycles昼夜图。网页使用同一GLB、单一太阳阴影和独立预览反射环境，最终验收以网页多角度为准，离线图不代表网页逐像素一致。
 - 统计：`cityhall-quality/build-info.json`记录Blender版本、物体/材质/三角形数量、GLB字节及生成时间，不把生成时间当完整任务耗时，也不把文件大小当token使用量。
 
+废弃变体由 `scripts/cityhall_abandoned.py` 在同一生成模型上构造，入口仍为 `build-cityhall-blender.py`，追加 `--variant abandoned`。输出 `city-hall-abandoned.blend`、`city-hall-abandoned.glb`、`renders/city-hall-abandoned-day.png` / `-night.png` 和 `abandoned-build-info.json`。原生占地、中央主楼、门廊和园区位置保持；右配楼屋面、实心楼体上部和两层檐口板一起切出七边形缺口，截断穿过缺口的接缝，补充局部桁架、下层楼板与对应碎片。杂草、失养材质、破窗、残损车/椅/旗帜与停用喷泉静态导出，无人物、燃烧动效或运营光源。变体贴图派生并内嵌GLB，原始完好贴图不覆盖；约43.9万三角形、37材质、29.8MB，仅为独立品质样板预算。
+
+两份Blend源文件默认关闭父子关系辅助线，隐藏相机/灯光辅助显示，以材质预览和参考方向打开。`configure_viewport` 保留在变体模块中，完好版重新生成时也采用同样视口设置；本轮已有完好模型仅整理源文件视口，原GLB保持。
+
 在仓库根目录执行（本机已安装Blender5.2 LTS）：
 
 ```sh
 /Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python scripts/build-cityhall-blender.py -- --render --samples 96 --size 1440
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python-exit-code 1 --python scripts/build-cityhall-blender.py -- --variant abandoned --render --samples 96 --size 1440
 ```
 
 不加 `--render` 只重建源模型、纹理、GLB及统计；样本数与图宽只影响离线渲染。若需要只修改相机/材质后渲染，可直接在源文件中操作，不必重建场景。macOS受限沙箱内Blender可能在Metal初始化时崩溃，本机正常授权执行已通过；没有安装插件、下载外部模型或修改系统配置。
 
-预览入口 `model-preview.html?asset=city-hall`，或页内「市政厅样板」按钮；可旋转/缩放、俯视/斜视、昼夜和完好/运营切换，下载GLB与Blend，原模型场景继续保留。样板照明设置只用于此对象的观察，不导入主游戏。首件在 `codex/cityhall-quality-sample` 独立分支制作，2026-10-15普通合并到main并保留原始提交及分支；基础品质已获用户认可，正式版运行预算与其余POI仍需单独验证。
+预览入口 `model-preview.html?asset=city-hall`，或页内「市政厅样板」按钮；可旋转/缩放、俯视/斜视、昼夜和完好/废弃/运营切换，下载对应GLB与Blend，参考图及离线图也随状态切换。样板照明设置只用于此对象的观察，不导入主游戏。首件在独立分支制作，2026-10-15普通合并到main保留原始提交，随后按用户要求删除该分支与临时工作目录，继续在main开发。基础品质已获用户认可，废弃版观感、正式版运行预算与其余POI仍需单独验证。
