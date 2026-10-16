@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {QUALITY_POIS,poiState} from './model-preview-pois.js?v=4';
+import {QUALITY_POIS,poiState} from './model-preview-pois.js?v=5';
 import {createZombieCrowds} from './city-enemies.js?v=6';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';

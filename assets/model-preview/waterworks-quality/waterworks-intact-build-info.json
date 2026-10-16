@@ -1,0 +1,16 @@
+{
+  "asset": "waterworks",
+  "state": "intact",
+  "units": "meters",
+  "footprint": [
+    120,
+    140
+  ],
+  "sourceObjects": 3727,
+  "materials": 27,
+  "triangles": 233280,
+  "glbBytes": 17156744,
+  "nightLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 42.6
+}

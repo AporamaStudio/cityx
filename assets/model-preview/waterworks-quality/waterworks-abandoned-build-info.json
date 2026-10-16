@@ -1,0 +1,16 @@
+{
+  "asset": "waterworks",
+  "state": "abandoned",
+  "units": "meters",
+  "footprint": [
+    120,
+    140
+  ],
+  "sourceObjects": 4055,
+  "materials": 28,
+  "triangles": 244512,
+  "glbBytes": 17605320,
+  "nightLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 53.2
+}

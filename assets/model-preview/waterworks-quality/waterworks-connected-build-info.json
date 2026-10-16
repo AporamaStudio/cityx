@@ -1,0 +1,16 @@
+{
+  "asset": "waterworks",
+  "state": "connected",
+  "units": "meters",
+  "footprint": [
+    120,
+    140
+  ],
+  "sourceObjects": 3757,
+  "materials": 29,
+  "triangles": 234240,
+  "glbBytes": 17193444,
+  "nightLights": 12,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 31.6
+}
