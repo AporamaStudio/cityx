@@ -12,7 +12,7 @@ def tank(q,x,y,index,water):
         vertices=[(x+r*math.cos(t),y+r*math.sin(t),z) for z in (.25,top) for r in (inner,outer) for t in (a,b)]
         faces=[(0,1,5,4),(2,6,7,3),(4,5,7,6),(0,2,3,1)]
         mesh=q.bpy.data.meshes.new('池壁弧段');mesh.from_pydata(vertices,[],faces);mesh.update();mesh.materials.append(q.concrete);q.own(q.bpy.data.objects.new('沉淀池实体池壁',mesh))
-    q.cylinder('池内水面',(x,y,.85 if q.abandoned else 1.9),11.75,.06,water,128)
+    q.cylinder('池内水面',(x,y,(.5 if index==2 else .85) if q.abandoned else 1.9),11.75,.06,water,128)
     q.cylinder('中央刮泥轴',(x,y,1.9),.55,3,q.steel,24)
     q.box('刮泥桥工作台',(x,y,2.85),(23.9,1.1,.25),q.steel,.025)
     for side in (-1,1):
@@ -28,7 +28,7 @@ def tank(q,x,y,index,water):
     for i in range(10):q.box('池边梯步',(x-13.3-i*.32,y,.25+i*.24),(.34,1.1,.22),q.concrete,.01)
     if q.abandoned:
         for i in range(5):
-            q.cylinder('水面藻斑',(x+math.sin(i*3)*7,y+math.cos(i*2)*6,.89),1.1+i*.15,.015,q.soil,16)
+            q.cylinder('水面藻斑',(x+math.sin(i*3)*7,y+math.cos(i*2)*6,.54 if index==2 else .89),1.1+i*.15,.015,q.soil,16)
 
 
 def build(q):
@@ -74,3 +74,22 @@ def build(q):
     for x,y in ((-45,10),(45,10),(-43,-20),(43,-21),(0,-29)):q.streetlight(x,y,6)
     if q.abandoned:q.weeds(0,15,90,60,95);q.rubble(44,37,4,5,14)
     q.people([(-34,-48),(35,-44),(1,9),(12,-23),(-30,12)])
+
+
+def damage(q,d):
+    """破裂池沿、坠落刮泥桥和泵房塌顶，废弃程度对应水处理设施。"""
+    d.cut(q,'东沉淀池崩塌池沿',(39,22,13,17),.65,prefixes=('沉淀池实体池壁','池边','刮泥桥','桥栏杆'))
+    d.heap(q,40,21,12,12,1.6,65,.3)
+    d.sheet(q,'断裂刮泥桥平台',(35,28,1.2),(11,1.2),(.14,.14,-.3),True)
+    q.beam('沉落护栏',(33,27,1.2),(41,23,1),.04,q.rust)
+    d.cut(q,'过滤池一角破裂',(28,-12,10,10),.7,prefixes=('过滤池侧壁','过滤池端墙','过滤隔堰','过滤池跨桥','跨桥'))
+    d.heap(q,29,-13,9,8,1.4,50,.28)
+    d.cut(q,'低泵房右端塌顶',(42,-34,12,18),1.8,('低泵房',))
+    d.heap(q,42,-34,12,12,1.9,65,.6)
+    d.sheet(q,'泵房坠落楼板',(39,-33,2.0),(7,6),(.2,.4,.1))
+    d.broken_wall(q,'泵房残墙',43,-41.3,6,1.5)
+    for x,y in ((-35,-44.65),(35,-41.65)):d.wall_dirt(q,x,y,19,2.5)
+    d.trash(q,-44,-28,9,6,23);d.trash(q,46,9,8,6,21);d.trash(q,-19,42,7,5,15)
+    for x,y in ((-18,-10),(10,-2),(31,33)):
+        d.patch(q,'池内淤泥浮渣',x,y,12,6,.55 if x==31 else .90,q.damage_soot)
+    for x,y in ((-27,12),(10,12),(35,-22)):d.patch(q,'维护地面水渍',x,y,16,8,.275,q.damage_soot)

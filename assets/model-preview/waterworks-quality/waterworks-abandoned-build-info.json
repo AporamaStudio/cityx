@@ -6,11 +6,12 @@
     120,
     140
   ],
-  "sourceObjects": 4055,
-  "materials": 28,
-  "triangles": 244512,
-  "glbBytes": 17605320,
+  "sourceObjects": 4914,
+  "materials": 33,
+  "triangles": 269248,
+  "glbBytes": 18785396,
   "nightLights": 0,
+  "nightSpotLights": 0,
   "blender": "5.2.0 LTS",
-  "elapsedSeconds": 53.2
+  "elapsedSeconds": 79.5
 }
