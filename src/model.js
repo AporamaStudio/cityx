@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=93';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=94';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -60,7 +60,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
   const blocked=new Set(layout?layout.tiles.flatMap((t,id)=>t==='block'?[id]:[]):[]),walls=new Set([...fixedWalls,...blocked,...playerWalls]);
   const terrainWalls=new Set([...fixedWalls,...blocked]);
   const camp = layout?key(layout.camp.x,layout.camp.y):key(...DEFAULTS.camp), field = routeField(camp, terrainWalls);
-  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), banks:new Map(), bankEarned:0, debtInterestCap:0, nightInterest:0, bankSettledDay:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, nightBuildSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
+  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), banks:new Map(), hospitals:new Map(), bankEarned:0, debtInterestCap:0, nightInterest:0, bankSettledDay:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, nightBuildSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
     layout, blocked, terrainWalls, sites, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
@@ -143,11 +143,13 @@ export function knownSources(state) {
 }
 export const firstNightReady=state=>state.day!==1||state.towers.size>0;
 export const campaignComplete=state=>!!state.result;
-// 医院沿用建筑碰到即归属；只读取连回火光的基础范围，发现地标不算收复。
+// 医院碰到即整栋受控，但修复且连回火光才完成目标；修复记录不随失控丢失。
 export function campaignGoals(state){
   const connected=connectedOutposts(state),active={...state,outposts:new Map([...state.outposts].filter(([id])=>connected.has(id)))};
   const hospitals=state.sites.filter(p=>p.role==='hospital'),sources=[...(state.enemySources?.values()??[])];
-  return {enabled:hospitals.length>0,hospital:hospitals.length>0&&hospitals.every(p=>buildingCells(state,key(p.x,p.y)).some(id=>inGroundControl(active,id))),
+  const hospitalControlled=hospitals.length>0&&hospitals.every(p=>buildingCells(state,key(p.x,p.y)).some(id=>inGroundControl(active,id)));
+  const hospitalRestored=hospitals.length>0&&hospitals.every(p=>state.hospitals.has(key(p.x,p.y)));
+  return {enabled:hospitals.length>0,hospital:hospitalControlled&&hospitalRestored,hospitalControlled,hospitalRestored,
     sources:sources.length>0&&sources.every(s=>s.hp===0),cleared:sources.filter(s=>s.hp===0).length,total:sources.length};
 }
 // 只在夜末调用：先发正常经营收入，再确认胜利或期限失败，不开放额外一天。
@@ -156,7 +158,7 @@ function settleCampaign(state){
   const type=goals.enabled?(goals.hospital&&goals.sources?'victory':last?'deadline':null):last?'experiment':null;
   if(!type)return;
   const connected=connectedOutposts(state),active={...state,outposts:new Map([...state.outposts].filter(([id])=>connected.has(id)))};
-  state.result={type,day:state.day,hospital:goals.hospital,cleared:goals.cleared,total:goals.total,population:population(state).total,
+  state.result={type,day:state.day,hospital:goals.hospital,hospitalRestored:goals.hospitalRestored,hospitalControlled:goals.hospitalControlled,cleared:goals.cleared,total:goals.total,population:population(state).total,
     buildings:state.sites.filter(p=>p.role!=='camp'&&buildingCells(state,key(p.x,p.y)).some(id=>inGroundControl(active,id))).length};
   if(type==='deadline')state.phase='lost';
 }
@@ -225,7 +227,7 @@ export function fireField(state) {
   }
   return fire;
 }
-export const funds = state => state.params.budget + (state.debugGold??0) + state.earned + state.economyEarned + (state.bankEarned??0) - [...(state.banks?.values()??[])].reduce((sum,b)=>sum+b.cost,0) - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - state.outposts.size*state.params.outpostCost - (state.nightBuildSpent??0) - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
+export const funds = state => state.params.budget + (state.debugGold??0) + state.earned + state.economyEarned + (state.bankEarned??0) - [...(state.hospitals?.values()??[])].reduce((sum,h)=>sum+h.cost,0) - [...(state.banks?.values()??[])].reduce((sum,b)=>sum+b.cost,0) - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - state.outposts.size*state.params.outpostCost - (state.nightBuildSpent??0) - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
 // 银行不另设账户：本金就是全局余额，停业仅撤销当前额度，不清偿既有债务。
 export const bankAt=(state,id)=>productionSite(id,state)?.role==='bank'?productionId(id,state):null;
 // 与银行实体揭示一致：完整占地已探索才解锁工具，展示关闭迷雾不算发现。
@@ -247,6 +249,25 @@ export function bankFinance(state,balance=funds(state)){
   return {active,capacity,debtCap,depositPercent,loanPercent,interest,credit:Math.max(0,capacity+Math.min(0,balance)),available:Math.max(0,balance+capacity)};
 }
 export const availableFunds=state=>bankFinance(state).available;
+// 固定远距揭示只提供医院位置，因此以地标中心已知解锁工具，实际修复仍须受控。
+export const hospitalAt=(state,id)=>productionSite(id,state)?.role==='hospital'?productionId(id,state):null;
+export function hospitalDiscovered(state,id){
+  const site=productionSite(id,state);return site?.role==='hospital'&&isExplored(state,key(site.x+Math.floor((site.width??site.size)/2),site.y+Math.floor((site.height??site.size)/2)));
+}
+export const pendingHospitals=state=>state.sites.filter(p=>p.role==='hospital').map(p=>key(p.x,p.y)).filter(id=>hospitalDiscovered(state,id)&&!state.hospitals.has(id));
+export function hospitalError(state,id,{ignoreResources=false}={}){
+  if(state.phase!=='build'||state.day<2)return '第2天起可在白天修复医院。';
+  const hospital=hospitalAt(state,id);if(hospital===null)return '请选择地图上已有的医院。';
+  if(!hospitalDiscovered(state,hospital)||!productionControlled(state,hospital))return '医院须进入控制区才能修复。';
+  if(state.hospitals.has(hospital))return '医院已经修复。';
+  return ignoreResources?'':buildResourceStatus(state,state.params.hospitalRestoreCost).message;
+}
+export function restoreHospital(state,id){
+  const error=hospitalError(state,id);if(error)return error;
+  recordBorrowing(state,state.params.hospitalRestoreCost);const hospital=hospitalAt(state,id);
+  state.hospitals.set(hospital,{cost:state.params.hospitalRestoreCost,day:state.day});
+  state.plotContents.set(hospital,{status:'building',type:'hospital'});return '';
+}
 // 本座贡献按移除该银行后的全局利率差计算，展示实际边界效果，不重复全局汇总。
 export function bankContribution(state,id){
   const bank=bankAt(state,id),record=state.banks.get(bank),active=!!bankActive(state,bank),finance=bankFinance(state);
@@ -491,7 +512,7 @@ export function plotBuildError(state,id) {
   const cells=productionCells(id,state);
   if(!cells.length)return '请选择地块，建筑不能建在道路上。';
   if(bankAt(state,id)!==null)return '银行为保留POI，不能拆除或改用途。';
-  if(productionSite(id,state)?.role==='hospital')return '医院为收复目标，连接控制范围即可收复，不能拆除或换建。';
+  if(productionSite(id,state)?.role==='hospital')return '医院为保留地标，受控后可修复，不能拆除或换建。';
   if([...(state.enemySources?.values()??[])].some(s=>s.site===productionId(id,state)))return '感染据点保留，需在周边建筑架炮肃清，不能改建或拆除。';
   if(!isExplored(state,id))return '该地块尚未探索。';
   if(cells.includes(state.camp))return '火光所在地块保留，不能拆除或换建。';
@@ -634,6 +655,7 @@ export function validateParams(params, state, checkLayout = true) {
   if(!['daySightMultiplier','nightSightMultiplier','eventSightMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=3))return '视野倍率须为 0–3，可使用小数。';
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
   if(!integer(params.bankRestoreCost,1,1000)||!integer(params.bankWorkers,0,100)||!integer(params.bankCapacity,1,10000)||!['bankDepositPercent','bankLoanPercent'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=100))return '银行恢复费用1–1000、用工0–100、额度1–10000为整数；利率0–100%，可用小数。';
+  if(!integer(params.hospitalRestoreCost,1,1000))return '医院修复费用须为1–1000金币整数。';
   if(!integer(params.bankUpgradeCost,1,1000)||!integer(params.bankUpgradeCapacityMultiplier,1,10)||!['bankUpgradeRatePoints','bankLoanMinPercent','bankRateMaxPercent'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=100)||params.bankLoanMinPercent>params.bankLoanPercent||params.bankLoanPercent>params.bankRateMaxPercent||params.bankDepositPercent>params.bankRateMaxPercent)return '银行升级费用1–1000、额度倍率1–10为整数；利率边界/升级百分点0–100%，贷款下限≤基础贷息≤利率上限，基础存息≤上限。';
   if(!integer(params.outpostWorkers,0,100))return '每座瞭望塔用工须为0–100人整数。';
   if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产、瞭望塔、银行用工或增加住房。';
@@ -1002,12 +1024,12 @@ export function economyBuildAvailability(state,type){
 }
 // 建成方案只读真实选址条件；缺钱/缺工人仍可看效果，补建只标本次新增经营格。
 export function economyConstructionPreview(state,id,type){
-  if(!['production','housing','bank'].includes(type)||!Number.isInteger(id))return null;
-  const errorFor=type==='bank'?bankError:type==='housing'?housingError:productionError;
+  if(!['production','housing','bank','hospital'].includes(type)||!Number.isInteger(id))return null;
+  const errorFor=type==='hospital'?hospitalError:type==='bank'?bankError:type==='housing'?housingError:productionError;
   if(type==='bank'&&!bankDiscovered(state,id)||errorFor(state,id,{ignoreResources:true}))return null;
   const site=productionSite(id,state),plot=productionId(id,state);
   const existing=new Set((type==='housing'?state.housing:state.production).has(plot)?contentCells(state,id):[]);
-  const cells=type==='bank'?productionCells(id,state):availableCells(state,id).filter(cell=>!existing.has(cell)),w=site.width??site.size,h=site.height??site.size;
+  const cells=['bank','hospital'].includes(type)?productionCells(id,state):availableCells(state,id).filter(cell=>!existing.has(cell)),w=site.width??site.size,h=site.height??site.size;
   const mask=new Uint8Array(w*h);for(const cell of cells){const [x,y]=xy(cell);mask[(y-site.y)*w+x-site.x]=1;}
   return {id:plot,x:site.x,y:site.y,w,h,type,status:'plan',powered:false,cellMeters:state.params.cellMeters,cells,mask};
 }
