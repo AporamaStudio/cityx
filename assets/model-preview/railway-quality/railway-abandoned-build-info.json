@@ -1,0 +1,17 @@
+{
+  "asset": "railway",
+  "state": "abandoned",
+  "units": "meters",
+  "footprint": [
+    180,
+    100
+  ],
+  "sourceObjects": 5715,
+  "materials": 34,
+  "triangles": 457020,
+  "glbBytes": 26825168,
+  "nightLights": 0,
+  "nightSpotLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 32.8
+}

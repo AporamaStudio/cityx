@@ -1,0 +1,16 @@
+{
+  "asset": "railway",
+  "state": "intact",
+  "units": "meters",
+  "footprint": [
+    180,
+    100
+  ],
+  "sourceObjects": 5094,
+  "materials": 32,
+  "triangles": 436272,
+  "glbBytes": 25994016,
+  "nightLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 72.8
+}

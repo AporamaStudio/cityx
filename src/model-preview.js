@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {QUALITY_POIS,poiState} from './model-preview-pois.js?v=2';
+import {QUALITY_POIS,poiState} from './model-preview-pois.js?v=3';
 import {createZombieCrowds} from './city-enemies.js?v=6';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
@@ -330,6 +330,7 @@ function setMode(next){
 }
 // 新品质样板按需装载三态，避免进入页面时下载整套POI。
 async function selectAsset(asset,show=true){
+  if(!ready)return;
   if(asset.poi&&!models.has(asset.id)){
     ready=false;$('loading').hidden=false;$('loading').textContent='正在装载'+asset.name+'三态样板…';
     try{
