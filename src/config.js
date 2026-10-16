@@ -18,8 +18,8 @@ export const DEFAULTS = {
   streetLightBudget: 24,
   // 每个原始敌群的基础视觉人数；合流增加密度，人物不独立结算HP。
   enemyFiguresPerGroup: 16,
-  // 仅视觉实验显示CPU绘制与提交量，默认关闭；不代表GPU帧率。
-  showRenderStats: false,
+  // 默认显示CPU绘制耗时与实际显示帧率，可在视觉实验关闭；绘制耗时不含完整GPU时间。
+  showRenderStats: true,
   // 精确火力只在路线格上显示；每格屏幕尺寸小于此值时收起数字，0关闭缩放门槛。
   fireNumbersMinCellPx: 12,
   // 两条倍率分界划分远/中/近景；报价另按实际空间保住可读字号。

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {surroundingLandscape,exteriorHeight,exteriorRiver} from './city-surroundings.js?v=6';
+import {surroundingLandscape,exteriorHeight,exteriorRiver} from './city-surroundings.js?v=7';
 import {createWaterMaterial} from './city-water.js?v=2';
 
 // 地图外共用同一太阳/环境光，远处向雾底色融合；无交互、真实灯或第二套游戏状态。

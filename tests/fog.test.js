@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {drawFog,fogTransitionActive,cloudStrength} from '../src/fog.js';
 import {createVisibility} from '../src/visibility.js';
-import {drawCitySilhouette} from '../src/city-textures.js';
 
 // 记录真实绘制函数生成的静态/动态遮罩，测试信息层级，不测试云纹形状。
 class CanvasStub {
@@ -83,16 +82,6 @@ test('整栋受控边缘无雾，距离从控制建筑外缘计算；S12/S23调�
   const before=[...controlled],density=alpha.veil(19.5,5.5),wider=render(controlled,explored,0,0,0,2,8,8);
   assert.ok(wider.veil(19.5,5.5)<density);assert.deepEqual([...controlled],before);
 });
-test('未知轮廓绘制仅使用体量，不因POI、原用途或敌源HP透露身份',()=>{
-  const p={x:2,y:3,width:4,height:3},ctx=new CanvasStub().ctx;
-  for(const mix of [0,.5,1]){
-    drawCitySilhouette(ctx,p,mix);const image=ctx.last.image;
-    for(const extra of [{role:'hospital',special:true},{type:'housing',hp:99},{role:'source',hp:999}]){
-      drawCitySilhouette(ctx,{...p,...extra},mix);assert.equal(ctx.last.image,image);
-    }
-  }
-});
-
 test('远处实时揭示形成局部S1薄雾，撤回后立即回浓雾且保留探索',()=>{
   const controlled=new Set(),explored=new Set(),sight=new Set();block(controlled,3,3,8,8);block(sight,3,3,8,8);block(sight,24,3,28,7);block(explored,24,3,28,7);
   let alpha=render(controlled,explored,600,0,0,2,3,3,sight);

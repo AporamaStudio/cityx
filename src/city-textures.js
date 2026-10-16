@@ -1,8 +1,4 @@
-import {drawSurroundingTerrain} from './city-surroundings.js?v=6';
-// 轻量程序贴图：日/夜各生成一套并缓存，纹理只表达材质，不参与通行或受击规则。
-import {fogColor} from './fog.js?v=19';
-import {roadMarkings,roadCellParts} from './city-roads.js?v=1';
-export {roadMarkings} from './city-roads.js?v=1';
+// 仅供独立2D地图生成实验页使用；主游戏不加载这套楼体贴图。
 const cache=new Map(),PX=32;
 const palettes={
   day:{road:'#343e47',edge:'#a3aaa4',lane:'#b3aa87',yard:'#697b70',ruin:'#877f6b',roof:'#b0a084',crack:'#454b46',factory:'#739697',factoryRoof:'#a4c2b9',home:'#af775c',homeWall:'#dfc6a0',window:'#425d64',grass:'#738b67'},
@@ -15,23 +11,6 @@ function texture(id,w,h,paint,px=PX){
 function layers(ctx,x,y,w,h,mix,get){
   ctx.drawImage(get('day'),x,y,w,h);
   if(mix>0){ctx.save();ctx.globalAlpha=mix;ctx.drawImage(get('night'),x,y,w,h);ctx.restore();}
-}
-// 按实际横断面计算中心；宽路的中线位于整条道路中央，不按每个格子分别居中。
-
-// 外围景物与3D共用自然布局，不复制可玩街区或显示未知城内信息。
-export function drawCitySurroundings(ctx,layout,mix,explored,backdrop){
-  drawSurroundingTerrain(ctx,layout,mix);
-}
-
-// 沥青、连续浅色路缘、路口斑马线形成道路语言；交叉口内部不硬画中线。
-export function drawRoadTexture(ctx,layout,x,y,mix,cellMeters=20){
-  layers(ctx,x,y,1,1,mix,time=>texture(`road-v2:${cellMeters}:${time}:${JSON.stringify(roadMarkings(layout).get(y*layout.width+x))}`,1,1,g=>{
-    for(const part of roadCellParts(layout,x,y,cellMeters)){
-      g.fillStyle=part.color;
-      g.fillRect(part.x-x,part.y-y,part.w,part.h);
-    }
-    if(time==='night'){g.fillStyle='#12304977';g.fillRect(0,0,1,1);}
-  },128));
 }
 export function drawBlockTexture(ctx,p,kind,mix){
   const w=p.width??p.size,h=p.height??p.size,variant=(p.x*7+p.y*13)%4;
@@ -74,16 +53,5 @@ export function drawBlockTexture(ctx,p,kind,mix){
         g.fillRect(x+bw-.05,y+bh+.06,.18,.12);g.fillRect(x-.14,y+bh*.4,.12,.17);
       }
     }
-  }));
-}
-
-// 未知建筑只取位置与体量，不读取用途、特殊身份、经营或敌源状态。
-export function drawCitySilhouette(ctx,p,mix){
-  const w=p.width??p.size,h=p.height??p.size;
-  layers(ctx,p.x,p.y,w,h,mix,time=>texture(`silhouette:${w}:${h}:${time}`,w,h,g=>{
-    g.fillStyle=time==='night'?'#425766':'#8c9da1';g.fillRect(.18,.18,w-.36,h-.36);
-    g.fillStyle=time==='night'?'#536674':'#a7b3b3';
-    const cols=Math.max(1,Math.floor(w/2)),rows=Math.max(1,Math.floor(h/2)),cw=w/cols,ch=h/rows;
-    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)g.fillRect(x*cw+.3,y*ch+.3,cw-.6,ch-.6);
   }));
 }

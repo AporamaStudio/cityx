@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {roadMarkings} from '../src/city-textures.js';
+import {roadMarkings} from '../src/city-roads.js';
 import {roadProfile,roadCellParts} from '../src/city-roads.js';
 
 test('一至三格宽道路的每格标线共用整条路的几何中心',()=>{

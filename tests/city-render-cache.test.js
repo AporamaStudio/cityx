@@ -5,8 +5,10 @@ import * as THREE from '../assets/model-preview/vendor/three/build/three.module.
 
 // Node没有网页import map；只替换模块地址，测试实际实现及实际Three对象。
 async function loadBrowserModule(name){
+  const mergeSource=(await readFile(new URL('../assets/model-preview/vendor/three/examples/jsm/utils/BufferGeometryUtils.js',import.meta.url),'utf8')).replace("'three'",JSON.stringify(new URL('../assets/model-preview/vendor/three/build/three.module.js',import.meta.url).href));
   const source=(await readFile(new URL('../src/'+name,import.meta.url),'utf8'))
     .replace("'three'",JSON.stringify(new URL('../assets/model-preview/vendor/three/build/three.module.js',import.meta.url).href))
+    .replace("'three/addons/utils/BufferGeometryUtils.js'",JSON.stringify('data:text/javascript;base64,'+Buffer.from(mergeSource).toString('base64')))
     .replace("'./city-view.js?v=3'",JSON.stringify(new URL('../src/city-view.js',import.meta.url).href));
   return import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 }
@@ -51,7 +53,7 @@ test('观察层缓存静态材质并登记新网格，空敌人不绘制也不�
     const original=root.traverse.bind(root);root.traverse=fn=>{visits++;original(fn);};
     const mesh=new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshStandardMaterial());root.add(mesh);
     const observation=createCityObservation(scene,renderer);
-    const options={ground:{},groundVersion:1,geometryVersion:1,mist:{},mistBounds:[0,0,60,60],view:{width:64,height:64,cell:2,panX:0,panY:0,yaw:0,elevation:Math.PI/2},background:'#000',objects:[root],enemies,hasEnemies:false,effects};
+    const options={geometryVersion:1,mist:{},mistBounds:[0,0,60,60],view:{width:64,height:64,cell:2,panX:0,panY:0,yaw:0,elevation:Math.PI/2},background:'#000',objects:[root],enemies,hasEnemies:false,effects};
     observation.render(options);const firstVisits=visits;observation.render(options);
     assert.equal(visits,firstVisits);assert.equal(mesh.material.userData.cityObserveFog,true);assert.equal(renders,2);assert.equal(observation.enemiesFrame(),null);assert.equal(clearAlpha,0);
     const added=new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshStandardMaterial());root.add(added);
@@ -107,4 +109,35 @@ test('升级光流只播放当前目标，复用几何材质，关闭/取消/减
  effect.update([a],3,{...params,upgradeFlowHeightMeters:0},true);assert.equal(mesh.visible,false);assert.equal(mesh.material.uniforms.still.value,1);assert.equal(mesh.material.uniforms.phase.value,0);assert.equal(effect.group.children.length,1);
  assert.equal(ground.material.uniforms.flowing.value,0);assert.equal(ground.material.uniforms.phase.value,0);assert.equal(ground.material.uniforms.still.value,1);
  effect.update([],4,params);assert.equal(effect.group.children.length,0);effect.dispose();assert.equal(parent.children.length,0);
+});
+
+// 同位置/体量的未知对象完全相同，身份与状态不流进几何或材质。
+test('3D未知轮廓不透露POI、用途或敌源HP，合批且不参加拾取',async()=>{
+  const {createUnknownCity}=await loadBrowserModule('city-unknown.js');
+  const layout={width:6,height:6,tiles:Array.from({length:36},(_,i)=>i%6===0?'road':'block')},plot={x:2,y:3,w:3,h:2};
+  const a=createUnknownCity(layout,[plot]);assert.equal(a.children.length,2);assert.equal(a.userData.cityNoPick,true);
+  for(const extra of [{role:'hospital',special:true},{type:'housing',status:'building',powered:true},{role:'source',hp:999}]){
+    const b=createUnknownCity(layout,[{...plot,...extra}]);
+    a.children.forEach((mesh,i)=>{assert.deepEqual(mesh.geometry.attributes.position.array,b.children[i].geometry.attributes.position.array);assert.equal(mesh.material.color.getHex(),b.children[i].material.color.getHex());});
+    b.traverse(node=>{if(node.isMesh){node.geometry.dispose();node.material.dispose();}});
+  }
+  a.traverse(node=>{if(node.isMesh){node.geometry.dispose();node.material.dispose();}});
+});
+
+test('俯视3D相机与格子信息投影一致，并能切回斜视相机',async()=>{
+  const previous=globalThis.document;globalThis.document={createElement:()=>({width:800,height:600,getContext:()=>({clearRect(){},drawImage(){}})})};
+  try{
+    const {createCityObservation}=await loadBrowserModule('city-observation.js'),{projectView}=await import('../src/city-view.js');
+    let renderedCamera;const renderer={domElement:{width:800,height:600},setClearColor(){},render(scene,camera){renderedCamera=camera;scene.updateMatrixWorld(true);}};
+    const scene=new THREE.Scene(),effects=new THREE.Group(),enemies=new THREE.Group(),observation=createCityObservation(scene,renderer);
+    const top={width:800,height:600,cell:20,panX:50,panY:-90,projection:'orthographic',yaw:0,elevation:Math.PI/2};
+    for(const view of [top,{...top,yaw:Math.PI/4,elevation:Math.PI/4},top]){
+      observation.render({geometryVersion:1,mist:{},mistBounds:[0,0,60,60],view,background:'#000',objects:[],enemies,hasEnemies:false,effects});
+      for(const [x,y,z] of [[3,9,0],[17,21,2],[35,28,.3]]){
+        const actual=new THREE.Vector3(x,z,y).project(renderedCamera),expected=projectView(x,y,z,view);
+        assert.ok(Math.abs((actual.x+1)*400-expected.x)<1e-8);assert.ok(Math.abs((1-actual.y)*300-expected.y)<1e-8);
+      }
+    }
+    assert.equal(observation.warmupRoot().material.map,null);
+  }finally{globalThis.document=previous;}
 });

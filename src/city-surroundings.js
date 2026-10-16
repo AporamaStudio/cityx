@@ -1,6 +1,5 @@
 import {riverBanks} from './natural-terrain.js?v=7';
 import {plantWidthMeters} from './city-vegetation.js?v=2';
-import {fogColor} from './fog.js?v=22';
 import {exteriorFogExtent} from './visibility.js?v=9';
 const cache=new WeakMap(),smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
 const hash=(x,y)=>(Math.imul(Math.round(x*100)+101,73856093)^Math.imul(Math.round(y*100)+103,19349663))>>>0;
@@ -80,25 +79,4 @@ export function surroundingLandscape(layout){
   // 稳定候选林地只移除占住田野/谷仓的树，不重新随机全片森林。
   land.trees=land.trees.filter(tree=>!occupied.some(p=>Math.hypot(tree.x-p.x,tree.y-p.y)<p.radius+tree.width/40+.15));
   cache.set(layout,land);return land;
-}
-
-const textures=new WeakMap();
-// 俯视回退也画同一片林地/水系；日夜两张静态纹理按原主题进度混合。
-export function drawSurroundingTerrain(ctx,layout,night){
-  const land=surroundingLandscape(layout),b=land.extent,w=layout.width,h=layout.height;
-  if(!textures.has(layout))textures.set(layout,[0,1].map(dark=>{
-    const canvas=document.createElement('canvas');canvas.width=(w+b*2)*8;canvas.height=(h+b*2)*8;const g=canvas.getContext('2d');g.scale(8,8);g.translate(b,b);g.save();g.beginPath();g.rect(-b,-b,w+b*2,h+b*2);g.rect(0,0,w,h);g.clip('evenodd');
-    for(let y=-b;y<h+b;y++)for(let x=-b;x<w+b;x++){
-      if(x>=0&&y>=0&&x<w&&y<h)continue;const height=exteriorHeight(layout,land,x+.5,y+.5);
-      g.fillStyle=dark?`rgb(${43+height*3},${65+height*4},${63+height*3})`:`rgb(${121+height*7},${142+height*6},${102+height*4})`;g.fillRect(x,y,1.01,1.01);
-    }
-    for(const road of land.exits){g.strokeStyle=dark?'#364b52':'#718279';g.lineWidth=road.w;g.beginPath();road.points.forEach((p,i)=>i?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y));g.stroke();}
-    if(layout.natural?.river)for(const side of [-1,1]){const points=[];for(let d=0;d<=b;d++){const x=side<0?-d:w+d;points.push({x,...exteriorRiver(layout,x)});}g.fillStyle=dark?'#294b60':'#588a97';g.beginPath();points.forEach((p,i)=>i?g.lineTo(p.x,p.top):g.moveTo(p.x,p.top));for(const p of [...points].reverse())g.lineTo(p.x,p.bottom);g.closePath();g.fill();}
-    for(const field of land.fields){g.save();g.translate(field.x,field.y);g.rotate(-field.angle);g.fillStyle=field.asset==='wheatfield-burnt'?(dark?'#333d38':'#575449'):field.asset==='wheatfield'?(dark?'#666044':'#b6a264'):field.asset==='wheatfield-abandoned'?(dark?'#505b42':'#8c835c'):(dark?'#514c3c':'#806c4a');g.fillRect(-.5,-.5,1,1);g.strokeStyle=dark?'#3c4639':'#766448';g.lineWidth=.025;for(let x=-.4;x<.5;x+=.12){g.beginPath();g.moveTo(x,-.45);g.lineTo(x,.45);g.stroke();}g.restore();}
-    g.fillStyle=dark?'#2f493c':'#627a4d';for(const tree of land.trees){g.beginPath();g.arc(tree.x,tree.y,tree.width/40,0,Math.PI*2);g.fill();}
-    for(const house of land.buildings){g.fillStyle=dark?'#607273':'#a1a08a';g.save();g.translate(house.x,house.y);g.rotate(-house.angle);g.fillRect(-.3,-.45,.6,.9);if(house.asset==='barn-abandoned'){g.fillStyle=dark?'#37433e':'#586055';g.fillRect(0,-.2,.27,.3);}g.restore();}
-    for(const prop of land.props){g.fillStyle=dark?'#625b42':'#a09266';g.fillRect(prop.x-.06,prop.y-.035,.12,.07);}
-    g.fillStyle=fogColor(dark);for(let y=-b;y<h+b;y++)for(let x=-b;x<w+b;x++){const d=outsideDistance(layout,x+.5,y+.5);if(!d)continue;g.globalAlpha=.12+.18*smooth(d/(b*.25))+.7*smooth((d-b*10/48)/(b*38/48));g.fillRect(x,y,1.01,1.01);}g.restore();return canvas;
-  }));
-  const [day,dark]=textures.get(layout);ctx.drawImage(day,-b,-b,w+b*2,h+b*2);if(night>0){ctx.save();ctx.globalAlpha=night;ctx.drawImage(dark,-b,-b,w+b*2,h+b*2);ctx.restore();}
 }

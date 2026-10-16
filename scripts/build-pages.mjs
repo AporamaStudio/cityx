@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -7,7 +7,9 @@ import { dirname, join } from 'node:path';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = join(root, '.pages-dist');
 const revision = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-const files = ['index.html', 'style.css', 'map-preview.html', 'model-preview.html', 'src/model-preview.js', 'src/model-preview.css', 'src/model-preview-effects.js', 'src/app.js', 'src/city-3d.js', 'src/city-shader-warmup.js', 'src/city-building-style.js', 'src/city-building-lights.js', 'src/city-wrecks.js', 'src/city-roads.js', 'src/city-road-model.js', 'src/city-view.js', 'src/city-observation.js', 'src/city-effects.js', 'src/city-streets.js', 'src/city-facilities.js', 'src/combat-visuals.js', 'src/model.js', 'src/config.js', 'src/enemy-sources.js', 'src/audio.js', 'src/map-camera.js', 'src/control-border.js', 'src/city-map.js', 'src/map-settings.js', 'src/map-preview.js', 'src/city-textures.js', 'src/fog.js', 'src/visibility.js', 'src/icons.js', 'src/tower-overlay.js', 'src/render-meter.js'];
+// 源目录均为网页运行模块；自动收集，避免3D拆分模块遗漏导致加载界面无法完成。
+const runtimeFiles=(await readdir(join(root,'src'))).filter(name=>/\.(js|css)$/.test(name)).map(name=>'src/'+name);
+const files=['index.html','style.css','map-preview.html','model-preview.html',...runtimeFiles];
 await rm(output, { recursive: true, force: true });
 for (const file of files) {
   let content = await readFile(join(root, file), 'utf8');

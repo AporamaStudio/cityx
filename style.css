@@ -446,3 +446,8 @@ body[data-time="night"]{--resource-unmet-ink:#ff9a8a}
 #targetPreview[data-valid="true"]{color:var(--teal)}
 #targetPreview[hidden]{display:none}
 .daily-status:has(#targetPreview:not([hidden])){column-gap:8px;row-gap:2px}
+
+/* 主游戏首帧只展示统一云色，失败时保留提示，不闪现旧的2D城市。 */
+.city-loading{position:absolute;inset:0;z-index:20;display:grid;place-items:center;background:radial-gradient(ellipse at 25% 30%,#e4e7df 0%,transparent 60%),radial-gradient(ellipse at 80% 65%,#dce3e0 0%,transparent 55%),#c6d1cf;color:#344b50}
+.city-loading[hidden]{display:none}.city-loading-card{display:grid;gap:14px;justify-items:center;min-width:220px;padding:26px;border:1px solid #aebeb980;border-radius:12px;background:#e6ebe3b8}.city-loading-card strong{font-size:15px}.city-loading-card span{font-size:12px;color:#587076}.city-loading progress{width:210px;height:7px;border:0;border-radius:9px;overflow:hidden;accent-color:#538b7d}.city-loading progress::-webkit-progress-bar{background:#bdceca}.city-loading progress::-webkit-progress-value{background:#538b7d;border-radius:9px}
+#viewport:not([data-city-state="ready"]) #map{visibility:hidden;pointer-events:none}

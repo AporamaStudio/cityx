@@ -11,19 +11,18 @@ export function createCityObservation(scene,renderer){
   const orthographic=new THREE.OrthographicCamera(),perspective=new THREE.PerspectiveCamera();
   let camera=orthographic;
   const canvas=document.createElement('canvas'),enemyCanvas=document.createElement('canvas');
-  let pickCandidates=[],lastGeometryVersion=null,lastGroundVersion=null,hasEnemyFrame=false;
+  let pickCandidates=[],lastGeometryVersion=null,hasEnemyFrame=false;
   const ray=new THREE.Raycaster(),pointer=new THREE.Vector2(),pickMeshes=[],hits=[];
-  const groundTexture=new THREE.CanvasTexture(document.createElement('canvas'));groundTexture.colorSpace=THREE.SRGBColorSpace;groundTexture.generateMipmaps=false;groundTexture.minFilter=THREE.LinearFilter;
   const fogTexture=new THREE.CanvasTexture(document.createElement('canvas'));fogTexture.flipY=false;fogTexture.generateMipmaps=false;fogTexture.minFilter=THREE.LinearFilter;
   const fog={enabled:{value:0},texture:{value:fogTexture},bounds:{value:new THREE.Vector4(-8,-8,76,76)}};
-  const floor=new THREE.Mesh(new THREE.PlaneGeometry(76,76),new THREE.MeshStandardMaterial({map:groundTexture,roughness:1,transparent:true,depthWrite:false}));floor.rotation.x=-Math.PI/2;floor.position.set(30,-.014,30);floor.receiveShadow=true;floor.visible=false;scene.add(floor);freezeCityTransforms(floor);
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(76,76),new THREE.MeshStandardMaterial({color:'#697b70',roughness:1}));floor.rotation.x=-Math.PI/2;floor.position.set(30,-.014,30);floor.receiveShadow=true;floor.visible=false;scene.add(floor);freezeCityTransforms(floor);
   // 拾取和绘制共用相机配置；旋转/缩放后快速点击也使用当前矩阵。
   function setCamera(view){
     const {width,height,cell,yaw,elevation}=view,center=viewCenter(view),distance=viewDistance(view);
     camera=view.projection==='perspective'?perspective:orthographic;
     if(camera===perspective){camera.fov=view.fov;camera.aspect=width/height;camera.near=distance*.05;camera.far=distance+300;}
     else{camera.left=-width/(2*cell);camera.right=width/(2*cell);camera.top=height/(2*cell);camera.bottom=-height/(2*cell);camera.near=.1;camera.far=300;}
-    camera.position.set(center.x+Math.sin(yaw)*Math.cos(elevation)*distance,Math.sin(elevation)*distance,center.y+Math.cos(yaw)*Math.cos(elevation)*distance);camera.up.set(0,1,0);camera.lookAt(center.x,0,center.y);camera.updateProjectionMatrix();camera.updateMatrixWorld();
+    camera.position.set(center.x+Math.sin(yaw)*Math.cos(elevation)*distance,Math.sin(elevation)*distance,center.y+Math.cos(yaw)*Math.cos(elevation)*distance);camera.up.set(0,Math.abs(Math.cos(elevation))<1e-6?0:1,Math.abs(Math.cos(elevation))<1e-6?-1:0);camera.lookAt(center.x,0,center.y);camera.updateProjectionMatrix();camera.updateMatrixWorld();
   }
   function bind(object){object.traverse(node=>{if(!node.isMesh&&!node.isLine)return;const material=node.material;if(material.userData.cityObserveFog)return;
     material.userData.cityObserveFog=true;const previous=material.onBeforeCompile,key=material.customProgramCacheKey();
@@ -46,7 +45,7 @@ export function createCityObservation(scene,renderer){
       for(const node of pickCandidates)if(!node.userData.cityConstructionPreview&&!node.material.transparent&&(!node.userData.cityDecoration||node.userData.cityGroundSurface))pickMeshes.push(node);
       const hit=ray.intersectObjects(pickMeshes,false,hits)[0];return hit?{x:hit.point.x,y:hit.point.z}:null;
     },
-    render({ground,groundVersion,geometryVersion,mist,mistBounds,view,background,objects,enemies,hasEnemies,effects}){
+    render({geometryVersion,mist,mistBounds,view,background,objects,enemies,hasEnemies,effects}){
       // 外围纯景物不参加鼠标射线，避免每次移动鼠标检测整片郊野几何。
       // 只有网格增删/替换时重新登记材质和拾取候选；预览透明度仍在每次拾取时判断。
       if(lastGeometryVersion!==geometryVersion){
@@ -55,7 +54,7 @@ export function createCityObservation(scene,renderer){
         lastGeometryVersion=geometryVersion;
       }
       bind(effects);
-      if(groundTexture.image!==ground||lastGroundVersion!==groundVersion){groundTexture.image=ground;groundTexture.needsUpdate=true;lastGroundVersion=groundVersion;}fogTexture.image=mist;fogTexture.needsUpdate=true;
+      fogTexture.image=mist;fogTexture.needsUpdate=true;
       fog.bounds.value.set(...mistBounds);
       setCamera(view);
       floor.visible=true;for(const object of [...objects,effects])object.visible=true;fog.enabled.value=1;
