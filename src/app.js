@@ -17,8 +17,8 @@ import {cameraScale,limitZoom,limitPan,limitObservationPan} from './map-camera.j
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {poiBadgeSVG,drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=15';
 import {createGameAudio} from './audio.js?v=11';
-import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=97';
-import {poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=121';
+import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=98';
+import {poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=122';
 import {generateCityMap} from './city-map.js?v=14';
 import {readMapSettings} from './map-settings.js?v=2';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -102,7 +102,12 @@ let zoom = 1, base = 20, panX = 0, panY = 0, width = 0, height = 0, cameraBottom
 let viewMode='top',viewYaw=Math.PI/4,viewElevation=DEFAULTS.obliqueElevationDegrees*Math.PI/180;
 const observationGround=document.createElement('canvas'),observationMist=document.createElement('canvas');
 let observationGroundKey='',pointerSample=null,pointerPending=false;
-const cameraView=()=>{const view={width,height,panX,panY,cell:base*zoom,zoom,projection:viewMode==='free'?previewParams().freeProjection:'orthographic',fov:previewParams().freePerspectiveFovDegrees,yaw:viewMode==='top'?0:viewYaw,elevation:viewMode==='top'?Math.PI/2:viewMode==='oblique'?previewParams().obliqueElevationDegrees*Math.PI/180:viewElevation};return viewMode==='top'?view:observationView(view,SIZE);};
+const cameraView=()=>{
+  const params=previewParams(),oblique=viewMode==='oblique';
+  // 两种观察模式独立读取投影/FOV，模型、叠加信息和拾取仍共用同一份镜头。
+  const view={width,height,panX,panY,cell:base*zoom,zoom,projection:viewMode==='top'?'orthographic':oblique?params.obliqueProjection:params.freeProjection,fov:oblique?params.obliquePerspectiveFovDegrees:params.freePerspectiveFovDegrees,yaw:viewMode==='top'?0:viewYaw,elevation:viewMode==='top'?Math.PI/2:oblique?params.obliqueElevationDegrees*Math.PI/180:viewElevation};
+  return viewMode==='top'?view:observationView(view,SIZE);
+};
 function setViewMode(mode){
   if(mode!=='top'&&!city3D?.isReady()){showTopNotice('3D模型仍在加载，请稍后。');return;}
   if(viewMode==='oblique')viewElevation=previewParams().obliqueElevationDegrees*Math.PI/180;
@@ -457,7 +462,7 @@ const towerOverlayCache=createTowerOverlayCache();
 const renderMeter=createRenderMeter();let lastStatsView='';
 // 只在统计开启时记录；HUD显示实际地图重绘率，完整提交数留在悬停说明。
 function recordRenderStats(cpu,stats,total){
-  const panel=$('renderStats'),view=[viewMode,state.phase,previewParams().freeProjection].join(':');
+  const camera=cameraView(),panel=$('renderStats'),view=[viewMode,state.phase,camera.projection,camera.fov].join(':');
   if(view!==lastStatsView){lastStatsView=view;renderMeter.reset();}
   panel.hidden=false;
   const continuous=!!(cameraKeys.size||dragging?.moved||motion&&(!paused||motion.singleStep)||state.phase==='battle'&&!paused&&combatShots.some(shot=>effectTime-shot.at<.2));
@@ -1986,7 +1991,7 @@ function paramsEditor(params,scope='all') {
     const row=document.createElement('div');row.className='fields';
     for(const [name,label,min,max] of specs){
       const wrap=document.createElement('label');wrap.textContent=label;
-      const choices=name==='shape'?[['square','方形'],['diamond','菱形']]:name==='freeProjection'?[['orthographic','正交'],['perspective','透视']]:['returnToTopOnAction','showRenderStats'].includes(name)?[['true','开启'],['false','关闭']]:null;
+      const choices=name==='shape'?[['square','方形'],['diamond','菱形']]:['obliqueProjection','freeProjection'].includes(name)?[['orthographic','正交'],['perspective','透视']]:['returnToTopOnAction','showRenderStats'].includes(name)?[['true','开启'],['false','关闭']]:null;
       const input=document.createElement(choices?'select':'input');
       if(choices)for(const [value,text] of choices){const option=document.createElement('option');option.value=value;option.textContent=text;input.append(option);}
       else{input.type='number';input.min=min;input.max=max;input.step=['productionIncomePerCell','productionSmallCostFloor','productionMaxDensity','bankDepositPercent','bankLoanPercent','bankUpgradeRatePoints','bankLoanMinPercent','bankRateMaxPercent','enemyFogFadeCells','controlBorderInnerCells','controlBorderOuterCells','controlBorderLinePx','upgradeFlowHeightMeters'].includes(name)||name.endsWith('Multiplier')?0.1:1;}
@@ -2013,8 +2018,9 @@ function paramsEditor(params,scope='all') {
   fields('POI标牌',params,'',[['poiMarkerMinSizePx','最小标牌（像素）',32,80],['poiMarkerSizePx','最大标牌（像素）',32,80],['poiMarkerBorderPx','状态边框（像素）',2,6],['poiMarkerRouteOpacity','聚焦路线时不透明度%',0,100],['poiMarkerNightOpacity','夜间不透明度%',0,100]],'visualParams');
   fields('升级预览',params,'',[['upgradeFlowHeightMeters','光流高度（米，0关闭光幕）',0,12],['upgradeFlowMinPx','投影最小上流距离（像素）',0,40],['upgradeFlowCycleMs','上流周期（毫秒）',500,6000],['upgradeFlowOpacity','光流强度%',0,100]],'visualParams');
   fields('地图比例尺',params,'',[['cellMeters','每格距离（米）',1,1000],['mapMaxCellPx','最大格宽（像素）',48,256]],'visualParams');
-  fields('观察镜头',params,'',[['obliqueElevationDegrees','斜视俯仰角（度）',25,80],['freeProjection','自由投影'],['returnToTopOnAction','操作返回俯视'],['freePerspectiveFovDegrees','透视FOV（度）',20,60]],'visualParams');
-  fields('键盘镜头',params,'',[['keyboardPanSpeedPx','WASD速度（像素/秒，0关闭）',0,1200]],'visualParams');
+  fields('斜视观察镜头',params,'',[['obliqueElevationDegrees','俯仰角（度）',25,80],['obliqueProjection','投影方式'],['obliquePerspectiveFovDegrees','透视FOV（度）',20,60]],'visualParams');
+  fields('自由观察镜头',params,'',[['freeProjection','投影方式'],['freePerspectiveFovDegrees','透视FOV（度）',20,60]],'visualParams');
+  fields('镜头操作',params,'',[['returnToTopOnAction','操作返回俯视'],['keyboardPanSpeedPx','WASD速度（像素/秒，0关闭）',0,1200]],'visualParams');
   fields('地图信息密度',params,'',[['mapMidZoomPercent','进入中景（%）',100,1000],['mapNearZoomPercent','进入近景（%）',100,1000]],'visualParams');
   fields('控制边缘',params,'',[['controlBorderInnerCells','内侧渐隐（格，0关闭）',0,2],['controlBorderOuterCells','外侧渐隐（格，0关闭）',0,2],['controlBorderInnerOpacity','内侧色带强度%',0,60],['controlBorderOuterOpacity','外侧色带强度%',0,60],['controlBorderLinePx','主线粗细（像素）',1,6]],'visualParams');
   fields('火力显示',params,'',[['fireNumbersMinCellPx','数字最小格宽（像素，0始终显示）',0,48]],'visualParams');
@@ -2030,7 +2036,7 @@ function readParams(scope='all') {
   const selector=scope==='visual'?'#visualParams [data-param]':scope==='gameplay'?'#params [data-param]':'[data-param]';
   for(const input of document.querySelectorAll(selector)){
     const parts=input.dataset.param.split('.'), name=parts.at(-1);
-    const value=['returnToTopOnAction','showRenderStats'].includes(name)?input.value==='true':['shape','freeProjection'].includes(name)?input.value:input.value.trim()===''?NaN:Number(input.value);
+    const value=['returnToTopOnAction','showRenderStats'].includes(name)?input.value==='true':['shape','obliqueProjection','freeProjection'].includes(name)?input.value:input.value.trim()===''?NaN:Number(input.value);
     if(parts.length===1)result[name]=value;else result.weapons[parts[0]][name]=value;
   }
   paramReads.set(scope,{base:state.params,value:result});return result;

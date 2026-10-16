@@ -20,6 +20,18 @@ test('第7天玩法原地应用保留日期、损伤与视觉，降低上限不�
   state.wallHealth.get(id).hp=0;assert.equal(applyExperimentParams(state,{...state.params,wallHP:2,campHP:5},'gameplay'),'');assert.equal(state.hp,5);assert.deepEqual(state.wallHealth.get(id),{hp:0,max:2});
 });
 
+test('斜视投影与FOV独立应用，不覆盖自由镜头或夜战状态，拒绝无效配置',()=>{
+  const state=setup();state.phase='battle';state.tick=12;
+  const {params,...before}=structuredClone(state);
+  assert.equal(applyExperimentParams(state,{...state.params,obliqueProjection:'perspective',obliquePerspectiveFovDegrees:55},'visual'),'');
+  const {params:after,...rest}=state;assert.deepEqual(rest,before);assert.equal(after.obliqueProjection,'perspective');assert.equal(after.obliquePerspectiveFovDegrees,55);
+  assert.equal(after.freeProjection,params.freeProjection);assert.equal(after.freePerspectiveFovDegrees,params.freePerspectiveFovDegrees);
+  const unchanged=structuredClone(state);
+  for(const change of [{obliqueProjection:'invalid'},{obliquePerspectiveFovDegrees:19},{obliquePerspectiveFovDegrees:61},{obliquePerspectiveFovDegrees:40.5}]){
+    assert.match(applyExperimentParams(state,{...state.params,...change},'visual'),/斜视/);assert.deepEqual(state,unchanged);
+  }
+});
+
 test('玩法应用拒绝冲突与战斗中修改，失败不覆盖任何状态',()=>{
   const state=setup(),before=structuredClone(state);assert.match(applyExperimentParams(state,{...state.params,nightTicks:1},'gameplay'),/最后一批/);assert.deepEqual(state,before);
   state.phase='battle';const battle=structuredClone(state);assert.match(applyExperimentParams(state,{...state.params,killReward:4},'gameplay'),/白天/);assert.deepEqual(state,battle);
