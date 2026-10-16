@@ -1,0 +1,17 @@
+{
+  "asset": "logistics",
+  "state": "connected",
+  "units": "meters",
+  "footprint": [
+    140,
+    160
+  ],
+  "sourceObjects": 3855,
+  "materials": 29,
+  "triangles": 279990,
+  "glbBytes": 18993704,
+  "nightLights": 17,
+  "nightSpotLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 50.6
+}
