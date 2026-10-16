@@ -1,0 +1,17 @@
+{
+  "asset": "police",
+  "state": "abandoned",
+  "units": "meters",
+  "footprint": [
+    80,
+    100
+  ],
+  "sourceObjects": 4177,
+  "materials": 33,
+  "triangles": 264368,
+  "glbBytes": 17549804,
+  "nightLights": 0,
+  "nightSpotLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 24.3
+}
