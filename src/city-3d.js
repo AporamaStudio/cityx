@@ -12,9 +12,11 @@ import {updateWater} from './city-water.js?v=3';
 import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {PLANT_MODELS} from './city-vegetation.js?v=2';
 import {groundGlow} from './model-preview-effects.js?v=4';
-import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=13';
-import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=19';
-import {createNightShaderWarmup} from './city-shader-warmup.js?v=1';
+import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=15';
+import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=20';
+import {createNightShaderWarmup} from './city-shader-warmup.js?v=3';
+import {createShaderSamples,cloneWarmupMaterial} from './city-shader-samples.js?v=1';
+import {createShotVFX,createImpactVFX} from './cannon-vfx.js?v=1';
 import {createZombieCrowds} from './city-enemies.js?v=8';
 import {constructionAppearance,constructionMaskTexture,bindConstructionMask,setConstructionMask} from './city-construction-preview.js?v=1';
 import {createUpgradePreview} from './city-upgrade-preview.js?v=2';
@@ -99,13 +101,28 @@ export function createCity3D({onReady,onProgress,onError}){
   }
   const zombieCrowds=createZombieCrowds(enemies);
   const observation=createCityObservation(scene,renderer);
-  let currentNight=0;
-  const shaderWarmup=createNightShaderWarmup(renderer,scene,{enabled:()=>ready&&currentNight===0});
-  const warmupRoot=new THREE.Group();
+  let initialPrepared=false;
+  const shaderSamples=createShaderSamples();
+  const shaderWarmup=createNightShaderWarmup(renderer,scene,{prepare:shaderSamples.prepare,enabled:()=>ready,onReady:()=>{if(!initialPrepared){initialPrepared=true;onReady();}},onError:error=>{if(!initialPrepared)onError(error);else console.warn('夜景材质准备未完成。',error);}});
+  const warmupRoot=new THREE.Group(),examples=new THREE.Group();let examplesReady=false;
+  function prepareExamples(){
+    if(examplesReady)return;examplesReady=true;
+    // 复用真实楼体构造；只保留少量材质样本，不创建运营灯、不触发探索或建设。
+    for(const type of ['housing','production','hospital','bank'])for(const status of ['building','ruin']){
+      const object=build({id:-100,x:0,y:0,w:3,h:3,type,status,cellMeters:20},true).object;examples.add(object);
+      const masked=object.clone(true);masked.traverse(node=>{if(node.material)node.material=cloneWarmupMaterial(node.material);});bindConstructionMask(masked,false);examples.add(masked);
+    }
+    const plan=build({id:-101,x:0,y:0,w:3,h:3,type:'housing',status:'building',cellMeters:20},true).object;constructionAppearance(plan);examples.add(plan);
+    for(const name of ['near','far','watch','wall'])for(const transparent of [false,true]){
+      const object=models.get(name).clone(true);object.traverse(node=>{if(node.material){node.material=node.material.clone();node.material.transparent=transparent;node.material.opacity=transparent?.45:1;}});examples.add(object);
+    }
+    createShotVFX(examples,'A');createShotVFX(examples,'B');createImpactVFX(examples);
+    observation.prepareMaterials(examples);
+  }
   function warmNight(camera){
-    if(currentNight!==0)return;
-    // 编译容器只引用原根节点，不重新挂载；零人数实例也编译真实材质，排除短命战斗特效。
-    warmupRoot.children=[exterior,nature,buildings,facilities,streets,roads,unknown,enemies,observation.warmupRoot()];
+    prepareExamples();
+    // 当前楼体与预览共用同一组结构特征；独立副本分批准备昼夜，不改真实父节点。
+    warmupRoot.children=[exterior,nature,buildings,facilities,streets,roads,unknown,enemies,examples,effects.group,observation.warmupRoot()];
     const lights=[...localLights,...effects.nightLights()];
     shaderWarmup.request(`${geometryVersion}:${localLights.length}:${effects.nightLightSignature()}`,warmupRoot,camera,lights);
   }
@@ -116,8 +133,8 @@ export function createCity3D({onReady,onProgress,onError}){
   function release(entry){
     geometryVersion++;entry.object.removeFromParent();shaderWarmup.release(()=>{const maps=new Set();entry.object.traverse(node=>{if(node.isMesh){if(node.material.map?.userData.cityOwned)maps.add(node.material.map);node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});for(const map of maps)map.dispose();});
   }
-  function build(plot){
-    geometryVersion++;const {id,x,y,w,h,type,status,cellMeters}=plot,landmark=['hospital','bank'].includes(type);
+  function build(plot,sample=false){
+    if(!sample)geometryVersion++;const {id,x,y,w,h,type,status,cellMeters}=plot,landmark=['hospital','bank'].includes(type);
     const pool=type==='housing'?['small','home','wide']:['factory','workshop'];
     const object=new THREE.Group(),housing=type==='housing',columns=landmark?1:housing?Math.min(w,4):Math.ceil(w/2),rows=landmark?1:housing?Math.min(h,3):Math.ceil(h/2),slotW=w/columns,slotH=h/rows;
     const podium=landmark?0:(housing?2.5:1.5)/cellMeters;
@@ -135,7 +152,7 @@ export function createCity3D({onReady,onProgress,onError}){
       const scale=landmark?Math.min((w-.16)/size.x,(h-.16)/size.z):Math.min(slotW*.86/size.x,slotH*.86/size.z,(housing?12:22)/cellMeters/size.y)*variation.scale;
       model.scale.setScalar(scale);if(landmark)model.scale.y=1/cellMeters;model.position.set(-w/2+(column+.5)*slotW-center.x*scale,podium-bounds.min.y*model.scale.y,-h/2+(row+.5)*slotH-center.z*scale);object.add(model);
     }
-    object.position.set(x+w/2,0,y+h/2);buildings.add(object);
+    object.position.set(x+w/2,0,y+h/2);if(!sample)buildings.add(object);
     if(!landmark)mergePlot(object);
     if(status==='ruin'&&!landmark)ruinAppearance(object);
     if(status==='building')operatingLights(object);
@@ -144,10 +161,11 @@ export function createCity3D({onReady,onProgress,onError}){
   }
   return {
     // 重开/重试释放本局保留的峰值槽位；下一帧按真实设施重新分配。
-    resetLighting(){effects.resetLights();for(const light of localLights){light.removeFromParent();light.dispose();}localLights.length=0;},
+    resetLighting(){shaderWarmup.reset();shaderWarmup.release(()=>shaderSamples.reset());effects.resetLights();for(const light of localLights){light.removeFromParent();light.dispose();}localLights.length=0;},
     beginStats(){renderer.info.autoReset=false;renderer.info.reset();},
     renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats(),streetLights:localLights.length,...effects.lightStats(),programs:renderer.info.programs.length};renderer.info.autoReset=true;return stats;},
     isReady(){return ready;},
+    isPrepared(){return initialPrepared;},
     observationPick(x,y,width,height,view){return ready?observation.pick(x,y,width,height,view):null;},
     observationFrame(options){if(!ready)return null;const image=observation.render({...options,objects:[exterior,nature,unknown,buildings,facilities,streets,roads],enemies,hasEnemies:zombieCrowds.stats().figures>0,geometryVersion,effects:effects.group});warmNight(observation.warmupCamera());return image;},
     observationEnemiesFrame(){return ready?observation.enemiesFrame():null;},
@@ -162,7 +180,6 @@ export function createCity3D({onReady,onProgress,onError}){
     },
     render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],dressing=[],plants=[],plantPreview=null,constructionPreview=null,naturalOccupied=[],roadCells=[],unknownPlots=[],fx}){
       if(!ready)return null;
-      currentNight=night;
       const geographyChanged=natureLayout!==layout||natureMeters!==cellMeters;
       if(natureLayout!==layout)effects.resetLights();
       // 只读实际设施占格；道路上的墙/塔不重建林地，悬停预览不触发整片几何更新。
@@ -246,20 +263,20 @@ export function createCity3D({onReady,onProgress,onError}){
         mergePlot(streets);const materials=new Set();streets.traverse(node=>{if(node.isMesh){materials.add(node.material);if(node.material.transparent)node.castShadow=false;}});streetMaterials=[...materials];freezeCityTransforms(streets);
         geometryVersion++;streetKey=nextStreets;
       }
-      // 只给镜头附近路灯分配照明；槽位保持参与着色，白天/离屏以0强度停光，不投独立阴影。
+      // 夜间槽位跨镜头保持稳定；白天不参与着色，布局变化后的夜景在空闲分批准备。
       const visible=lightViewport??{left:-panX/cell,right:(width-panX)/cell,top:-panY/cell,bottom:(height-panY)/cell};
       const reach=22/cellMeters,cx=(width/2-panX)/cell,cy=(height/2-panY)/cell;
       const nearby=streetLights.filter(p=>p.x>=visible.left-reach&&p.x<=visible.right+reach&&p.y>=visible.top-reach&&p.y<=visible.bottom+reach).sort((a,b)=>Math.hypot(a.x-cx,a.y-cy)-Math.hypot(b.x-cx,b.y-cy)).slice(0,lightBudget);
       // 池规模不超过实际灯具数；平移仍保持槽位，避免没有路灯时也计算24盏零强度灯。
       const wanted=new Map(nearby.map(p=>[`${p.x}:${p.y}`,p])),poolSize=Math.min(lightBudget,streetLights.length);
       while(localLights.length>poolSize){const index=localLights.findIndex(light=>!wanted.has(light.userData.id)&&light.userData.level===0);if(index<0)break;localLights.splice(index,1)[0].removeFromParent();}
-      while(localLights.length<poolSize){const light=new THREE.PointLight('#ffd08a',0,reach,2);light.userData.level=0;scene.add(light);localLights.push(light);}
+      while(localLights.length<poolSize){const light=new THREE.PointLight('#ffd08a',0,reach,2);light.userData.level=0;light.userData.cityNightOnly=true;scene.add(light);localLights.push(light);}
       const claimed=new Set(localLights.map(l=>l.userData.id).filter(id=>wanted.has(id)));
       for(const light of localLights){
         let p=wanted.get(light.userData.id);const dt=Math.min(.1,Math.max(0,performance.now()/1000-(light.userData.at??performance.now()/1000)));light.userData.at=performance.now()/1000;
         light.userData.level=fx.reducedMotion?(p?1:0):Math.max(0,Math.min(1,light.userData.level+(p?1:-1)*dt*5));
         if(!p&&light.userData.level===0){const next=[...wanted].find(([id])=>!claimed.has(id));if(next){const [id,point]=next;light.userData.id=id;claimed.add(id);p=point;light.userData.level=fx.reducedMotion?1:night>0?.01:0;}}
-        light.visible=true;light.distance=reach;light.intensity=night*1.7*(20/cellMeters)**2*light.userData.level;if(p)light.position.set(p.x,p.height,p.y);
+        light.visible=night>0;light.distance=reach;light.intensity=night*1.7*(20/cellMeters)**2*light.userData.level;if(p)light.position.set(p.x,p.height,p.y);
       }
       for(const material of streetMaterials){if(material.map)material.opacity=night*.32;else if(material.name==='#ffe1a3'){material.emissive.set('#ffb75c');material.emissiveIntensity=night*1.8;}}
       const lightItems=[...fx.sweeps,...fx.fires].map(item=>{const {size}=measureModel(item.asset);return {...item,height:naturalGroundAt(layout,item.x,item.y,cellMeters)+size.y*Math.min(item.w/size.x,item.h/size.z)*(item.asset==='watch'?.84:.65)};});

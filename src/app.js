@@ -5,7 +5,7 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
 import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=4';
-import {createCity3D} from './city-3d.js?v=76';
+import {createCity3D} from './city-3d.js?v=78';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -2476,7 +2476,7 @@ function frame(now){
   if(pointerPending){pointerPending=false;if(pointerSample&&!(dragging&&(dragging.moved||dragging.panOnly||dragging.rotate))){hover=cellAt(pointerSample);updateMapSourceHover();draw();}}
   if(drawPending){
     drawPending=false;const start=measured?performance.now():0;if(measured)city3D?.beginStats();
-    try{if(paintMap()!==false)cityLoading.reveal();}catch(error){failCity(error);}
+    try{if(paintMap()!==false&&city3D.isPrepared())cityLoading.reveal();}catch(error){failCity(error);}
     if(measured)recordRenderStats(performance.now()-start,city3D?.renderStats(),performance.now()-frameStart);else{$('renderStats').hidden=true;renderMeter.reset();lastStatsView='';}
   }
   requestAnimationFrame(frame);

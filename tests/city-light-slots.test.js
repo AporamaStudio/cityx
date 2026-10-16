@@ -29,7 +29,7 @@ test('灯槽按实际设施增长、离开后保留零强度且复用，新地�
   slots.reset();assert.equal(scene.children.length,0);assert.equal(slots.lights().length,0);assert.deepEqual(slots.stats(),{fireLights:0,watchLights:0});
 });
 
-test('跨视口/昼夜不改灯数，保留火光、前线扫光和后方暖灯的真实参数',async()=>{
+test('夜间跨视口不改灯数，白天塔灯退出着色但火光保留，照明参数不变',async()=>{
   const previous=globalThis.document;globalThis.document={createElement:()=>({getContext:()=>({createRadialGradient:()=>({addColorStop(){}}),fillRect(){}})})};
   try{
     const {createCityEffects}=await load('city-effects.js'),scene=new THREE.Scene(),effects=createCityEffects(scene);
@@ -41,8 +41,11 @@ test('跨视口/昼夜不改灯数，保留火光、前线扫光和后方暖灯�
     effects.updateLights([camp,wreck,watch],0,1,far);assert.equal(point.intensity,0);assert.equal(spot.intensity,0);assert.ok(all.every(light=>light.visible));assert.equal(scene.children.filter(n=>n.isLight).length,3);
     effects.updateLights([camp,wreck,watch],0,1,near);assert.equal(point.intensity,power);assert.equal(spot.intensity,85);
     effects.updateLights([camp,wreck,{...watch,target:null}],0,1,near);assert.equal(spot.color.getHexString(),'ffd599');assert.equal(spot.intensity,1.1);assert.equal(spot.distance,watch.w*4);
-    effects.updateLights([camp,wreck,watch],0,0,near);assert.equal(spot.intensity,0);assert.ok(point.intensity>0);assert.ok(all.every(light=>light.visible));
+    effects.updateLights([camp,wreck,watch],0,0,near);assert.equal(spot.intensity,0);assert.ok(point.intensity>0);assert.equal(point.visible,true);assert.equal(spot.visible,false);assert.equal(spot.userData.cityNightOnly,true);
+    effects.updateLights([camp,wreck,watch],0,.2,near);assert.equal(spot.visible,true);assert.equal(spot.intensity,17);
     effects.updateLights([],0,1,near);assert.ok(all.every(light=>light.intensity===0));assert.equal(effects.group.children.length,0);
+    effects.updateLights([],0,0,near);assert.equal(spot.visible,false);assert.equal(point.visible,true);
+    effects.updateLights([],0,1,near);assert.equal(spot.visible,true);assert.ok(all.every(light=>light.intensity===0));
     effects.resetLights();assert.equal(effects.nightLights().length,0);
   }finally{globalThis.document=previous;}
 });

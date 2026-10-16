@@ -2,7 +2,7 @@ import {createShotVFX,createImpactVFX,muzzlePoint} from './cannon-vfx.js?v=1';
 import {SHOT_STYLES,shotEnvelope} from './shot-visuals.js?v=1';
 import {createDefenseVFX} from './defense-vfx.js?v=2';
 import * as THREE from 'three';
-import {createCityLightSlots} from './city-light-slots.js?v=1';
+import {createCityLightSlots} from './city-light-slots.js?v=3';
 import {groundGlow} from './model-preview-effects.js?v=3';
 
 function mesh(geometry,color,opacity=1){
@@ -60,6 +60,8 @@ export function createCityEffects(scene){
     },
     updateLights(items,time,night,viewport){
       const slots=lightSlots.sync(items);
+      // 空槽也随昼夜一起切换，防止拆塔后残留白天聚光计算或夜间改变峰值灯数。
+      for(const light of lightSlots.lights())light.visible=!light.userData.cityNightOnly||night>0;
       const active=new Set(items.map(item=>item.id));for(const [id,entry] of lights)if(!active.has(id)){dispose(entry.object);lights.delete(id);}
       for(const item of items){
         const slot=slots.get(item.id),e=lightEntry(item,slot);e.light=slot.light;e.target=slot.target;
