@@ -154,7 +154,7 @@ Three.js **0.180.0**，MIT，来自官方npm包 `three`。仅保留预览所需�
 
 - 共用米制构件/原创PBR/分件保存与固化合批导出入口为 `scripts/poi_quality.py`；建筑布局各由 `scripts/poi_<id>.py` 独立定义，统一运行 `scripts/build-poi-blender.py -- --asset <id> --state abandoned|intact|connected --render`。并非调用旧脚本生成别的楼体再改名。
 - 每个POI保留同址三态：`abandoned`废弃、`intact`修复但未运营、`connected`接通文明。保留占地/入口/建筑布局，损坏按设施结构分别制作；完好不自动受控或运营。接通版使用局部窗灯、灯具、真实灯位与少量生活/作业摆件，废弃和修复版无运营灯。
-- 输出为 `<id>-quality/<id>-<state>.blend`、`.glb`、`-build-info.json` 及 `renders/<id>-<state>-day.png` / `-night.png`，三态共六张同镜头Cycles图。源文件按分件可编辑、贴图打包；导出副本固化倒角并按材质合并，GLB纹理内嵌。运行照明保存在 `poiLights` / `poiLightColor` 和材质 `poiNightStrength` / `poiNightColor`，网页与离线渲染共用。
+- 输出为 `<id>-quality/<id>-<state>.blend`、`.glb`、`-build-info.json` 及 `renders/<id>-<state>-day.png` / `-night.png`，三态共六张同镜头Cycles图。源文件按分件可编辑、贴图打包；导出副本固化倒角并按材质合并，GLB纹理内嵌。运行照明保存在 `poiLights` / `poiSpotLights`（含照射目标、距离和角度）/ `poiLightColor` 和材质 `poiNightStrength` / `poiNightColor`，网页与离线渲染共用。
 - 仍为独立品质样板预算，不宣称符合主游戏/手机预算或接近逐像素概念重建。网页为Three.js实时渲染，最终以多角度网页检查为准；浏览器检查截图只留临时目录。离线图、脚本、源文件和GLB保留。
 
 在仓库根目录执行（例：学校修复状态）：
@@ -166,3 +166,4 @@ Three.js **0.180.0**，MIT，来自官方npm包 `three`。仅保留预览所需�
 | id | 样板 | 米制园区 | 结构与参考 |
 | --- | --- | --- | --- |
 | school | 学校 | 120×160m | 62×14m三层教学楼、短行政翼、低体育馆、篮球场和后院练习场；参考第一组下左，废弃体育馆缺失屋面可见桁架与内部地板，教学楼主体保留 |
+| athletics | 操场 | 160×120m | 贴合椭圆轮廓的六道缩编跑道、足球练习场、五排矮看台、篮球场及更衣服务房；参考第一组下右，非标准400m体育工程尺寸。废弃场地失养、座板与雨棚局部缺损；接通后四座场灯和入口照明开启 |

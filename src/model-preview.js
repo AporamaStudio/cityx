@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {QUALITY_POIS,poiState} from './model-preview-pois.js?v=1';
+import {QUALITY_POIS,poiState} from './model-preview-pois.js?v=2';
 import {createZombieCrowds} from './city-enemies.js?v=6';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
@@ -7,7 +7,7 @@ import {addBuildingFoundation} from './city-building-style.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
 import {VEHICLE_PALETTE} from './city-streets.js?v=5';
 import {createRoadModel} from './city-road-model.js?v=1';
-import {createQualityPreview,attachCityhallLights,updateShelterFirelight} from './model-preview-quality.js?v=4';
+import {createQualityPreview,attachCityhallLights,updateShelterFirelight} from './model-preview-quality.js?v=5';
 import {createPreviewEffects,groundGlow} from './model-preview-effects.js?v=4';
 
 // 独立选型页：模型、灯光与状态仅用于看效果，不读取或修改原型游戏。
@@ -319,7 +319,7 @@ function updateSingleState(){
     $('qualityReference').href=root+'concepts/poi-2026-10-14/01-civic-life'+(abandoned?'-abandoned':'')+'.png';
     for(const period of ['day','night'])$('quality'+(period==='day'?'Day':'Night')).href=root+'cityhall-quality/renders/city-hall'+(abandoned?'-abandoned':'')+'-'+period+'.png';
   }
-  if(mode==='single')$('sceneSubtitle').textContent=selected.shelter?(singleState==='ruined'?'孤立 · 少量应急灯与天窗微光':'接通后 · 稳定暖窗与沿路照明'):isBuilding(selected)?({intact:'完好 · 尚未运营',ruined:'原建筑局部塌损 · 占地与门窗保留',operating:'恢复运营 · 窗户与屋顶亮灯'})[singleState]:(selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0');
+  if(mode==='single')$('sceneSubtitle').textContent=selected.poi?({intact:'修复 · 设施完整，尚未启用',ruined:'废弃 · 设施失养与局部损坏',operating:'接通 · 场所与沿路照明恢复'})[singleState]:selected.shelter?(singleState==='ruined'?'孤立 · 少量应急灯与天窗微光':'接通后 · 稳定暖窗与沿路照明'):isBuilding(selected)?({intact:'完好 · 尚未运营',ruined:'原建筑局部塌损 · 占地与门窗保留',operating:'恢复运营 · 窗户与屋顶亮灯'})[singleState]:(selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0');
 }
 function setMode(next){
   mode=next;for(const button of document.querySelectorAll('[data-poi]'))button.classList.toggle('active',button.dataset.poi===selected.id);$('sampleNav').hidden=mode!=='single';qualityLight(mode==='single'&&selected.quality,night);$('qualityDetails').hidden=!(mode==='single'&&selected.quality);$('cityhall').classList.toggle('active',mode==='single'&&selected.id==='city-hall');$('shelter').classList.toggle('active',mode==='single'&&Boolean(selected.shelter));$('modelSelection').hidden=['roads','rural'].includes(mode);$('ruralDetails').hidden=mode!=='rural';rural.visible=mode==='rural';$('rural').classList.toggle('active',mode==='rural');$('roadDetails').hidden=mode!=='roads';district.visible=mode==='district';single.visible=mode==='single';roads.visible=mode==='roads';$('roads').classList.toggle('active',mode==='roads');$('district').classList.toggle('active',mode==='district');$('single').classList.toggle('active',mode==='single');$('restore').hidden=mode==='single';

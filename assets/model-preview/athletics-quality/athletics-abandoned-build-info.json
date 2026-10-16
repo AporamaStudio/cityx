@@ -1,0 +1,16 @@
+{
+  "asset": "athletics",
+  "state": "abandoned",
+  "units": "meters",
+  "footprint": [
+    160,
+    120
+  ],
+  "sourceObjects": 5036,
+  "materials": 29,
+  "triangles": 272961,
+  "glbBytes": 18862672,
+  "nightLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 51.8
+}

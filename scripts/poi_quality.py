@@ -173,12 +173,12 @@ def material(name, color, roughness=.8, metal=0, night=0, light_color='#ffe0b1')
 
 
 def initialize(options, info):
-    global source, root, scene, materials, icos, lights, abandoned, connected, footprint, asset_info, started
+    global source, root, scene, materials, icos, lights, spotlights, abandoned, connected, footprint, asset_info, started
     global stone,trim,brick,paving,asphalt,grass,roof,roof_seam,frame_mat,glass,dark,steel,wood,gravel,bark,tire,chrome,leaf,paint
     global lit_glass,lamp,white,soil,rust,red,blue,concrete
     started=time.monotonic();random.seed(20261017)
     abandoned=options.state=='abandoned';connected=options.state=='connected'
-    asset_info=info;footprint=info['footprint'];materials={};icos={};lights=[]
+    asset_info=info;footprint=info['footprint'];materials={};icos={};lights=[];spotlights=[]
     bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
     bpy.context.preferences.filepaths.save_version=0
     scene=bpy.context.scene;scene.unit_settings.system='METRIC';scene.unit_settings.scale_length=1
@@ -287,6 +287,11 @@ def light(x,y,z,power=120,reach=13):
     if connected:lights.append([x,z,-y,power,reach])
 
 
+def spot(x,y,z,tx,ty,tz,power=6000,reach=120,angle=.64):
+    """场灯朝功能区域照射，位置/朝向供网页与Cycles共同使用。"""
+    if connected:spotlights.append([x,z,-y,tx,tz,-ty,power,reach,angle])
+
+
 def streetlight(x,y,height=5.5):
     cylinder('路灯底座',(x,y,.3),.25,.5,steel)
     cylinder('路灯柱',(x,y,height/2),.075,height,steel,12)
@@ -364,7 +369,7 @@ def finish(options):
     """保存分件源文件，导出固化副本，再以同一镜头渲染昼夜。"""
     out=ROOT/'assets/model-preview'/(options.asset+'-quality');out.mkdir(parents=True,exist_ok=True);(out/'renders').mkdir(exist_ok=True)
     stem=options.asset+'-'+options.state
-    root['poiLights']=lights;root['poiLightColor']=asset_info.get('lightColor','#ffe0b1')
+    root['poiLights']=lights;root['poiSpotLights']=spotlights;root['poiLightColor']=asset_info.get('lightColor','#ffe0b1')
     root['mainBuildingMeters']=asset_info.get('mainBuilding',[0,0])
     scene.world=bpy.data.worlds.new('POI环境');scene.world.use_nodes=True;bg=scene.world.node_tree.nodes['Background']
     bg.inputs[0].default_value=(.78,.84,.87,1);bg.inputs[1].default_value=.55
@@ -400,7 +405,7 @@ def finish(options):
     triangles=0
     for obj in export.objects:
         if obj.type=='MESH':obj.data.calc_loop_triangles();triangles+=len(obj.data.loop_triangles)
-    stats={'asset':options.asset,'state':options.state,'units':'meters','footprint':footprint,'sourceObjects':len(source.objects),'materials':len(batches),'triangles':triangles,'glbBytes':(out/(stem+'.glb')).stat().st_size,'nightLights':len(lights),'blender':bpy.app.version_string,'elapsedSeconds':round(time.monotonic()-started,1)}
+    stats={'asset':options.asset,'state':options.state,'units':'meters','footprint':footprint,'sourceObjects':len(source.objects),'materials':len(batches),'triangles':triangles,'glbBytes':(out/(stem+'.glb')).stat().st_size,'nightLights':len(lights),'nightSpotLights':len(spotlights),'blender':bpy.app.version_string,'elapsedSeconds':round(time.monotonic()-started,1)}
     (out/(stem+'-build-info.json')).write_text(json.dumps(stats,ensure_ascii=False,indent=2)+'\n')
     print('POI_BUILD',json.dumps(stats),flush=True);export.hide_render=True
     if options.render:
@@ -411,5 +416,9 @@ def finish(options):
         for x,z,ny,power,reach in lights:
             bpy.ops.object.light_add(type='POINT',location=(x,-ny,z));point=bpy.context.object
             point.data.energy=power*5;point.data.color=rgb(asset_info.get('lightColor','#ffe0b1'));point.data.shadow_soft_size=.5
+        for x,z,ny,tx,tz,nty,power,reach,angle in spotlights:
+            bpy.ops.object.light_add(type='SPOT',location=(x,-ny,z));point=bpy.context.object
+            point.data.energy=power*5;point.data.color=rgb(asset_info.get('lightColor','#ffe0b1'));point.data.shadow_soft_size=.5
+            point.data.spot_size=angle*2;point.data.spot_blend=.5;point.rotation_euler=(Vector((tx,-nty,tz))-point.location).to_track_quat('-Z','Y').to_euler()
         scene.render.filepath=str(out/'renders'/(stem+'-night.png'));bpy.ops.render.render(write_still=True)
     print('POI_DONE',stem,round(time.monotonic()-started,1),flush=True)

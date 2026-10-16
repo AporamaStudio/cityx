@@ -21,6 +21,7 @@ for(const asset of QUALITY_POIS){
       if(state==='connected'){
         assert.ok(extras.poiLights.length>0);
         assert.ok(doc.materials.some(m=>m.extras?.poiNightStrength>0));
+        if(asset.id==='athletics'){assert.equal(extras.poiSpotLights.length,4);for(const light of extras.poiSpotLights){assert.equal(light.length,9);assert.ok(light.every(Number.isFinite));assert.ok(light[1]>light[4]);assert.ok(light[8]>0&&light[8]<Math.PI/2);}}
       }else assert.equal(extras.poiLights.length,0);
       assert.equal(Boolean(extras.condition),state==='abandoned');
       const blend=readFileSync(new URL(base+'.blend'));

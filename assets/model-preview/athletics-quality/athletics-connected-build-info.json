@@ -1,0 +1,17 @@
+{
+  "asset": "athletics",
+  "state": "connected",
+  "units": "meters",
+  "footprint": [
+    160,
+    120
+  ],
+  "sourceObjects": 4432,
+  "materials": 30,
+  "triangles": 257482,
+  "glbBytes": 18254456,
+  "nightLights": 8,
+  "nightSpotLights": 4,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 62.9
+}

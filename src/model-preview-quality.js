@@ -28,6 +28,10 @@ export function attachCityhallLights(object,scale){
       if(node.userData.shelterLightStyle==='firelight')light.userData.previewFirelight={base:light.intensity,phase:lighting.children.length*1.7};
       lighting.add(light);
     }
+    for(const [x,y,z,tx,ty,tz,power,range,angle] of node.userData.poiSpotLights??[]){
+      const light=new THREE.SpotLight(node.userData.poiLightColor??'#ffe0b1',power*scale*scale,range*scale,angle,.5,2),target=new THREE.Object3D();
+      light.position.set(x,y,z);target.position.set(tx,ty,tz);light.target=target;lighting.add(light,target);
+    }
   });
   object.add(lighting);
 }
