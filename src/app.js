@@ -181,8 +181,6 @@ let effectTime=0,combatShots=[],combatImpacts=[],defenseHits=[],cityTransitions=
 let dayEndHold=null,dayEndReturn=null,dayEndProgress=0,sceneProgress=-1,duskMix=0,skipStartClick=false;
 let nightVisualTick=0;
 const effectiveSpeed=()=>sourceCleanup?Math.max(playbackSpeed,state.params.nightCleanupSpeed):playbackSpeed;
-// 格线属于建设信息层；场景明暗由共享3D光照负责。
-function gridColor(){return `rgb(${[114,125,112].map((v,i)=>Math.round(v+([43,58,77][i]-v)*nightMix)).join(',')})`;}
 // 显示不可用时停住战斗，防止玩家在错误遮罩后继续受袭。
 function failCity(error){cityLoading.fail(error);paused=true;if(motion)motion.singleStep=false;cancelDayEnd();}
 // 敌方在红色附近拉开橙红、玫红与明暗差；避开控制、经营与炮位的青绿/金/紫色。
@@ -613,7 +611,6 @@ function paintMap() {
   ctx.clearRect(0, 0, width, height);
   const size = base * zoom;
   sound.updateShotView(id=>currentlyVisible(id)?cannonSoundView(id):null);
-  const grid=gridColor();
   // 地图外与远处雾使用同一底色，宽屏留白也不出现另一块纯色平面。
   const backdrop=fogColor(nightMix),fogTime=reducedMotion.matches?0:performance.now()/1000;
   cloudSpeed=previewParams().cloudSpeedMultiplier;
@@ -773,7 +770,6 @@ function paintMap() {
     const id=key(x,y);if(!visibleCell(id))continue;
     if($('heat').checked&&fire.get(id)&&currentlyVisible(id)){ctx.fillStyle=`rgba(99,211,166,${Math.min(.6,.17+fire.get(id)*.045)})`;ctx.fillRect(x,y,1,1);}
     if(postGhost&&previewControlled.has(id)&&!controlled.has(id)){ctx.fillStyle='#f0d18b44';ctx.fillRect(x,y,1,1);}
-    if(tool!==null&&mapDetail!=='far'){ctx.strokeStyle=grid;ctx.lineWidth=.025;ctx.strokeRect(x,y,1,1);}
   }
   for(const plot of cityPlots){
     const overlay=view.towers.plots.get(plot.id);
