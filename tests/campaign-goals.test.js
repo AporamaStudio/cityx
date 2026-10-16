@@ -39,14 +39,15 @@ test('白天达成不结算；夜末胜利可提前，不能进入次日或重�
   assert.equal(retry.hospitals.size,1);assert.equal(fresh.hospitals.size,0);assert.equal(campaignGoals(fresh).hospital,false);
 });
 
-test('医院即时修复按实体仅收费一次，不占人、不改道路；失控保留修复，重连恢复目标',()=>{
+test('医院40金币仅收费一次、持续2人、不改道路；失控保留修复和人员，重连不重复分配',()=>{
   const s=setup(false);s.day=2;const id=key(16,21),before=funds(s),workers=population(s),terrain=new Set(s.terrainWalls);
   assert.equal(hospitalDiscovered(s,id),true);assert.deepEqual(pendingHospitals(s),[id]);
-  assert.equal(restoreHospital(s,key(17,22)),'');assert.equal(funds(s),before-DEFAULTS.hospitalRestoreCost);assert.deepEqual(population(s),workers);assert.deepEqual(s.terrainWalls,terrain);
+  assert.equal(DEFAULTS.hospitalRestoreCost,40);assert.equal(DEFAULTS.hospitalWorkers,2);
+  assert.equal(restoreHospital(s,key(17,22)),'');assert.equal(funds(s),before-40);assert.deepEqual(population(s),{total:workers.total,working:workers.working+2,free:workers.free-2});assert.deepEqual(s.terrainWalls,terrain);
   assert.deepEqual(pendingHospitals(s),[]);assert.equal(s.plotContents.get(id).type,'hospital');assert.equal(s.plotContents.get(id).status,'building');
   assert.match(restoreHospital(s,id),/已经修复/);assert.equal(funds(s),before-DEFAULTS.hospitalRestoreCost);
-  s.params.controlRadius=1;assert.equal(campaignGoals(s).hospital,false);assert.equal(campaignGoals(s).hospitalRestored,true);assert.equal(s.hospitals.size,1);
-  s.params.controlRadius=9;assert.equal(campaignGoals(s).hospital,true);assert.equal(s.result,null);
+  s.params.controlRadius=1;assert.equal(campaignGoals(s).hospital,false);assert.equal(campaignGoals(s).hospitalRestored,true);assert.equal(s.hospitals.size,1);assert.equal(population(s).working,2);
+  s.params.controlRadius=9;assert.equal(campaignGoals(s).hospital,true);assert.equal(s.result,null);assert.equal(population(s).working,2);assert.equal(funds(s),before-40);
 });
 
 test('未修复医院不能通关，最后一晚记录待修复；修复且受控才在夜末胜利',()=>{
@@ -69,6 +70,7 @@ test('医院修复缺钱可预览、灰工具仍有目标；未知、区外、�
 test('医院费用参数校验与玩法应用一致，已修复投资不因调参重收；重试保留战前修复',()=>{
   const s=setup(false);s.day=2;const id=key(16,21);
   for(const value of [0,1.5,1001])assert.match(validateParams({...s.params,hospitalRestoreCost:value},s),/医院/);
+  for(const value of [0,1.5,101])assert.match(validateParams({...s.params,hospitalWorkers:value},s),/医院/);
   assert.equal(applyExperimentParams(s,{...s.params,hospitalRestoreCost:40},'gameplay'),'');const before=funds(s);
   assert.equal(restoreHospital(s,id),'');assert.equal(funds(s),before-40);const snapshot=beginBattle(s),retry=restoreNight(snapshot);
   assert.equal(retry.hospitals.get(id).cost,40);assert.equal(funds(retry),before-40);
@@ -78,8 +80,17 @@ test('医院费用参数校验与玩法应用一致，已修复投资不因调�
 test('医院使用现有银行授信付款，保留借款计息义务；修复后仍不能拆除',()=>{
   const s=setup(false),id=key(16,21);assert.match(hospitalError(s,id),/第2天/);s.day=2;
   s.sites.push({x:11,y:25,width:1,height:1,kind:'building',role:'bank'});assert.equal(restoreBank(s,key(11,25)),'');
-  s.debugGold-=funds(s)-10;assert.equal(restoreHospital(s,id),'');assert.equal(funds(s),-15);assert.equal(s.debtInterestCap,s.params.bankCapacity);
-  assert.match(clearPlot(s,id),/医院/);assert.equal(s.hospitals.size,1);assert.equal(funds(s),-15);
+  s.debugGold-=funds(s)-10;assert.equal(restoreHospital(s,id),'');assert.equal(funds(s),-30);assert.equal(s.debtInterestCap,s.params.bankCapacity);
+  assert.match(clearPlot(s,id),/医院/);assert.equal(s.hospitals.size,1);assert.equal(funds(s),-30);
+});
+test('医院缺工人或同时缺钱时修复无副作用，仍可看方案；实验不能挤掉已分配人员',()=>{
+  const s=setup(false);s.day=2;s.debugPopulation=-5;const id=key(16,21),before=structuredClone(s);
+  assert.match(hospitalError(s,id),/劳动力不足/);assert.match(restoreHospital(s,id),/劳动力不足/);assert.deepEqual(s,before);
+  assert.equal(economyConstructionPreview(s,id,'hospital').type,'hospital');s.debugGold=-100;
+  assert.match(hospitalError(s,id),/资金不足.*劳动力不足/);assert.equal(s.hospitals.size,0);
+  s.debugGold=0;s.debugPopulation=0;assert.equal(restoreHospital(s,id),'');const repaired=structuredClone(s);
+  assert.match(applyExperimentParams(s,{...s.params,hospitalWorkers:7},'gameplay'),/劳动力不足/);assert.deepEqual(s,repaired);
+  const retry=restoreNight(beginBattle(s));assert.equal(population(retry).working,2);assert.equal(population(restartCampaign(s)).working,0);
 });
 test('隐藏未激活源头仍须肃清；空源头目录不能以空集判为胜利',()=>{
   const s=setup(),source=s.enemySources.get('source-1');Object.assign(source,{bx:40,by:10,x:39,y:10,site:key(40,10),discovered:false});assert.equal(source.discovered,false);assert.equal(campaignGoals(s).sources,false);

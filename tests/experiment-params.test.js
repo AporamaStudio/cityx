@@ -32,3 +32,11 @@ test('升级光流参数只影响视觉，支持关闭光幕且拒绝越界值',
   const unchanged=structuredClone(state);
   for(const change of [{upgradeFlowHeightMeters:13},{upgradeFlowMinPx:-1},{upgradeFlowMinPx:41},{upgradeFlowMinPx:1.5},{upgradeFlowCycleMs:0},{upgradeFlowOpacity:101}]){assert.match(applyExperimentParams(state,{...state.params,...change},'visual'),/升级光流/);assert.deepEqual(state,unchanged);}
 });
+
+test('POI标牌尺寸、边框及淡化可独立调节，不改变玩法；非法输入保持原状态',()=>{
+  const state=setup();state.phase='battle';const {params,...before}=structuredClone(state);
+  assert.equal(applyExperimentParams(state,{...params,poiMarkerMinSizePx:44,poiMarkerSizePx:72,poiMarkerBorderPx:6,poiMarkerRouteOpacity:40,poiMarkerNightOpacity:70,hospitalWorkers:99},'visual'),'');
+  const {params:after,...rest}=state;assert.deepEqual(rest,before);assert.equal(after.poiMarkerMinSizePx,44);assert.equal(after.poiMarkerSizePx,72);assert.equal(after.poiMarkerBorderPx,6);assert.equal(after.poiMarkerRouteOpacity,40);assert.equal(after.poiMarkerNightOpacity,70);assert.equal(after.hospitalWorkers,2);
+  const unchanged=structuredClone(state);
+  for(const change of [{poiMarkerSizePx:31},{poiMarkerSizePx:81},{poiMarkerSizePx:55.5},{poiMarkerMinSizePx:31},{poiMarkerMinSizePx:73},{poiMarkerMinSizePx:44.5},{poiMarkerBorderPx:1},{poiMarkerBorderPx:7},{poiMarkerRouteOpacity:-1},{poiMarkerRouteOpacity:100.5},{poiMarkerNightOpacity:101},{poiMarkerNightOpacity:NaN}]){assert.match(applyExperimentParams(state,{...state.params,...change},'visual'),/POI标牌/);assert.deepEqual(state,unchanged);}
+});

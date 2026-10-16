@@ -85,7 +85,7 @@ test('重试回滚债务和利息，整局重来恢复银行废墟；参数不�
   const s=setup(1,0),snap=beginBattle(s);assert.equal(buildTower(s,plot,'A'),'');for(let i=0;i<3;i++)stepBattle(s);
   const restored=restoreNight(snap);assert.equal(funds(restored),0);assert.equal(restored.nightInterest,0);assert.equal(restored.debtInterestCap,0);
   const fresh=restartCampaign(s);assert.equal(fresh.banks.size,0);assert.equal(fresh.bankEarned,0);assert.equal(fresh.bankSettledDay,0);
-  for(const [key,value] of [['bankWorkers',-1],['bankCapacity',0],['bankRestoreCost',0],['bankDepositPercent',NaN],['bankLoanPercent',101]])assert.match(validateParams({...DEFAULTS,[key]:value},fresh),/银行/);
+  for(const [key,value] of [['bankWorkers',-1],['bankWorkers',0],['bankCapacity',0],['bankRestoreCost',0],['bankDepositPercent',NaN],['bankLoanPercent',101]])assert.match(validateParams({...DEFAULTS,[key]:value},fresh),/银行/);
 });
 
 test('击杀金币先自动还清债务，剩余正余额在夜末获得存款利息',()=>{
@@ -104,14 +104,26 @@ test('金币与人口实验输入只接受整数，拒绝时保持状态',()=>{
   const s=setup(),before=structuredClone(s);
   for(const [gold,people] of [[4.3,6],[-3.8,6],[10,6.5]]){assert.match(applyTestScenario(s,3,gold,people),/整数/);assert.deepEqual(s,before);}
 });
-test('银行完整揭示才算发现，未控制仍可被发现；探索记忆保留但新局重置',()=>{
+test('银行沿用整栋探索才发现，探索边角不显示工具且新局重置',()=>{
   const s=setup(0);s.explored=new Set();assert.equal(bankDiscovered(s,first),false);
-  s.explored.add(first);assert.equal(bankDiscovered(s,first),false);
+  s.explored.add(first);assert.equal(bankDiscovered(s,first),false);assert.equal(s.explored.size,1);assert.deepEqual(pendingBanks(s),[]);
   for(const id of productionCells(first,s))s.explored.add(id);
+  assert.equal(bankDiscovered(s,first),true);assert.deepEqual(pendingBanks(s),[first]);
   s.params.controlRadius=1;assert.equal(bankDiscovered(s,first),true);assert.match(bankError(s,first),/控制区/);
   assert.equal(bankDiscovered(s,key(1,1)),false);
   s.params.campS01=0;
+  s.layout={...s.layout,camp:{x:40,y:40}}; // 新局起点远离银行，避免初始地面控制再次发现它。
+  s.waves=s.waves.map(()=>[]); // 此用例只检查探索回滚，不让旧道路出兵口再次揭示银行边角。
   assert.equal(bankDiscovered(restartCampaign(s),first),false);
+});
+
+test('默认地图开场不发现银行，完整探索后才进入已知目标池',()=>{
+  const layout=generateCityMap({...MAP_DEFAULTS,width:SIZE,height:SIZE}),s=createCampaign(DEFAULTS,undefined,layout);
+  const banks=s.sites.filter(site=>site.role==='bank').map(site=>key(site.x,site.y));
+  assert.equal(banks.length,2);assert.deepEqual(pendingBanks(s),[]);
+  for(const id of banks)assert.equal(bankDiscovered(s,id),false);
+  for(const cell of productionCells(banks[0],s))s.explored.add(cell);
+  assert.deepEqual(pendingBanks(s),[banks[0]]);
 });
 
 test('银行修缮方案沿用单色预览，须已发现且受控；缺资源可看且不授信',()=>{
@@ -119,8 +131,10 @@ test('银行修缮方案沿用单色预览，须已发现且受控；缺资源�
   const plan=economyConstructionPreview(s,first,'bank');assert.equal(plan.type,'bank');assert.equal(plan.status,'plan');assert.equal(plan.powered,false);
   assert.deepEqual(plan.cells,productionCells(first,s));assert.deepEqual([...plan.mask],[1,1,1,1]);assert.deepEqual(s,before);assert.equal(bankFinance(s).capacity,0);
   assert.equal(economyConstructionPreview(s,plot,'bank'),null);
-  s.explored=new Set([first]);assert.equal(economyConstructionPreview(s,first,'bank'),null);
+  s.explored=new Set();assert.equal(economyConstructionPreview(s,first,'bank'),null);
+  s.explored.add(first);assert.equal(economyConstructionPreview(s,key(13,24),'bank'),null);assert.equal(s.explored.size,1);
   for(const id of productionCells(first,s))s.explored.add(id);
+  assert.equal(economyConstructionPreview(s,key(13,24),'bank').type,'bank');
   s.params.controlRadius=1;assert.equal(economyConstructionPreview(s,first,'bank'),null);
   s.params.controlRadius=DEFAULTS.controlRadius;s.phase='battle';assert.equal(economyConstructionPreview(s,first,'bank'),null);
   s.phase='build';assert.equal(applyTestScenario(s,3,100,6),'');assert.equal(restoreBank(s,first),'');assert.equal(economyConstructionPreview(s,first,'bank'),null);

@@ -367,7 +367,7 @@ input[type=number]{background:var(--input);color:var(--text);border-color:var(--
 .build-sidebar .toolgrid button:is(:disabled,.tool-unavailable) .price-coin{filter:none}
 :root{--resource-unmet-ink:#a33027}
 body[data-time="night"]{--resource-unmet-ink:#ff9a8a}
-.tool-price .resource-unmet,.bank-hover-item.resource-unmet{color:var(--resource-unmet-ink)!important;filter:none;opacity:1}
+.tool-price .resource-unmet{color:var(--resource-unmet-ink)!important;filter:none;opacity:1}
 :is(.price-coin.resource-unmet,.resource-unmet .price-coin) circle:nth-of-type(1){fill:#8f3026}
 :is(.price-coin.resource-unmet,.resource-unmet .price-coin) circle:nth-of-type(2){fill:#ed8d7c}
 :is(.price-coin.resource-unmet,.resource-unmet .price-coin) circle:nth-of-type(3){stroke:#ffd6cc}
@@ -430,14 +430,6 @@ body[data-time="night"]{--resource-unmet-ink:#ff9a8a}
 .bank-upgrade-value .price-coin{width:16px;height:16px;flex:none}
 #bankUpgradeCancel{display:block;min-width:110px;margin:20px auto 0}
 @media(max-width:540px){#bankUpgradeDialog{padding:16px}.bank-upgrade-choices{grid-template-columns:1fr}.bank-upgrade-choices button{gap:8px;padding:12px}.bank-upgrade-icon,.bank-upgrade-icon .facility-icon{width:40px;height:40px}}
-
-/* 银行信息靠近鼠标但留出空隙，不抢点击；图标表达专精，最多两行。 */
-.bank-hover{position:fixed;z-index:12;display:flex;align-items:center;flex-wrap:wrap;gap:6px 9px;max-width:calc(100vw - 16px);padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--tooltip);color:var(--text);box-shadow:0 4px 16px #0003;pointer-events:none;font-size:12px;font-weight:650;line-height:18px}
-.bank-hover[hidden],.bank-hover-item[hidden]{display:none}
-.bank-hover-item{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
-.bank-hover-item svg{width:16px;height:16px;flex:none}
-#bankHoverWorkers{color:var(--wallet-ink)}
-.bank-hover.bank-stopped .bank-hover-item{opacity:.6}
 
 /* 性能浮层不推动布局；悬停可看诊断细节，点击不穿透为地图建设。 */
 .render-stats{position:absolute;right:12px;bottom:10px;z-index:8;display:flex;align-items:center;gap:7px;padding:5px 8px;border:1px solid #8ca6a744;border-radius:5px;background:#17252ddd;color:#eef4ed;font:11px/1.3 system-ui;pointer-events:auto;font-variant-numeric:tabular-nums}

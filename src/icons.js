@@ -39,8 +39,8 @@ const facilityPaths={
   wall:'<rect x="3" y="7" width="26" height="22" rx="2" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="2.5"/><path d="M3 14h26M3 22h26M16 7v7M10 14v8m12-8v8m-6 0v7M4 4h24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   production:'<path d="M3 29V15l9-6v6l9-6v6h3V3h5v26zM6 21v4h4v-4zm8 0v4h4v-4z" fill="currentColor" fill-rule="evenodd"/><path d="M25 7h3" stroke="currentColor" stroke-width="2"/>',
   housing:'<path d="m2 15 14-12 14 12" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 14v15h20V14L16 6zM10 17v5h5v-5zm9 4v8h4v-8z" fill="currentColor" fill-rule="evenodd"/>',
-  bank:'<path d="M3 11 16 3l13 8H3ZM5 28h22M8 13v12m8-12v12m8-12v12" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>',
-  hospital:'<path d="M5 29V10h6V3h10v7h6v19Z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M14 7h4v4h4v4h-4v4h-4v-4h-4v-4h4zM13 23h6v6h-6z" fill="currentColor"/><path d="M8 21h2m12 0h2" stroke="currentColor" stroke-width="2.5"/>',
+  bank:'<g stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"><path d="m3 11 13-8 13 8Z" fill="currentColor" fill-opacity=".15"/><path d="M5 15h22M5 26h22M3 29h26M8 15v11m8-11v11m8-11v11" fill="none"/></g><circle cx="16" cy="8" r="1.25" fill="currentColor"/>',
+  hospital:'<path d="M4 28V12h6V4h12v8h6v16Z" fill="currentColor" fill-opacity=".12" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 7h4v4h4v4h-4v4h-4v-4h-4v-4h4Z" fill="currentColor"/><path d="M13 28v-6h6v6M7 19h2m14 0h2M7 23h2m14 0h2" fill="none" stroke="currentColor" stroke-width="1.8"/>',
   // 主体与趋势符号分层留白：钱包扩容、硬币收益上升、借据成本下降；地图共用。
   bankCapacity:'<g stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h26M7 2 3 5l4 3M25 2l4 3-4 3M7 12v-1h17" fill="none"/><rect x="3" y="12" width="26" height="17" rx="3" fill="currentColor" fill-opacity=".16"/><path d="M29 17h-7a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h7z" fill="currentColor" fill-opacity=".32"/></g><circle cx="24" cy="20.5" r="1.3" fill="currentColor"/>',
   bankDeposit:'<g stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h5l6-6 6 2 8-5m-5 0h5v5" fill="none"/><path d="M4 20v7c0 4 14 4 14 0v-7z" fill="currentColor" fill-opacity=".18"/><ellipse cx="11" cy="20" rx="7" ry="3" fill="currentColor" fill-opacity=".32"/><path d="M4 24c0 4 14 4 14 0" fill="none"/></g>',
@@ -55,3 +55,11 @@ export const FACILITY_SVGS=Object.fromEntries(Object.entries(facilityPaths).map(
 }));
 // 保留瞭望塔入口，形状与其它设施一样由共享图标表提供。
 export const WATCHTOWER_SVG=FACILITY_SVGS.watch;
+
+// POI完整主体与不透明底板；断框/单框只表达修复，升级另附小徽章。
+export function poiBadgeSVG(kind,{restored=false,night=false,border=4}={}){
+  const ink=FACILITY_COLORS[kind][night?1:0],background=night?'#17272f':'#f5f0e5';
+  const frame=restored?ink:night?'#b4b7aa':'#788579';
+  const outline=restored?'M13 3H43Q53 3 53 13V43Q53 53 43 53H13Q3 53 3 43V13Q3 3 13 3Z':'M13 3H32l2 2M42 3H43Q53 3 53 13V43Q53 53 43 53H27l-2-2M17 53H13Q3 53 3 43V13Q3 3 13 3';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56" width="56" height="56" class="poi-badge" aria-hidden="true"><rect x="1" y="1" width="54" height="54" rx="11" fill="${background}"/><path d="${outline}" fill="none" stroke="${frame}" stroke-width="${border}" stroke-linejoin="round"/><g transform="translate(11 11) scale(1.0625)" style="color:${ink}">${facilityPaths[kind]}</g></svg>`;
+}

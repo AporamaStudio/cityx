@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=94';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=97';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -230,10 +230,15 @@ export function fireField(state) {
 export const funds = state => state.params.budget + (state.debugGold??0) + state.earned + state.economyEarned + (state.bankEarned??0) - [...(state.hospitals?.values()??[])].reduce((sum,h)=>sum+h.cost,0) - [...(state.banks?.values()??[])].reduce((sum,b)=>sum+b.cost,0) - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - state.outposts.size*state.params.outpostCost - (state.nightBuildSpent??0) - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
 // 银行不另设账户：本金就是全局余额，停业仅撤销当前额度，不清偿既有债务。
 export const bankAt=(state,id)=>productionSite(id,state)?.role==='bank'?productionId(id,state):null;
-// 与银行实体揭示一致：完整占地已探索才解锁工具，展示关闭迷雾不算发现。
-export const bankDiscovered=(state,id)=>bankAt(state,id)!==null&&productionCells(id,state).every(cell=>isExplored(state,cell));
+// 银行恢复原有整栋探索条件；医院由固定位置揭示发现，二者均不额外扩散迷雾。
+export function poiDiscovered(state,id){
+  const kind=productionSite(id,state)?.role,cells=productionCells(id,state);
+  return kind==='bank'?cells.length>0&&cells.every(cell=>isExplored(state,cell)):kind==='hospital'&&cells.some(cell=>isExplored(state,cell));
+}
+export const bankDiscovered=(state,id)=>bankAt(state,id)!==null&&poiDiscovered(state,id);
 export const bankActive=(state,id)=>state.banks?.has(id)&&productionControlled(state,id)&&population(state).free>=0;
 export const bankWorkers=state=>(state.banks?.size??0)*state.params.bankWorkers;
+export const hospitalWorkers=state=>(state.hospitals?.size??0)*state.params.hospitalWorkers;
 export const bankCapacityFor=(state,id)=>Math.ceil(state.params.bankCapacity*(state.banks?.get(bankAt(state,id))?.upgrade==='capacity'?state.params.bankUpgradeCapacityMultiplier:1));
 // POI只列已发现、对应操作尚未完成的实体；临时缺钱或失控不移除目标。
 export const pendingBanks=(state,upgrade=false)=>state.sites.filter(p=>p.role==='bank').map(p=>key(p.x,p.y)).filter(id=>bankDiscovered(state,id)&&(upgrade?state.banks.has(id)&&!state.banks.get(id).upgrade:!state.banks.has(id)));
@@ -249,10 +254,10 @@ export function bankFinance(state,balance=funds(state)){
   return {active,capacity,debtCap,depositPercent,loanPercent,interest,credit:Math.max(0,capacity+Math.min(0,balance)),available:Math.max(0,balance+capacity)};
 }
 export const availableFunds=state=>bankFinance(state).available;
-// 固定远距揭示只提供医院位置，因此以地标中心已知解锁工具，实际修复仍须受控。
+// 已公开的医院与探索发现的银行共用身份规则，实际修复仍须受控。
 export const hospitalAt=(state,id)=>productionSite(id,state)?.role==='hospital'?productionId(id,state):null;
 export function hospitalDiscovered(state,id){
-  const site=productionSite(id,state);return site?.role==='hospital'&&isExplored(state,key(site.x+Math.floor((site.width??site.size)/2),site.y+Math.floor((site.height??site.size)/2)));
+  return hospitalAt(state,id)!==null&&poiDiscovered(state,id);
 }
 export const pendingHospitals=state=>state.sites.filter(p=>p.role==='hospital').map(p=>key(p.x,p.y)).filter(id=>hospitalDiscovered(state,id)&&!state.hospitals.has(id));
 export function hospitalError(state,id,{ignoreResources=false}={}){
@@ -260,7 +265,7 @@ export function hospitalError(state,id,{ignoreResources=false}={}){
   const hospital=hospitalAt(state,id);if(hospital===null)return '请选择地图上已有的医院。';
   if(!hospitalDiscovered(state,hospital)||!productionControlled(state,hospital))return '医院须进入控制区才能修复。';
   if(state.hospitals.has(hospital))return '医院已经修复。';
-  return ignoreResources?'':buildResourceStatus(state,state.params.hospitalRestoreCost).message;
+  return ignoreResources?'':buildResourceStatus(state,state.params.hospitalRestoreCost,state.params.hospitalWorkers).message;
 }
 export function restoreHospital(state,id){
   const error=hospitalError(state,id);if(error)return error;
@@ -293,7 +298,7 @@ function clearRepaidDebt(state){if(funds(state)>=0)state.debtInterestCap=0;}
 export function bankError(state,id,{ignoreResources=false}={}){
   if(state.phase!=='build'||state.day<2)return '第2天起可在白天恢复银行。';
   const bank=bankAt(state,id);if(bank===null)return '请选择地图上已有的银行。';
-  if(!isExplored(state,id)||!productionControlled(state,bank))return '银行须进入控制区才能恢复。';
+  if(!bankDiscovered(state,bank)||!productionControlled(state,bank))return '银行须进入控制区才能恢复。';
   if(state.banks.has(bank))return '银行已经恢复。';
   return ignoreResources?'':buildResourceStatus(state,state.params.bankRestoreCost,state.params.bankWorkers).message;
 }
@@ -629,6 +634,8 @@ export function validateVisualParams(params){
   if(!['controlBorderInnerCells','controlBorderOuterCells'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=2))return '控制边缘内/外渐隐宽度须为 0–2 格，0 关闭，可使用小数。';
   if(!integer(params.controlBorderInnerOpacity,0,60)||!integer(params.controlBorderOuterOpacity,0,60))return '控制边缘内/外色带强度须为 0–60% 整数。';
   if(!Number.isFinite(params.controlBorderLinePx)||params.controlBorderLinePx<1||params.controlBorderLinePx>6)return '控制边缘主线粗细须为 1–6 像素，可使用小数。';
+  if(!integer(params.poiMarkerSizePx,32,80)||!integer(params.poiMarkerMinSizePx,32,params.poiMarkerSizePx)||!integer(params.poiMarkerBorderPx,2,6))return 'POI标牌最小/最大尺寸须为32–80像素整数且最小≤最大，边框须为2–6像素整数。';
+  if(!integer(params.poiMarkerRouteOpacity,0,100)||!integer(params.poiMarkerNightOpacity,0,100))return 'POI标牌不透明度须为0–100%整数。';
   if(!Number.isFinite(params.upgradeFlowHeightMeters)||params.upgradeFlowHeightMeters<0||params.upgradeFlowHeightMeters>12)return '升级光流高度须为0–12米，0关闭光幕。';
   if(!integer(params.upgradeFlowMinPx,0,40))return '升级光流投影最小距离须为0–40像素整数。';
   if(!integer(params.upgradeFlowCycleMs,500,6000)||!integer(params.upgradeFlowOpacity,0,100))return '升级光流周期须为500–6000毫秒，强度为0–100%整数。';
@@ -654,11 +661,11 @@ export function validateParams(params, state, checkLayout = true) {
   if(!integer(params.campS01,0,30)||!integer(params.outpostS01,0,30)||!integer(params.sourceRevealPadding,0,10))return 'S01 视野距离须为 0–30 格整数，敌源边缘揭示格数须为 0–10 整数。';
   if(!['daySightMultiplier','nightSightMultiplier','eventSightMultiplier'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=3))return '视野倍率须为 0–3，可使用小数。';
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
-  if(!integer(params.bankRestoreCost,1,1000)||!integer(params.bankWorkers,0,100)||!integer(params.bankCapacity,1,10000)||!['bankDepositPercent','bankLoanPercent'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=100))return '银行恢复费用1–1000、用工0–100、额度1–10000为整数；利率0–100%，可用小数。';
-  if(!integer(params.hospitalRestoreCost,1,1000))return '医院修复费用须为1–1000金币整数。';
+  if(!integer(params.bankRestoreCost,1,1000)||!integer(params.bankWorkers,1,100)||!integer(params.bankCapacity,1,10000)||!['bankDepositPercent','bankLoanPercent'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=100))return '银行恢复费用1–1000、用工1–100、额度1–10000为整数；利率0–100%，可用小数。';
+  if(!integer(params.hospitalRestoreCost,1,1000)||!integer(params.hospitalWorkers,1,100))return '医院修复费用须为1–1000金币、用工须为1–100人整数。';
   if(!integer(params.bankUpgradeCost,1,1000)||!integer(params.bankUpgradeCapacityMultiplier,1,10)||!['bankUpgradeRatePoints','bankLoanMinPercent','bankRateMaxPercent'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=100)||params.bankLoanMinPercent>params.bankLoanPercent||params.bankLoanPercent>params.bankRateMaxPercent||params.bankDepositPercent>params.bankRateMaxPercent)return '银行升级费用1–1000、额度倍率1–10为整数；利率边界/升级百分点0–100%，贷款下限≤基础贷息≤利率上限，基础存息≤上限。';
   if(!integer(params.outpostWorkers,0,100))return '每座瞭望塔用工须为0–100人整数。';
-  if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产、瞭望塔、银行用工或增加住房。';
+  if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产、瞭望塔、地标用工或增加住房。';
   if(!integer(params.demolitionRefundPercent,0,100))return '拆除返还比例须为 0–100 整数。';
   if(!integer(params.renovationCostPercent,1,100))return '修缮费用占新建价须为 1–100% 整数。';
   if(!integer(params.productionBaseArea,1,SIZE*SIZE)||!integer(params.productionDensityGrowthArea,1,SIZE*SIZE)||!Number.isFinite(params.productionSmallCostFloor)||params.productionSmallCostFloor<=0||params.productionSmallCostFloor>1||!Number.isFinite(params.productionMaxDensity)||params.productionMaxDensity<1||params.productionMaxDensity>10)return '经营曲线：基准/增长面积须为 1–3600，低面积成本倍率大于 0 且不超过 1，产出密度上限为 1–10。';
@@ -941,7 +948,7 @@ function embeddingError(state,id){
   const p=productionSite(id,state);if(!p)return '';
   const error=plotBuildError(state,id);if(error)return error;
   const q=embeddingQuote(state,id);
-  // 只检查经营依赖，不能因改建住房让已有生产或瞭望塔缺人。
+  // 只检查经营依赖，不能因改建住房让已有生产、瞭望塔或POI缺人。
   return q.freeAfter<0?`改建后劳动力不足：住房减少 ${q.residents} 人，生产释放 ${q.released} 人；还缺 ${-q.freeAfter} 人。`:'';
 }
 function applyEmbedding(state,id,preserveBuilding=false){
@@ -958,7 +965,7 @@ function applyEmbedding(state,id,preserveBuilding=false){
 export function population(state){
   const total=state.params.initialPopulation+(state.debugPopulation??0)+[...state.housing.keys()].reduce((n,id)=>n+housingQuote(state,id).residents,0);
   // 用工随设施持续占用，拆除即时释放；不另存分配记录，避免重试或改建漏结算。
-  const working=[...state.production.keys()].reduce((n,id)=>n+productionLabor(state,id),0)+state.outposts.size*state.params.outpostWorkers+bankWorkers(state);
+  const working=[...state.production.keys()].reduce((n,id)=>n+productionLabor(state,id),0)+state.outposts.size*state.params.outpostWorkers+bankWorkers(state)+hospitalWorkers(state);
   return {total,working,free:total-working};
 }
 export function housingError(state,id,{ignoreResources=false}={}){
@@ -983,7 +990,7 @@ export function housingRemovalError(state,id){
   if(state.phase!=='build')return '防守中不能拆除住房。';
   if(!state.housing.has(productionId(id,state)))return '这里没有住房。';
   const support=buildingRemovalError(state,id);if(support)return support;
-  return population(state).free<housingQuote(state,id).residents?'现有生产、瞭望塔或银行依赖这些居民，请先拆除用工设施或补建住房。':'';
+  return population(state).free<housingQuote(state,id).residents?'现有生产、瞭望塔或地标依赖这些居民，请先拆除用工设施或补建住房。':'';
 }
 export function removeHousing(state,id){
   const error=housingRemovalError(state,id);if(error)return error;
