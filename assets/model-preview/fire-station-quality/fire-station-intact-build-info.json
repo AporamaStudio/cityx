@@ -1,0 +1,17 @@
+{
+  "asset": "fire-station",
+  "state": "intact",
+  "units": "meters",
+  "footprint": [
+    60,
+    80
+  ],
+  "sourceObjects": 1814,
+  "materials": 28,
+  "triangles": 135904,
+  "glbBytes": 10537556,
+  "nightLights": 0,
+  "nightSpotLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 4.5
+}
