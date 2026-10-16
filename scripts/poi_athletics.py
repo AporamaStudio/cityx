@@ -79,3 +79,24 @@ def build(q):
             verts=[(x+math.cos(i*math.tau/9)*(2.2+(i%3)*.6),y+math.sin(i*math.tau/9)*(1.3+(i%2)*.4),.266) for i in range(9)]
             mesh=q.bpy.data.meshes.new('不规则枯草斑');mesh.from_pydata(verts,[],[tuple(range(9))]);mesh.update();mesh.materials.append(q.soil);q.own(q.bpy.data.objects.new('草坪失养斑块',mesh))
     q.people([(-7,-38),(-12,-35),(1,11),(-18,17),(65,-9),(67,-12)])
+
+
+def damage(q,d):
+    """看台局部垮塌、跑道失养；保留开放运动场的原有身份。"""
+    d.cut(q,'东段看台与雨棚塌毁',(10,45,25,14),.8,prefixes=('看台',))
+    d.heap(q,11,44,24,11,1.8,90)
+    for x,y,z,angle in ((5,43,2.2,.25),(14,44,1.5,-.16),(18,42,1.0,.4)):
+        d.sheet(q,'折落看台雨棚',(x,y,z),(7.5,6),(.12,angle,.18),True)
+    q.beam('看台弯折立柱',(0,48,.3),(2,47,3.5),.13,q.rust)
+    q.beam('看台坠落横梁',(2,47,3.5),(12,42,1.2),.12,q.rust)
+    d.broken_wall(q,'看台碎裂混凝土挡沿',9,41,21,1.3)
+    # 跑道表面和场地有局部泥土/裂纹，避免整场铺满瓦砾。
+    for x,y,w,h in ((-37,-11,18,5),(33,23,11,8),(-9,20,18,12),(-38,8,14,9)):
+        d.patch(q,'运动场积尘裸斑',x,y,w,h,.308,q.damage_dry)
+        q.weeds(x,y,w,h,25)
+    for i in range(6):
+        q.beam('跑道裂缝',(-31+i*1.1,-14,.319),(-30+i*.9,-9+i*.25,.319),.025,q.dark)
+    d.cut(q,'破损球门',(19,12,4,8),.6,prefixes=('球门','球网'))
+    q.beam('倾倒球门横梁',(17,9,.4),(21,14,.8),.065,q.rust)
+    d.wall_dirt(q,-48,-38.53,15,2.3)
+    d.trash(q,-42,-29,10,5,24);d.trash(q,26,49,10,5,22);d.trash(q,62,-29,6,5,14)
