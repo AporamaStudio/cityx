@@ -1,0 +1,17 @@
+{
+  "asset": "power",
+  "state": "abandoned",
+  "units": "meters",
+  "footprint": [
+    160,
+    180
+  ],
+  "sourceObjects": 6116,
+  "materials": 30,
+  "triangles": 391570,
+  "glbBytes": 26108648,
+  "nightLights": 0,
+  "nightSpotLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 66.1
+}

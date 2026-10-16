@@ -1,0 +1,16 @@
+{
+  "asset": "power",
+  "state": "intact",
+  "units": "meters",
+  "footprint": [
+    160,
+    180
+  ],
+  "sourceObjects": 5556,
+  "materials": 29,
+  "triangles": 372178,
+  "glbBytes": 25328000,
+  "nightLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 90.6
+}

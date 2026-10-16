@@ -1,0 +1,17 @@
+{
+  "asset": "power",
+  "state": "connected",
+  "units": "meters",
+  "footprint": [
+    160,
+    180
+  ],
+  "sourceObjects": 5586,
+  "materials": 31,
+  "triangles": 373138,
+  "glbBytes": 25364860,
+  "nightLights": 19,
+  "nightSpotLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 27.4
+}
