@@ -214,12 +214,13 @@ def initialize(options, info):
                     top=small[iy[:,None],ix[None,:]]*(1-fx)+small[iy[:,None],(ix+1)[None,:]%resolution]*fx
                     bottom=small[(iy+1)[:,None]%resolution,ix[None,:]]*(1-fx)+small[(iy+1)[:,None]%resolution,(ix+1)[None,:]%resolution]*fx
                     field+=weight*(top*(1-fy[:,None])+bottom*fy[:,None])
-                rgba[:,:,:3]*=(.69+field[:,:,None])
+                rgba[:,:,:3]*=(.44+field[:,:,None]*1.65)
+                rgba[:,:,:3]*=np.array([1.0,.94,.84],dtype=np.float32)
                 image=bpy.data.images.new(mat.name+'_abandoned_albedo',width=w,height=h)
                 image.colorspace_settings.name=original.colorspace_settings.name
                 image.pixels.foreach_set(rgba.ravel());image.pack();tex.image=image
             else:
-                color=base.default_value;new=tuple(color[i]*.82 for i in range(3))+(1,)
+                color=base.default_value;new=tuple(color[i]*.64 for i in range(3))+(1,)
                 base.default_value=new;mat.diffuse_color=new
         root['condition']=['weathered-surfaces','local-structural-damage','unmaintained-grounds']
 
@@ -244,8 +245,19 @@ def window(x,y,z,w=2.0,h=2.2,turn=0,lit=True,broken=False):
 
 def building(name,x,y,w,d,h,floors=2,spacing=3.7,windows=True,flat=True):
     """普通公共建筑的壳体：四面立面、楼层线脚和屋顶设备。"""
+    before=set(source.objects)
     box(name+'_基础',(x,y,.36),(w+.5,d+.5,.6),brick,.07)
-    box(name+'_楼体',(x,y,h/2+.55),(w,d,h),stone,.06)
+    if abandoned:
+        # 废弃楼体保留真实墙壳/楼板，坍塌后能看到内部层次而非实心方块。
+        for side in (-1,1):
+            box(name+'_纵墙',(x+side*(w/2-.23),y,h/2+.55),(.46,d,h),stone,.035)
+            box(name+'_横墙',(x,y+side*(d/2-.23),h/2+.55),(w,.46,h),stone,.035)
+        for level in range(floors):
+            box(name+'_室内楼板',(x,y,.55+level*h/floors),(w-.6,d-.6,.24),concrete,.025)
+        for px in np.arange(x-w/2+8,x+w/2-3,8):
+            box(name+'_内部承重墙',(float(px),y,h/2+.55),(.22,d-.6,h),concrete,.02)
+    else:
+        box(name+'_楼体',(x,y,h/2+.55),(w,d,h),stone,.06)
     for z in [.65]+[.55+h*i/floors for i in range(1,floors+1)]:
         box(name+'_楼层线脚',(x,y,z),(w+.3,d+.3,.19),trim,.025)
     if windows:
@@ -272,6 +284,8 @@ def building(name,x,y,w,d,h,floors=2,spacing=3.7,windows=True,flat=True):
         for i in range(max(4,int(w/5))):
             px=x-w*.42+i*w*.84/max(1,int(w/5)-1)
             box('立面风化水痕',(px,y-d/2-.014,h*.6),(.24+random.random()*.6,.018,h*.5+random.random()),soil,0)
+
+    for obj in set(source.objects)-before:obj['poiStructure']=name
 
 
 def entrance(x,y,w=5,h=3.3):
@@ -367,6 +381,9 @@ def site():
 
 def finish(options):
     """保存分件源文件，导出固化副本，再以同一镜头渲染昼夜。"""
+    if abandoned:
+        from poi_damage import apply
+        apply(__import__(__name__),options.asset)
     out=ROOT/'assets/model-preview'/(options.asset+'-quality');out.mkdir(parents=True,exist_ok=True);(out/'renders').mkdir(exist_ok=True)
     stem=options.asset+'-'+options.state
     root['poiLights']=lights;root['poiSpotLights']=spotlights;root['poiLightColor']=asset_info.get('lightColor','#ffe0b1')
@@ -422,3 +439,9 @@ def finish(options):
             point.data.spot_size=angle*2;point.data.spot_blend=.5;point.rotation_euler=(Vector((tx,-nty,tz))-point.location).to_track_quat('-Z','Y').to_euler()
         scene.render.filepath=str(out/'renders'/(stem+'-night.png'));bpy.ops.render.render(write_still=True)
     print('POI_DONE',stem,round(time.monotonic()-started,1),flush=True)
+
+
+
+def roof_damage(name,x,y,z,radius=3.0):
+    """旧局部屋面破口入口；废弃结构统一由poi_damage按建筑特点处理。"""
+    return
