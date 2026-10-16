@@ -22,6 +22,24 @@ test('静态水域只登记一次节点，时间/昼夜仍逐次更新，替换�
   assert.equal(next.time.value,9);assert.equal(next.night.value,0);
 });
 
+test('运营暖光不增加网格或光源，保留楼体材质与变换并通过同一供电值开关',async()=>{
+  const {operatingLights}=await loadBrowserModule('city-building-lights.js');
+  const root=new THREE.Group(),material=new THREE.MeshStandardMaterial({color:'#789abc'}),mesh=new THREE.Mesh(new THREE.BoxGeometry(2,1,3),material);
+  root.position.set(12,4,18);root.rotation.y=.4;root.scale.set(2,1,3);mesh.position.y=1;root.add(mesh);root.userData.podiumHeight=.1;
+  root.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(root),matrix=mesh.matrixWorld.clone();let previousCalled=false;
+  material.onBeforeCompile=()=>{previousCalled=true;};const geometry=mesh.geometry;
+  operatingLights(root);
+  assert.equal(root.children.length,1);assert.equal(mesh.geometry,geometry);assert.equal(mesh.material,material);assert.equal(material.transparent,false);
+  assert.ok(mesh.matrixWorld.equals(matrix));assert.ok(new THREE.Box3().setFromObject(root).equals(bounds));
+  const shader={uniforms:{},vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader};material.onBeforeCompile(shader);
+  assert.equal(previousCalled,true);assert.equal(shader.uniforms.cityWindowPower.value,0);
+  material.userData.cityPower.value=.65;assert.equal(shader.uniforms.cityWindowPower.value,.65);
+  const center=bounds.getCenter(new THREE.Vector3());assert.equal(shader.uniforms.cityRoofBounds.value.x,center.x);assert.equal(shader.uniforms.cityRoofBounds.value.y,center.z);
+  assert.ok(shader.uniforms.cityRoofHeight.value.x>bounds.min.y+.1);assert.match(shader.vertexShader,/inverseTransformDirection\(transformedNormal,viewMatrix\)/);
+  material.userData.cityPower.value=0;assert.equal(shader.uniforms.cityWindowPower.value,0);
+  geometry.dispose();material.dispose();
+});
+
 test('观察层缓存静态材质并登记新网格，空敌人不绘制也不返回旧画面',async()=>{
   const previous=globalThis.document;
   globalThis.document={createElement:()=>({width:64,height:64,getContext:()=>({clearRect(){},drawImage(){}})})};

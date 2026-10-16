@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {addBuildingFoundation,buildingVariation} from './city-building-style.js?v=1';
+import {operatingLights} from './city-building-lights.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
 import {createRoadModel} from './city-road-model.js?v=3';
 import {createNaturalModel} from './city-natural-model.js?v=8';
@@ -23,28 +24,6 @@ for(const name of ['farmland','wheatfield','wheatfield-abandoned','wheatfield-bu
 for(const [name,file] of Object.entries(PLANT_MODELS))files[name]='generated/'+file;
 for(const name of ['home','small','wide','factory','workshop'])files[name+'Ruined']=files[name]+'-ruined';
 const resource=file=>new URL('../assets/model-preview/'+file+'.glb?v=5',import.meta.url).href;
-
-function operatingLights(object){
-  // 玻璃沿用同一色板发光，屋顶补少量暖灯，保证俯视也能辨认运营状态。
-  object.traverse(node=>{if(node.isMesh){const material=node.material;material.userData.cityPower={value:0};material.onBeforeCompile=shader=>{
-    shader.uniforms.cityWindowPower=material.userData.cityPower;
-    shader.vertexShader='varying float cityWindowSurface;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncityWindowSurface=1.-smoothstep(.35,.6,abs(normal.y));');
-    shader.fragmentShader='uniform float cityWindowPower;\nvarying float cityWindowSurface;\n'+shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\nfloat cityGlass=step(diffuseColor.r*1.8,diffuseColor.b)*step(diffuseColor.g*1.25,diffuseColor.b)*step(.1,diffuseColor.b)*cityWindowSurface;\ntotalEmissiveRadiance+=vec3(1.,.54,.18)*cityGlass*cityWindowPower*1.1;');
-  };material.customProgramCacheKey=()=> 'cityx-game-windows';}});
-  object.updateMatrixWorld(true);
-  const bounds=new THREE.Box3().setFromObject(object),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3()),group=new THREE.Group();
-  const ray=new THREE.Raycaster(),normal=new THREE.Vector3();
-  for(const [dx,dz] of [[-.22,-.18],[.22,-.18],[-.22,.18],[.22,.18]]){
-    ray.set(new THREE.Vector3(center.x+size.x*dx,bounds.max.y+1,center.z+size.z*dz),new THREE.Vector3(0,-1,0));const hit=ray.intersectObject(object,true)[0];
-    // 烟囱/高塔不应抬高有效屋面的门槛；只排除底座铺装，低屋顶也可亮起暖灯。
-    if(!hit||hit.point.y<=(object.userData.podiumHeight??bounds.min.y)+size.y*.03)continue;
-    normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);if(normal.y<.28)continue;
-    const point=object.worldToLocal(hit.point.clone()),lamp=new THREE.Mesh(new THREE.PlaneGeometry(size.x*.11,size.z*.07),new THREE.MeshBasicMaterial({color:'#ffd28a',transparent:true,toneMapped:false}));
-    lamp.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal);lamp.position.copy(point).addScaledVector(normal,.025);lamp.userData.ownGeometry=true;
-    const halo=groundGlow(size.x*.28,size.z*.24,'#ffc174',.28);halo.quaternion.copy(lamp.quaternion);halo.position.copy(point).addScaledVector(normal,.035);halo.userData.ownGeometry=true;group.add(lamp,halo);
-  }
-  group.userData.cityRoofLights=true;group.visible=false;object.add(group);
-}
 
 function ruinAppearance(object){
   // 几何使用固定配套GLB；运行时只灰化原贴图，保留暗内层与碎块本身的材质。
@@ -157,7 +136,7 @@ export function createCity3D(onReady){
     if(!landmark)mergePlot(object);
     if(status==='ruin'&&!landmark)ruinAppearance(object);
     if(status==='building')operatingLights(object);
-    freezeCityTransforms(object);const powerNodes=[];object.traverse(node=>{if(node.userData.cityRoofLights||node.material?.userData.cityPower||node.parent?.userData.cityRoofLights)powerNodes.push(node);});
+    freezeCityTransforms(object);const powerNodes=[];object.traverse(node=>{if(node.material?.userData.cityPower)powerNodes.push(node);});
     return {object,powerNodes,signature:`${type}:${status}:${w}:${h}:${cellMeters}`,roof:new THREE.Box3().setFromObject(object).max.y};
   }
   return {
@@ -198,7 +177,7 @@ export function createCity3D(onReady){
         if(entries.get(plot.id)?.signature!==signature){if(entries.has(plot.id))release(entries.get(plot.id));entries.set(plot.id,build(plot));}
         const entry=entries.get(plot.id);
         if(entry.powered!==plot.powered||entry.night!==night){
-          for(const node of entry.powerNodes){if(node.userData.cityRoofLights)node.visible=plot.powered&&night>0;if(node.isMesh){if(node.material.userData.cityPower)node.material.userData.cityPower.value=plot.powered?night:0;if(node.parent?.userData.cityRoofLights)node.material.opacity=plot.powered?night*(node.material.map?.28:1):0;}}
+          for(const node of entry.powerNodes)node.material.userData.cityPower.value=plot.powered?night:0;
           entry.powered=plot.powered;entry.night=night;
         }
       }
