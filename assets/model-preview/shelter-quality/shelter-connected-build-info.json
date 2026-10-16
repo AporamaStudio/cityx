@@ -1,0 +1,15 @@
+{
+  "state": "connected",
+  "units": "meters",
+  "footprint": [
+    60,
+    80
+  ],
+  "sourceObjects": 1587,
+  "materials": 42,
+  "triangles": 135084,
+  "glbBytes": 10145320,
+  "nightLights": 11,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 7.4
+}

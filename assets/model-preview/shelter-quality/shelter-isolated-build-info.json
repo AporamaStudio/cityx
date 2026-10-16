@@ -1,0 +1,15 @@
+{
+  "state": "isolated",
+  "units": "meters",
+  "footprint": [
+    60,
+    80
+  ],
+  "sourceObjects": 1808,
+  "materials": 46,
+  "triangles": 142241,
+  "glbBytes": 10446568,
+  "nightLights": 3,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 7.9
+}

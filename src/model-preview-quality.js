@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-// 市政厅样板独立使用较细的太阳阴影和柔和反射环境，不改变主游戏照明。
+// 品质样板独立使用较细的太阳阴影和柔和反射环境，不改变主游戏照明。
 export function createQualityPreview(renderer,scene,sun,sky){
   const room=new THREE.Scene(),geometry=new THREE.BoxGeometry(1,1,1),walls=[];
   for(const [x,y,z,w,h,d,color] of [[0,8,0,18,.1,18,'#ecece1'],[-8,3,0,.1,10,18,'#d7ddd5'],[8,3,0,.1,10,18,'#b8c2bd'],[0,3,-8,18,10,.1,'#b4c3c5'],[0,-2,0,18,.1,18,'#626a5b']]){
@@ -23,9 +23,23 @@ export function createQualityPreview(renderer,scene,sun,sky){
 export function attachCityhallLights(object,scale){
   const lighting=new THREE.Group();lighting.userData.previewRoofLights=true;lighting.visible=false;
   object.traverse(node=>{
-    for(const [x,y,z,power,range] of node.userData.cityhallLights??[]){
-      const light=new THREE.PointLight('#ffd098',power*scale*scale,range*scale,2);light.position.set(x,y,z);lighting.add(light);
+    for(const [x,y,z,power,range] of node.userData.shelterLights??node.userData.cityhallLights??[]){
+      const light=new THREE.PointLight(node.userData.shelterLightColor??'#ffd098',power*scale*scale,range*scale,2);light.position.set(x,y,z);
+      if(node.userData.shelterLightStyle==='firelight')light.userData.previewFirelight={base:light.intensity,phase:lighting.children.length*1.7};
+      lighting.add(light);
     }
   });
   object.add(lighting);
+}
+
+// 只驱动孤立避难所的局部发光与真实灯位；使用预览的可暂停时钟，不烘焙进模型动画。
+export function updateShelterFirelight(object,time,enabled){
+  object.traverse(node=>{
+    const light=node.userData.previewFirelight,material=node.isMesh?node.material:null;
+    const factor=phase=>enabled?1+.08*Math.sin(time*2.1+phase)+.035*Math.sin(time*6.7+phase*1.3):1;
+    if(light)node.intensity=light.base*factor(light.phase);
+    if(material?.userData.shelterLightStyle==='firelight'&&material.userData.previewLamp){
+      material.emissiveIntensity=material.userData.previewEmission*factor(0);
+    }
+  });
 }

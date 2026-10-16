@@ -125,4 +125,25 @@ Three.js **0.180.0**，MIT，来自官方npm包 `three`。仅保留预览所需�
 
 不加 `--render` 只重建源模型、纹理、GLB及统计；样本数与图宽只影响离线渲染。若需要只修改相机/材质后渲染，可直接在源文件中操作，不必重建场景。macOS受限沙箱内Blender可能在Metal初始化时崩溃，本机正常授权执行已通过；没有安装插件、下载外部模型或修改系统配置。
 
-预览入口 `model-preview.html?asset=city-hall`，或页内「市政厅样板」按钮；可旋转/缩放、俯视/斜视、昼夜和完好/废弃/运营切换，下载对应GLB与Blend，参考图及离线图也随状态切换。样板照明设置只用于此对象的观察，不导入主游戏。首件在独立分支制作，2026-10-15普通合并到main保留原始提交，随后按用户要求删除该分支与临时工作目录，继续在main开发。基础品质已获用户认可，废弃版观感、正式版运行预算与其余POI仍需单独验证。
+预览入口 `model-preview.html?asset=city-hall`，或「单体模型样板 → 市政厅」；可旋转/缩放、俯视/斜视、昼夜和完好/废弃/运营切换，下载对应GLB与Blend，参考图及离线图也随状态切换。样板照明设置只用于此对象的观察，不导入主游戏。首件在独立分支制作，2026-10-15普通合并到main保留原始提交，随后按用户要求删除该分支与临时工作目录，继续在main开发。基础品质已获用户认可，废弃版观感、正式版运行预算与其余POI仍需单独验证。
+
+## 社区中心改造避难所品质样板（2026-10-15）
+
+用户确定先制作孤立／接通后的昼夜概念对照，再用Blender制作，仅放独立3D视觉预览，不实现救援、倒计时、人口奖励、安全区或供电玩法。参考为 `concepts/shelter-2026-10-15/shelter-comparison.png`，使用内置image_gen生成；提示词和工具记录在同目录 `prompt.json`。此前社区中心概念是设计起点，并无可直接修改的既有精细3D模型。实际模型沿用概念设计元素，非逐像素重建。
+
+- 园区60×80m，主楼33×22m，两层公共大厅、低砖配楼、入口雨棚；保留半场、三顶家庭帐篷、无线电天线、太阳能板、储水、备用发电机、晾衣和物资。孤立版少量封窗、杂草和可移动路障，接通后整理入口、补充物资；地块、主体、帐篷及入口位置不变。静态人物仅作比例及生活感。
+- 夜间孤立版门厅、少数窗户、两片天窗及一顶帐篷采用琥珀火光，外围路灯关闭；接通后保留原稳定LED观感，更多窗户、天窗和帐篷亮起，六盏真实路灯形成连续院落与临街照明。两态采用相同冷色环境光，不通过全图曝光差异伪造恢复；白天和墙面不发光。
+- 2026-10-16补充失养细节：`scripts/shelter_weathering.py` 只修改孤立版，派生抹灰、铺装纹理，添加墙脚剥落/水痕、坡面污斑、两扇未点亮碎窗、配楼女儿墙及平屋面小缺角、对应落地碎片。主大厅屋面保持完整；原始市政厅贴图和接通版不覆盖。屋面沿用原颜色并以贴合坡面的污斑几何表现风化，避免新生成线性贴图导出后偏黑。
+- 动效由网页运行时根据 `shelterLightStyle` 驱动局部灯位/发光亮度，不烘焙Blender关键帧；孤立版轻微明暗起伏，接通版恒定。共用预览可暂停时钟，后台不追赶，暂停或系统减少动态时稳定显示；模型保存灯位、灯色、材质夜间强度及状态标记，离线图为固定灯光帧，没有发电模拟或报警。
+- 源文件／GLB：`shelter-quality/shelter-isolated.blend` / `.glb` 与 `shelter-connected.blend` / `.glb`。源模型按部件可编辑，导出副本固化倒角并按材质合并；沿用项目原创市政厅PBR材质及米制构件做法，不引用其建筑几何。贴图内嵌GLB；灯位保存在 `shelterLights`，夜间发光强度、颜色保存在材质extras，网页按同一资料切换。
+- 离线渲染：同目录 `renders/shelter-isolated-day.png` / `-night.png` 和 `shelter-connected-day.png` / `-night.png`，由实际源模型Cycles渲染；网页采用实时Three.js，离线图不代表逐像素一致。统计为 `shelter-*-build-info.json`。浏览器验收截图仅放临时目录。
+- 入口：`model-preview.html?asset=shelter`，或「单体模型样板 → 避难所」；两态分别提供GLB、Blend和对应昼夜图，参考链接共用四格对照。模型不读取主游戏存档、地图或资源。
+
+制作入口使用本机Blender5.2，依赖仓库内市政厅源文件的打包原创材质；修改脚本后重新生成两态：
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python-exit-code 1 --python scripts/build-shelter-blender.py -- --state isolated --render --samples 96 --size 1440
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python-exit-code 1 --python scripts/build-shelter-blender.py -- --state connected --render --samples 96 --size 1440
+```
+
+不带 `--render` 仅生成Blend、GLB及统计。源文件默认关闭父子关系辅助线、使用材质预览；同一状态昼夜共用模型，无独立夜间贴图。不因已有灯光、围栏、人物和物资模型而增加经营或安全规则。
