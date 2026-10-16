@@ -23,8 +23,8 @@ export function createQualityPreview(renderer,scene,sun,sky){
 export function attachCityhallLights(object,scale){
   const lighting=new THREE.Group();lighting.userData.previewRoofLights=true;lighting.visible=false;
   object.traverse(node=>{
-    for(const [x,y,z,power,range] of node.userData.shelterLights??node.userData.cityhallLights??[]){
-      const light=new THREE.PointLight(node.userData.shelterLightColor??'#ffd098',power*scale*scale,range*scale,2);light.position.set(x,y,z);
+    for(const [x,y,z,power,range] of node.userData.poiLights??node.userData.shelterLights??node.userData.cityhallLights??[]){
+      const light=new THREE.PointLight(node.userData.poiLightColor??node.userData.shelterLightColor??'#ffd098',power*scale*scale,range*scale,2);light.position.set(x,y,z);
       if(node.userData.shelterLightStyle==='firelight')light.userData.previewFirelight={base:light.intensity,phase:lighting.children.length*1.7};
       lighting.add(light);
     }

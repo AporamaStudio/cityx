@@ -1,0 +1,16 @@
+{
+  "asset": "school",
+  "state": "intact",
+  "units": "meters",
+  "footprint": [
+    120,
+    160
+  ],
+  "sourceObjects": 5545,
+  "materials": 31,
+  "triangles": 440198,
+  "glbBytes": 29505820,
+  "nightLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 35.7
+}

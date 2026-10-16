@@ -1,0 +1,16 @@
+{
+  "asset": "school",
+  "state": "abandoned",
+  "units": "meters",
+  "footprint": [
+    120,
+    160
+  ],
+  "sourceObjects": 6014,
+  "materials": 32,
+  "triangles": 457250,
+  "glbBytes": 30197036,
+  "nightLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 44.9
+}
