@@ -2,6 +2,7 @@ import {createShotVFX,createImpactVFX,muzzlePoint} from './cannon-vfx.js?v=1';
 import {SHOT_STYLES,shotEnvelope} from './shot-visuals.js?v=1';
 import {createDefenseVFX} from './defense-vfx.js?v=2';
 import * as THREE from 'three';
+import {createCityLightSlots} from './city-light-slots.js?v=1';
 import {groundGlow} from './model-preview-effects.js?v=3';
 
 function mesh(geometry,color,opacity=1){
@@ -11,11 +12,11 @@ function dispose(object){object.removeFromParent();object.traverse(node=>{if(nod
 
 // 动效只消费显示描述和游戏时间；这里没有自动试射、独立计时或伤害计算。
 export function createCityEffects(scene){
-  const group=new THREE.Group();scene.add(group);const lights=new Map(),shots=new Map(),transitions=new Map(),impacts=new Map(),defense=new Map();let nightLights=[],nearFireCount=0;
-  function lightEntry(item){
+  const group=new THREE.Group();scene.add(group);const lights=new Map(),shots=new Map(),transitions=new Map(),impacts=new Map(),defense=new Map();
+  const lightSlots=createCityLightSlots(scene);
+  function lightEntry(item,slot){
     if(lights.has(item.id))return lights.get(item.id);
-    const sweep=item.asset==='watch',wreck=item.asset==='wreck',object=new THREE.Group(),light=sweep?new THREE.SpotLight('#9fcaff',0,24,.10,.7,2):new THREE.PointLight(wreck?'#ff8745':'#ffb860',0,wreck?2.3:4,2),target=new THREE.Object3D();
-    light.castShadow=false;scene.add(light,target);
+    const sweep=item.asset==='watch',wreck=item.asset==='wreck',object=new THREE.Group(),{light,target}=slot;
     const pool=groundGlow(sweep?2.2:wreck?1.6:2.4,sweep?3.2:wreck?1.6:2.4,sweep?'#9bc8ff':wreck?'#ff984a':'#ffc174',.3);pool.position.y=.025;pool.userData.ownGeometry=true;object.add(pool);
     const cone=sweep?mesh(new THREE.ConeGeometry(1,1,18,1,true),'#93bdff',.17):null;if(cone){cone.material.side=THREE.DoubleSide;object.add(cone);light.target=target;}
     group.add(object);const entry={object,light,target,pool,cone};lights.set(item.id,entry);return entry;
@@ -35,8 +36,10 @@ export function createCityEffects(scene){
   }
   return {
     group,
-    nightLights:()=>nightLights,
-    nightLightSignature:()=>`${nearFireCount}:${nightLights.length}`,
+    nightLights:lightSlots.lights,
+    lightStats:lightSlots.stats,
+    nightLightSignature:()=>{const stats=lightSlots.stats();return `${stats.fireLights}:${stats.watchLights}`;},
+    resetLights(){for(const entry of lights.values())dispose(entry.object);lights.clear();lightSlots.reset();},
     updateDefense(items,time){
       const active=new Set(items.map(item=>item.token));for(const [token,entry] of defense)if(!active.has(token)){entry.dispose();defense.delete(token);}
       for(const item of items){if(!defense.has(item.token))defense.set(item.token,createDefenseVFX(group,item));defense.get(item.token).update(time-item.at,item.alpha);}
@@ -56,13 +59,12 @@ export function createCityEffects(scene){
       }
     },
     updateLights(items,time,night,viewport){
-      nightLights=[];nearFireCount=0;
-      const active=new Set(items.map(item=>item.id));for(const [id,entry] of lights)if(!active.has(id)){dispose(entry.object);entry.light.removeFromParent();entry.target.removeFromParent();lights.delete(id);}
+      const slots=lightSlots.sync(items);
+      const active=new Set(items.map(item=>item.id));for(const [id,entry] of lights)if(!active.has(id)){dispose(entry.object);lights.delete(id);}
       for(const item of items){
-        const e=lightEntry(item),fireScale=item.fireScale??1,watch=item.asset==='watch',range=watch?(item.target?24:item.w*4):item.asset==='wreck'?2.3*fireScale:4,near=item.x>=viewport.left-range&&item.x<=viewport.right+range&&item.y>=viewport.top-range&&item.y<=viewport.bottom+range;
-        e.light.position.set(item.x,item.height,item.y);e.light.visible=near&&(watch?night>0:true);e.object.visible=near&&(watch?night>0:true);
-        if(watch&&near)nightLights.push(e.light);
-        if(!watch&&near)nearFireCount++;
+        const slot=slots.get(item.id),e=lightEntry(item,slot);e.light=slot.light;e.target=slot.target;
+        const fireScale=item.fireScale??1,watch=item.asset==='watch',range=watch?(item.target?24:item.w*4):item.asset==='wreck'?2.3*fireScale:4,near=item.x>=viewport.left-range&&item.x<=viewport.right+range&&item.y>=viewport.top-range&&item.y<=viewport.bottom+range;
+        e.light.position.set(item.x,item.height,item.y);e.object.visible=near&&(watch?night>0:true);
         if(e.cone)e.cone.visible=!!item.target;
         if(item.target){
           e.light.color.set('#9fcaff');e.light.angle=.10;e.light.distance=24;e.pool.material.color.set('#9bc8ff');e.pool.scale.setScalar(1);
@@ -77,8 +79,10 @@ export function createCityEffects(scene){
         }else{
           const flicker=1+.12*Math.sin(time*8.7+item.x)+.05*Math.sin(time*13+item.y);
           // 距离/光池按实体缩放，平方缩放光强保持局部明暗；不把小车辆当大范围照明。
-          const wreck=item.asset==='wreck';e.pool.position.set(item.x,.025,item.y);e.pool.scale.setScalar(fireScale);e.pool.material.opacity=(wreck?.12:.22)*flicker;e.light.distance=(wreck?2.3:4)*fireScale;e.light.intensity=(wreck?2+night*4:3+night*16)*flicker*fireScale**2;
+          const wreck=item.asset==='wreck';e.light.color.set(wreck?'#ff8745':'#ffb860');e.pool.position.set(item.x,.025,item.y);e.pool.scale.setScalar(fireScale);e.pool.material.opacity=(wreck?.12:.22)*flicker;e.light.distance=(wreck?2.3:4)*fireScale;e.light.intensity=(wreck?2+night*4:3+night*16)*flicker*fireScale**2;
         }
+        // 保留原光强、颜色和扫光范围；离屏只归零真实照明，光柱/光池仍按原条件隐藏。
+        if(!near)e.light.intensity=0;
       }
     },
     updateShots(items,hitItems,props,time,cell,cellMeters=20,night=0,pixelsAt=null){

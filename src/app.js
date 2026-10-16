@@ -5,7 +5,7 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
 import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=4';
-import {createCity3D} from './city-3d.js?v=74';
+import {createCity3D} from './city-3d.js?v=76';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -471,7 +471,7 @@ function recordRenderStats(cpu,stats,total){
   panel.querySelector('span').textContent=`绘制 ${values.drawMs.toFixed(1)}ms · ${Math.round(values.fps)} FPS`;
   const level={low:'低',medium:'中',high:'高'}[values.load];
   panel.setAttribute('aria-label',`${level}负载，绘制${values.drawMs.toFixed(1)}毫秒，地图重绘${Math.round(values.fps)}帧每秒`);
-  panel.title=`${level}负载（CPU及连续交互帧率估计，非GPU利用率）。FPS是实际地图重绘率，空闲按需更新。显示回调CPU ${values.cpuMs.toFixed(1)}ms；${stats?.calls??0}次提交，${Math.round((stats?.triangles??0)/1000)}k面，人物${stats?.figures??0}，路灯槽位${stats?.streetLights??0}。`;
+  panel.title=`${level}负载（CPU及连续交互帧率估计，非GPU利用率）。FPS是实际地图重绘率，空闲按需更新。显示回调CPU ${values.cpuMs.toFixed(1)}ms；${stats?.calls??0}次提交，${Math.round((stats?.triangles??0)/1000)}k面，人物${stats?.figures??0}，路灯/火光/塔灯槽位${stats?.streetLights??0}/${stats?.fireLights??0}/${stats?.watchLights??0}，着色程序${stats?.programs??0}。`;
 }
 // 输入与动画可以同时要求刷新，但同一浏览器帧只重画一次。
 function draw(){drawPending=true;}
@@ -1922,6 +1922,7 @@ function refreshParams(scope='all'){
   update();
 }
 function clearPlayback() {
+  city3D?.resetLighting();
   cancelDayEnd();
   upgradePulse=null;
   dayEndReturn=null;

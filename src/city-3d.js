@@ -12,10 +12,10 @@ import {updateWater} from './city-water.js?v=3';
 import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {PLANT_MODELS} from './city-vegetation.js?v=2';
 import {groundGlow} from './model-preview-effects.js?v=4';
-import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=12';
+import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=13';
 import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=19';
 import {createNightShaderWarmup} from './city-shader-warmup.js?v=1';
-import {createZombieCrowds} from './city-enemies.js?v=7';
+import {createZombieCrowds} from './city-enemies.js?v=8';
 import {constructionAppearance,constructionMaskTexture,bindConstructionMask,setConstructionMask} from './city-construction-preview.js?v=1';
 import {createUpgradePreview} from './city-upgrade-preview.js?v=2';
 
@@ -104,8 +104,8 @@ export function createCity3D({onReady,onProgress,onError}){
   const warmupRoot=new THREE.Group();
   function warmNight(camera){
     if(currentNight!==0)return;
-    // 编译容器只引用原根节点，不重新挂载；灯光仍从真实scene读取，排除短命战斗特效。
-    warmupRoot.children=[exterior,nature,buildings,facilities,streets,roads,unknown,observation.warmupRoot()];
+    // 编译容器只引用原根节点，不重新挂载；零人数实例也编译真实材质，排除短命战斗特效。
+    warmupRoot.children=[exterior,nature,buildings,facilities,streets,roads,unknown,enemies,observation.warmupRoot()];
     const lights=[...localLights,...effects.nightLights()];
     shaderWarmup.request(`${geometryVersion}:${localLights.length}:${effects.nightLightSignature()}`,warmupRoot,camera,lights);
   }
@@ -143,8 +143,10 @@ export function createCity3D({onReady,onProgress,onError}){
     return {object,powerNodes,signature:`${type}:${status}:${w}:${h}:${cellMeters}`,roof:new THREE.Box3().setFromObject(object).max.y};
   }
   return {
+    // 重开/重试释放本局保留的峰值槽位；下一帧按真实设施重新分配。
+    resetLighting(){effects.resetLights();for(const light of localLights){light.removeFromParent();light.dispose();}localLights.length=0;},
     beginStats(){renderer.info.autoReset=false;renderer.info.reset();},
-    renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats(),streetLights:localLights.length};renderer.info.autoReset=true;return stats;},
+    renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats(),streetLights:localLights.length,...effects.lightStats(),programs:renderer.info.programs.length};renderer.info.autoReset=true;return stats;},
     isReady(){return ready;},
     observationPick(x,y,width,height,view){return ready?observation.pick(x,y,width,height,view):null;},
     observationFrame(options){if(!ready)return null;const image=observation.render({...options,objects:[exterior,nature,unknown,buildings,facilities,streets,roads],enemies,hasEnemies:zombieCrowds.stats().figures>0,geometryVersion,effects:effects.group});warmNight(observation.warmupCamera());return image;},
@@ -162,6 +164,7 @@ export function createCity3D({onReady,onProgress,onError}){
       if(!ready)return null;
       currentNight=night;
       const geographyChanged=natureLayout!==layout||natureMeters!==cellMeters;
+      if(natureLayout!==layout)effects.resetLights();
       // 只读实际设施占格；道路上的墙/塔不重建林地，悬停预览不触发整片几何更新。
       const clearCells=naturalOccupied.filter(id=>layout.tiles[id]==='open'&&layout.natural?.regions.some(r=>id%layout.width>=r.x&&id%layout.width<r.x+r.w&&Math.floor(id/layout.width)>=r.y&&Math.floor(id/layout.width)<r.y+r.h)).sort((a,b)=>a-b),nextNature=clearCells.join(',');
       if(geographyChanged||natureKey!==nextNature){release({object:nature});nature=createNaturalModel(layout,cellMeters,models,new Set(clearCells));scene.add(nature);freezeCityTransforms(nature);natureKey=nextNature;}
@@ -243,7 +246,7 @@ export function createCity3D({onReady,onProgress,onError}){
         mergePlot(streets);const materials=new Set();streets.traverse(node=>{if(node.isMesh){materials.add(node.material);if(node.material.transparent)node.castShadow=false;}});streetMaterials=[...materials];freezeCityTransforms(streets);
         geometryVersion++;streetKey=nextStreets;
       }
-      // 只启用镜头附近路灯的真实光源；远景保留灯具与光池，灯不投独立阴影。
+      // 只给镜头附近路灯分配照明；槽位保持参与着色，白天/离屏以0强度停光，不投独立阴影。
       const visible=lightViewport??{left:-panX/cell,right:(width-panX)/cell,top:-panY/cell,bottom:(height-panY)/cell};
       const reach=22/cellMeters,cx=(width/2-panX)/cell,cy=(height/2-panY)/cell;
       const nearby=streetLights.filter(p=>p.x>=visible.left-reach&&p.x<=visible.right+reach&&p.y>=visible.top-reach&&p.y<=visible.bottom+reach).sort((a,b)=>Math.hypot(a.x-cx,a.y-cy)-Math.hypot(b.x-cx,b.y-cy)).slice(0,lightBudget);
@@ -256,7 +259,7 @@ export function createCity3D({onReady,onProgress,onError}){
         let p=wanted.get(light.userData.id);const dt=Math.min(.1,Math.max(0,performance.now()/1000-(light.userData.at??performance.now()/1000)));light.userData.at=performance.now()/1000;
         light.userData.level=fx.reducedMotion?(p?1:0):Math.max(0,Math.min(1,light.userData.level+(p?1:-1)*dt*5));
         if(!p&&light.userData.level===0){const next=[...wanted].find(([id])=>!claimed.has(id));if(next){const [id,point]=next;light.userData.id=id;claimed.add(id);p=point;light.userData.level=fx.reducedMotion?1:night>0?.01:0;}}
-        light.visible=night>0;light.distance=reach;light.intensity=night*1.7*(20/cellMeters)**2*light.userData.level;if(p)light.position.set(p.x,p.height,p.y);
+        light.visible=true;light.distance=reach;light.intensity=night*1.7*(20/cellMeters)**2*light.userData.level;if(p)light.position.set(p.x,p.height,p.y);
       }
       for(const material of streetMaterials){if(material.map)material.opacity=night*.32;else if(material.name==='#ffe1a3'){material.emissive.set('#ffb75c');material.emissiveIntensity=night*1.8;}}
       const lightItems=[...fx.sweeps,...fx.fires].map(item=>{const {size}=measureModel(item.asset);return {...item,height:naturalGroundAt(layout,item.x,item.y,cellMeters)+size.y*Math.min(item.w/size.x,item.h/size.z)*(item.asset==='watch'?.84:.65)};});
