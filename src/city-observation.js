@@ -55,11 +55,12 @@ export function createCityObservation(scene,renderer){
         lastGeometryVersion=geometryVersion;
       }
       bind(effects);
-      fogTexture.image=mist;fogTexture.needsUpdate=true;
+      // 关闭雾时不清空/上传整张世界贴图；保留同一着色程序，以uniform切换。
+      if(mist){fogTexture.image=mist;fogTexture.needsUpdate=true;}
       fog.bounds.value.set(...mistBounds);
       setCamera(view);
       const size=view.size??60;if(floor.userData.mapSize!==size){floor.matrixAutoUpdate=true;floor.scale.setScalar((size+16)/76);floor.position.set(size/2,-.014,size/2);freezeCityTransforms(floor);floor.userData.mapSize=size;}
-      floor.visible=true;for(const object of [...objects,effects])object.visible=true;fog.enabled.value=1;
+      floor.visible=true;for(const object of [...objects,effects])object.visible=true;fog.enabled.value=mist?1:0;
       // 敌人已按原插值中心渐隐；单独在雾上绘制，避免楼体遮住本应可见的敌群。
       enemies.visible=false;renderer.setClearColor(background,1);renderer.render(scene,camera);
       if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}

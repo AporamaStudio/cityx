@@ -6,7 +6,7 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
 import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=5';
-import {createCity3D} from './city-3d.js?v=79';
+import {createCity3D} from './city-3d.js?v=80';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -1196,10 +1196,13 @@ function updateCameraLabels(size,params){
 function paintCityScene(view,fogTime){
   const fogPx=4,camera=cameraView(),m=observationMist.getContext('2d');
   const {border:mistBorder,span:mistSpan}=view.visibility;
+  const mistEnabled=mapFogEnabled();
+  if(mistEnabled){
   if(observationMist.width!==mistSpan*fogPx)observationMist.width=observationMist.height=mistSpan*fogPx;
   m.setTransform(1,0,0,1,0,0);m.clearRect(0,0,observationMist.width,observationMist.height);m.setTransform(fogPx,0,0,fogPx,mistBorder*fogPx,mistBorder*fogPx);
-  if(mapFogEnabled())drawFog(m,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom);
-  const image=city3D.observationFrame({mist:observationMist,mistBounds:[-mistBorder,-mistBorder,mistSpan,mistSpan],view:camera,background:fogColor(nightMix)});
+  drawFog(m,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom);
+  }
+  const image=city3D.observationFrame({mist:mistEnabled?observationMist:null,mistBounds:[-mistBorder,-mistBorder,mistSpan,mistSpan],view:camera,background:fogColor(nightMix)});
   ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.clearRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);
 }
 function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,fogTime,operationValid=false){

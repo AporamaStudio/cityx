@@ -15,13 +15,14 @@ import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {PLANT_MODELS} from './city-vegetation.js?v=2';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=15';
-import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=21';
+import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=22';
 import {createNightShaderWarmup} from './city-shader-warmup.js?v=3';
 import {createShaderSamples,cloneWarmupMaterial} from './city-shader-samples.js?v=1';
 import {createShotVFX,createImpactVFX} from './cannon-vfx.js?v=1';
 import {createZombieCrowds} from './city-enemies.js?v=8';
 import {constructionAppearance,constructionMaskTexture,bindConstructionMask,setConstructionMask} from './city-construction-preview.js?v=1';
 import {createUpgradePreview} from './city-upgrade-preview.js?v=2';
+import {spatialChunks} from './city-spatial-cache.js?v=1';
 
 // 城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
@@ -81,7 +82,7 @@ export function createCity3D({onReady,onProgress,onError}){
   sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-64,right:64,top:64,bottom:-64,near:1,far:180});sun.shadow.bias=-.00025;sun.shadow.normalBias=.03;
   const buildings=new THREE.Group(),facilities=new THREE.Group(),enemies=new THREE.Group();scene.add(buildings,facilities,enemies);
   const vegetation=new THREE.Group(),plantEntries=new Map();facilities.add(vegetation);let plantKey='';
-  const streets=new THREE.Group();scene.add(streets);let streetKey='',lastShadow='',streetLights=[],streetMaterials=[];
+  const streets=new THREE.Group(),streetEntries=new Map();scene.add(streets);let streetKey='',lastShadow='',streetLights=[],streetMaterials=[],streetChunks=new Map(),streetInputs=[];
   let roads=new THREE.Group(),roadKey='';scene.add(roads);
   let railway=new THREE.Group();scene.add(railway);
   let nature=new THREE.Group(),natureLayout=null,natureMeters=0,natureKey='';scene.add(nature);
@@ -92,6 +93,7 @@ export function createCity3D({onReady,onProgress,onError}){
   let unknown=new THREE.Group(),unknownKey='';scene.add(unknown);
   const landmarkLoads=new Map();let visibleLandmarksPending=false;
   const models=new Map(),entries=new Map(),props=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',lastProps='',pixels='',geometryVersion=0;
+  let plotInput=null,plantInput=null,plantPlots=new Map(),plantSignature='',unknownInput=null,roadInput=null;
   let constructionEntry=null,constructionBase=null,constructionKey='';
   // 模板只读；按原模型与旋转复用实际包围盒，不改变米制缩放或楼体选型。
   const modelMeasures=new Map();let streetLightOffset=null;
@@ -198,14 +200,15 @@ export function createCity3D({onReady,onProgress,onError}){
       // 远景融合发生在输出色域转换后，雾色也用sRGB，避免地平线形成暗色矩形边缘。
       exterior.userData.haze?.value.set(fx.hazeColor).convertLinearToSRGB();
       updateWater(nature,fx.time,night,fx.reducedMotion);updateWater(exterior,fx.time,night,fx.reducedMotion);
-      const active=new Set(plots.map(p=>p.id));
-      for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
+      if(plotInput!==plots){
+        const active=new Set(plots.map(p=>p.id));
+        for(const [id,entry] of entries)if(!active.has(id)){release(entry);entries.delete(id);}
+        plotInput=plots;
+      }
       // 只构造镜头附近会贡献画面/阴影的细节；已访问楼体保留到其状态真正消失。
       const intersects=p=>!lightViewport||p.x+p.w>=lightViewport.left-16&&p.x<=lightViewport.right+16&&p.y+p.h>=lightViewport.top-16&&p.y<=lightViewport.bottom+16;
+      for(const plot of plots)if(entries.has(plot.id))entries.get(plot.id).object.visible=intersects(plot);
       plots=plots.filter(intersects);
-      dressing=dressing.filter(p=>intersects({...p,w:p.w??1,h:p.h??1}));
-      lamps=lamps.filter(p=>intersects({...p,w:1,h:1}));
-      plants=plants.filter(p=>intersects({...p,w:p.w??1,h:p.h??p.w??1}));
       visibleLandmarksPending=false;
       for(const plot of plots){
         const landmark=landmarkById(plot.type);
@@ -236,19 +239,25 @@ export function createCity3D({onReady,onProgress,onError}){
         constructionBase=entries.get(plan.id);
         if(constructionBase){constructionBase.planMask??=bindConstructionMask(constructionBase.object,false);setConstructionMask(constructionBase.planMask,plan,constructionEntry.texture);}
       }else if(constructionEntry)constructionEntry.object.visible=false;
-      const nextUnknown=JSON.stringify(unknownPlots);
-      if(unknown.userData.layout!==layout||unknownKey!==nextUnknown){
-        release({object:unknown});unknown=createUnknownCity(layout,unknownPlots);unknown.userData.layout=layout;scene.add(unknown);freezeCityTransforms(unknown);unknownKey=nextUnknown;
+      if(unknown.userData.layout!==layout||unknownInput!==unknownPlots){
+        const nextUnknown=JSON.stringify(unknownPlots);unknownInput=unknownPlots;
+        if(unknown.userData.layout!==layout||unknownKey!==nextUnknown){release({object:unknown});unknown=createUnknownCity(layout,unknownPlots);unknown.userData.layout=layout;scene.add(unknown);freezeCityTransforms(unknown);unknownKey=nextUnknown;}
       }
-      const nextRoads=cellMeters+':'+roadCells.join(',');
-      if(roads.userData.layout!==layout||nextRoads!==roadKey){
-        release({object:roads});const visibleRoads=new Set(roadCells);roads=createRoadModel(layout,cellMeters,id=>visibleRoads.has(id));roads.userData.layout=layout;scene.add(roads);freezeCityTransforms(roads);roadKey=nextRoads;
+      if(roads.userData.layout!==layout||roadInput!==roadCells||geographyChanged){
+        const nextRoads=cellMeters+':'+roadCells.join(',');roadInput=roadCells;
+        if(roads.userData.layout!==layout||nextRoads!==roadKey){release({object:roads});const visibleRoads=new Set(roadCells);roads=createRoadModel(layout,cellMeters,id=>visibleRoads.has(id));roads.userData.layout=layout;scene.add(roads);freezeCityTransforms(roads);roadKey=nextRoads;}
       }
-      const plantPlots=new Map();for(const plant of plants){if(!plantPlots.has(plant.plot))plantPlots.set(plant.plot,[]);plantPlots.get(plant.plot).push(plant);}
-      for(const [id,entry] of plantEntries)if(!plantPlots.has(id)){release(entry);plantEntries.delete(id);}
+      if(plantInput!==plants){
+        plantInput=plants;plantPlots=new Map();for(const plant of plants){if(!plantPlots.has(plant.plot))plantPlots.set(plant.plot,[]);plantPlots.get(plant.plot).push(plant);}
+        for(const [id,list] of plantPlots)list.signature=JSON.stringify(list);
+        plantSignature=JSON.stringify(plants);
+        for(const [id,entry] of plantEntries)if(!plantPlots.has(id)){release(entry);plantEntries.delete(id);}
+      }
       // 同一空地的静态树群按共用材质合并；悬停建设只改透明度，不重建几何。
       for(const [id,list] of plantPlots){
-        const signature=JSON.stringify(list);
+        const nearby=list.some(p=>intersects({...p,w:p.w??1,h:p.h??p.w??1}));
+        if(!nearby){if(plantEntries.has(id))plantEntries.get(id).object.visible=false;continue;}
+        const signature=list.signature;
         if(plantEntries.get(id)?.signature!==signature){
           if(plantEntries.has(id))release(plantEntries.get(id));const group=new THREE.Group();
           for(const plant of list){
@@ -263,29 +272,36 @@ export function createCity3D({onReady,onProgress,onError}){
         entry.object.visible=id!==constructionPreview?.id;
         if(entry.faded!==faded){entry.object.traverse(node=>{if(node.isMesh){node.material.transparent=faded;node.material.opacity=faded ? .18 : 1;node.material.depthWrite=!faded;node.castShadow=!faded;}});entry.faded=faded;}
       }
-      plantKey=JSON.stringify(plants)+':'+plantPreview;
-      const nextStreets=cellMeters+JSON.stringify([lamps,dressing]);
+      plantKey=plantSignature+':'+plantPreview;
       const rawStreet=models.get('street'),{bounds:streetBounds}=measureModel('street'),streetScale=7.5/cellMeters/(streetBounds.max.y-streetBounds.min.y);
       if(!streetLightOffset){streetLightOffset=new THREE.Vector3();rawStreet.traverse(node=>{if(node.isMesh&&node.material.name==='#ffe1a3')streetLightOffset=new THREE.Box3().setFromObject(node).getCenter(new THREE.Vector3());});}
       const lightOffset=streetLightOffset;
-      if(geographyChanged||nextStreets!==streetKey){
+      let streetsChanged=false;
+      if(geographyChanged||streetInputs[0]!==lamps||streetInputs[1]!==dressing||streetInputs[2]!==cellMeters){
+        streetChunks=spatialChunks(lamps,dressing);streetInputs=[lamps,dressing,cellMeters];
         streetLights=[];
         for(const lamp of lamps){const offset=lightOffset.clone().multiplyScalar(streetScale).applyAxisAngle(new THREE.Vector3(0,1,0),lamp.angle);streetLights.push({x:lamp.x+offset.x,y:lamp.y+offset.z,height:offset.y+naturalGroundAt(layout,lamp.x,lamp.y,cellMeters)});}
-        for(const object of [...streets.children])release({object});streets.clear();
-        for(const lamp of lamps){
+        for(const [id,entry] of streetEntries)if(geographyChanged||entry.signature!==streetChunks.get(id)?.signature){release(entry);streetEntries.delete(id);}
+        streetKey=cellMeters+JSON.stringify([lamps,dressing]);streetsChanged=true;
+      }
+      for(const [id,chunk] of streetChunks){
+        const nearby=intersects(chunk);if(streetEntries.has(id)){streetEntries.get(id).object.visible=nearby;continue;}if(!nearby)continue;
+        const group=new THREE.Group();
+        for(const lamp of chunk.lamps){
           const object=new THREE.Group(),model=models.get('street').clone(true);object.add(model);model.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.castShadow=true;}});
           model.scale.setScalar(streetScale);model.position.y=-streetBounds.min.y*streetScale;object.position.set(lamp.x,naturalGroundAt(layout,lamp.x,lamp.y,cellMeters),lamp.y);object.rotation.y=lamp.angle;
-          const pool=groundGlow(18/cellMeters,28/cellMeters,'#ffca72',.32);pool.position.set(lightOffset.x*streetScale,.012,lightOffset.z*streetScale);pool.userData.ownGeometry=true;object.add(pool);streets.add(object);
+          const pool=groundGlow(18/cellMeters,28/cellMeters,'#ffca72',.32);pool.position.set(lightOffset.x*streetScale,.012,lightOffset.z*streetScale);pool.userData.ownGeometry=true;object.add(pool);group.add(object);
         }
-        for(const prop of dressing){
+        for(const prop of chunk.dressing){
           const object=models.get(prop.asset).clone(true),{bounds,size,center}=measureModel(prop.asset),scale=Math.min(prop.w/size.x,prop.h/size.z);
           object.traverse(node=>{if(node.isMesh){node.material=node.material.clone();node.castShadow=true;node.receiveShadow=true;}});
           if(prop.color)styleVehicleBody(object,prop.color,prop.asset==='damagedCar');
-          const anchor=new THREE.Group();object.scale.setScalar(scale);object.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);anchor.add(object);anchor.position.set(prop.x,naturalGroundAt(layout,prop.x,prop.y,cellMeters),prop.y);anchor.rotation.y=prop.angle;streets.add(anchor);
+          const anchor=new THREE.Group();object.scale.setScalar(scale);object.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);anchor.add(object);anchor.position.set(prop.x,naturalGroundAt(layout,prop.x,prop.y,cellMeters),prop.y);anchor.rotation.y=prop.angle;group.add(anchor);
         }
-        mergePlot(streets);const materials=new Set();streets.traverse(node=>{if(node.isMesh){materials.add(node.material);if(node.material.transparent)node.castShadow=false;}});streetMaterials=[...materials];freezeCityTransforms(streets);
-        geometryVersion++;streetKey=nextStreets;
+        mergePlot(group);group.traverse(node=>{if(node.isMesh&&node.material.transparent)node.castShadow=false;});streets.add(group);freezeCityTransforms(group);
+        streetEntries.set(id,{object:group,signature:chunk.signature});geometryVersion++;streetsChanged=true;
       }
+      if(streetsChanged)streetMaterials=[...new Set([...streetEntries.values()].flatMap(entry=>entry.object.children.map(node=>node.material)))];
       // 夜间槽位跨镜头保持稳定；白天不参与着色，布局变化后的夜景在空闲分批准备。
       const visible=lightViewport??{left:-panX/cell,right:(width-panX)/cell,top:-panY/cell,bottom:(height-panY)/cell};
       const reach=22/cellMeters,cx=(width/2-panX)/cell,cy=(height/2-panY)/cell;

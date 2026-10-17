@@ -60,6 +60,10 @@ test('观察层缓存静态材质并登记新网格，空敌人不绘制也不�
     observation.render({...options,geometryVersion:2,hasEnemies:true});
     assert.equal(added.material.userData.cityObserveFog,true);assert.equal(renders,4);assert.ok(observation.enemiesFrame());
     observation.render({...options,geometryVersion:2});assert.equal(renders,5);assert.equal(observation.enemiesFrame(),null);assert.equal(enemies.visible,false);assert.equal(clearAlpha,0);
+    const shader={uniforms:{},vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader};mesh.material.onBeforeCompile(shader);
+    const texture=shader.uniforms.cityObserveFog.value,version=texture.version;
+    observation.render({...options,geometryVersion:2,mist:null});assert.equal(texture.version,version);assert.equal(shader.uniforms.cityObserveActive.value,0);
+    observation.render({...options,geometryVersion:2});assert.equal(texture.version,version+1);
   }finally{globalThis.document=previous;}
 });
 
