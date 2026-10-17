@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {QUALITY_POIS,poiState} from './model-preview-pois.js?v=9';
+import {QUALITY_POIS,poiState} from './model-preview-pois.js?v=10';
 import {createZombieCrowds} from './city-enemies.js?v=6';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
@@ -303,9 +303,9 @@ function updateSingleState(){
   if(selected.landmark||selected.paired){$('download').href=root+(selected.local?'generated/':'kenney/')+selected.file+(singleState==='ruined'?'-ruined':'')+'.glb?v=7';$('download').textContent=singleState==='ruined'?'下载破损模型 ↓':'下载完好模型 ↓';}
   if(selected.poi){
     const state=poiState(singleState),base=root+selected.id+'-quality/'+selected.id+'-'+state;
-    $('download').href=base+'.glb';$('download').textContent='下载'+({abandoned:'废弃',intact:'修复',connected:'接通'})[state]+'模型 ↓';
-    $('qualityBlend').href=base+'.blend';$('qualityReference').href=root+'concepts/poi-2026-10-14/'+selected.sheet+(state==='abandoned'?'-abandoned':'')+'.png';
-    for(const period of ['day','night'])$('quality'+(period==='day'?'Day':'Night')).href=root+selected.id+'-quality/renders/'+selected.id+'-'+state+'-'+period+'.png';
+    $('download').href=base+'.glb?v=2';$('download').textContent='下载'+({abandoned:'废弃',intact:'修复',connected:'接通'})[state]+'模型 ↓';
+    $('qualityBlend').href=base+'.blend?v=2';$('qualityReference').href=root+'concepts/poi-2026-10-14/'+selected.sheet+(state==='abandoned'?'-abandoned':'')+'.png';
+    for(const period of ['day','night'])$('quality'+(period==='day'?'Day':'Night')).href=root+selected.id+'-quality/renders/'+selected.id+'-'+state+'-'+period+'.png?v=2';
   }else if(selected.shelter){
     const state=singleState==='ruined'?'isolated':'connected',base=root+'shelter-quality/shelter-'+state;
     $('download').href=base+'.glb?v=2';$('download').textContent=state==='isolated'?'下载孤立避难所 ↓':'下载接通后模型 ↓';
@@ -319,7 +319,7 @@ function updateSingleState(){
     $('qualityReference').href=root+'concepts/poi-2026-10-14/01-civic-life'+(abandoned?'-abandoned':'')+'.png';
     for(const period of ['day','night'])$('quality'+(period==='day'?'Day':'Night')).href=root+'cityhall-quality/renders/city-hall'+(abandoned?'-abandoned':'')+'-'+period+'.png';
   }
-  if(mode==='single')$('sceneSubtitle').textContent=selected.poi?({intact:'修复 · 设施完整，尚未启用',ruined:'废弃 · 设施失养与局部损坏',operating:'接通 · 场所与沿路照明恢复'})[singleState]:selected.shelter?(singleState==='ruined'?'孤立 · 少量应急灯与天窗微光':'接通后 · 稳定暖窗与沿路照明'):isBuilding(selected)?({intact:'完好 · 尚未运营',ruined:'原建筑局部塌损 · 占地与门窗保留',operating:'恢复运营 · 窗户与屋顶亮灯'})[singleState]:(selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0');
+  if(mode==='single')$('sceneSubtitle').textContent=selected.poi?({intact:'修复 · 设施完整，尚未启用',ruined:'废弃 · 结构塌损与场地失养',operating:'接通 · 场所与沿路照明恢复'})[singleState]:selected.shelter?(singleState==='ruined'?'孤立 · 少量应急灯与天窗微光':'接通后 · 稳定暖窗与沿路照明'):isBuilding(selected)?({intact:'完好 · 尚未运营',ruined:'原建筑局部塌损 · 占地与门窗保留',operating:'恢复运营 · 窗户与屋顶亮灯'})[singleState]:(selected.local?'CityX 自制 low poly 样件':'Kenney 城市系列 · CC0');
 }
 function setMode(next){
   mode=next;for(const button of document.querySelectorAll('[data-poi]'))button.classList.toggle('active',button.dataset.poi===selected.id);$('sampleNav').hidden=mode!=='single';qualityLight(mode==='single'&&selected.quality,night);$('qualityDetails').hidden=!(mode==='single'&&selected.quality);$('cityhall').classList.toggle('active',mode==='single'&&selected.id==='city-hall');$('shelter').classList.toggle('active',mode==='single'&&Boolean(selected.shelter));$('modelSelection').hidden=['roads','rural'].includes(mode);$('ruralDetails').hidden=mode!=='rural';rural.visible=mode==='rural';$('rural').classList.toggle('active',mode==='rural');$('roadDetails').hidden=mode!=='roads';district.visible=mode==='district';single.visible=mode==='single';roads.visible=mode==='roads';$('roads').classList.toggle('active',mode==='roads');$('district').classList.toggle('active',mode==='district');$('single').classList.toggle('active',mode==='single');$('restore').hidden=mode==='single';
@@ -334,7 +334,7 @@ async function selectAsset(asset,show=true){
   if(asset.poi&&!models.has(asset.id)){
     ready=false;$('loading').hidden=false;$('loading').textContent='正在装载'+asset.name+'三态样板…';
     try{
-      const loadedModels=await Promise.all([['intact',''],['abandoned','-ruined'],['connected','-connected']].map(async([state,suffix])=>[asset.id+suffix,(await loader.loadAsync(root+asset.id+'-quality/'+asset.id+'-'+state+'.glb')).scene]));
+      const loadedModels=await Promise.all([['intact',''],['abandoned','-ruined'],['connected','-connected']].map(async([state,suffix])=>[asset.id+suffix,(await loader.loadAsync(root+asset.id+'-quality/'+asset.id+'-'+state+'.glb?v=2')).scene]));
       for(const [id,model] of loadedModels)models.set(id,model);
     }catch(error){$('loading').textContent='样板装载失败，请刷新后重试。';console.error(error);ready=true;return;}
     ready=true;$('loading').hidden=true;

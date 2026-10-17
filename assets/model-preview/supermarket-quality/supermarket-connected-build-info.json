@@ -1,0 +1,17 @@
+{
+  "asset": "supermarket",
+  "state": "connected",
+  "units": "meters",
+  "footprint": [
+    80,
+    100
+  ],
+  "sourceObjects": 2173,
+  "materials": 29,
+  "triangles": 136996,
+  "glbBytes": 11103964,
+  "nightLights": 10,
+  "nightSpotLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 13.0
+}

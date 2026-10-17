@@ -1,0 +1,17 @@
+{
+  "asset": "supermarket",
+  "state": "abandoned",
+  "units": "meters",
+  "footprint": [
+    80,
+    100
+  ],
+  "sourceObjects": 3381,
+  "materials": 35,
+  "triangles": 179270,
+  "glbBytes": 12939336,
+  "nightLights": 0,
+  "nightSpotLights": 0,
+  "blender": "5.2.0 LTS",
+  "elapsedSeconds": 15.0
+}
