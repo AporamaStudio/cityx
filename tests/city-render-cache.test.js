@@ -9,7 +9,7 @@ async function loadBrowserModule(name){
   const source=(await readFile(new URL('../src/'+name,import.meta.url),'utf8'))
     .replace("'three'",JSON.stringify(new URL('../assets/model-preview/vendor/three/build/three.module.js',import.meta.url).href))
     .replace("'three/addons/utils/BufferGeometryUtils.js'",JSON.stringify('data:text/javascript;base64,'+Buffer.from(mergeSource).toString('base64')))
-    .replace("'./city-view.js?v=3'",JSON.stringify(new URL('../src/city-view.js',import.meta.url).href));
+    .replace(/'\.\/city-view\.js\?v=[^']+'/,JSON.stringify(new URL('../src/city-view.js',import.meta.url).href));
   return import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 }
 
@@ -140,4 +140,15 @@ test('俯视3D相机与格子信息投影一致，并能切回斜视相机',asyn
     }
     assert.equal(observation.warmupRoot().material.map,null);
   }finally{globalThis.document=previous;}
+});
+
+
+test('品质地标共享原索引几何与PBR贴图，米制缩放不按地块拉伸',async()=>{
+  const {createLandmarkModel}=await loadBrowserModule('city-landmark-model.js');
+  const geometry=new THREE.BoxGeometry(120,30,140),normalMap=new THREE.Texture(),material=new THREE.MeshStandardMaterial({normalMap,metalness:.3});
+  const template=new THREE.Group(),mesh=new THREE.Mesh(geometry,material);mesh.position.y=15;template.add(mesh);
+  const object=createLandmarkModel(template,{x:117,y:114,w:6,h:7,cellMeters:20});object.updateMatrixWorld(true);
+  const size=new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3());assert.deepEqual(size.toArray(),[6,1.5,7]);
+  const clone=object.children[0].children[0];assert.strictEqual(clone.geometry,geometry);assert.notStrictEqual(clone.material,material);assert.strictEqual(clone.material.normalMap,normalMap);assert.equal(clone.material.metalness,.3);
+  assert.ok(geometry.index);assert.deepEqual(new THREE.Box3().setFromObject(object).getCenter(new THREE.Vector3()).toArray(),[120,.75,117.5]);
 });

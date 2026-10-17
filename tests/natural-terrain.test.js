@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
 import {MAP_DEFAULTS as LARGE_MAP_DEFAULTS,mapSearch,readMapSettings} from '../src/map-settings.js';
-const MAP_DEFAULTS={...LARGE_MAP_DEFAULTS,width:60,height:60};
+const MAP_DEFAULTS={...LARGE_MAP_DEFAULTS,width:60,height:60,landmarks:false};
 import {DEFAULTS} from '../src/config.js';
 import {createCampaign,key,validateSources,wallPreview,outpostError,rebuildTerrain} from '../src/model.js';
 import {naturalGroundAt,naturalPlants,naturalDetails,hillHeight,lakeOutline} from '../src/natural-terrain.js';

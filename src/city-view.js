@@ -1,7 +1,7 @@
 // 观察镜头只变换显示坐标；俯视建设继续使用原格子命中和权限。
 export function viewCenter({width,height,panX,panY,cell}){return {x:(width/2-panX)/cell,y:(height/2-panY)/cell};}
 // 透视在观察中心保留原格宽；Three.js相机与Canvas信息共用此距离。
-export function viewDistance(view){return view.projection==='perspective'?view.height/(2*view.cell*Math.tan((view.fov??40)*Math.PI/360)):100;}
+export function viewDistance(view){return view.projection==='perspective'?view.height/(2*view.cell*Math.tan((view.fov??40)*Math.PI/360)):Math.max(100,(view.size??60)*2);}
 export function viewPixelScale(x,y,z,view){
   if(view.projection!=='perspective')return view.cell;
   const center=viewCenter(view),distance=viewDistance(view),v=Math.sin(view.yaw)*(x-center.x)+Math.cos(view.yaw)*(y-center.y),depth=distance-Math.cos(view.elevation)*v-Math.sin(view.elevation)*z;
@@ -62,7 +62,7 @@ export function observationView(view,size=60){
 }
 export function viewBounds(view){
   const corners=[[0,0],[view.width,0],[0,view.height],[view.width,view.height]].map(([x,y])=>groundAt(x,y,view));
-  if(corners.some(p=>p.sky))return {left:-8,right:68,top:-8,bottom:68};
+  if(corners.some(p=>p.sky))return {left:-8,right:(view.size??60)+8,top:-8,bottom:(view.size??60)+8};
   return {left:Math.min(...corners.map(p=>p.x)),right:Math.max(...corners.map(p=>p.x)),top:Math.min(...corners.map(p=>p.y)),bottom:Math.max(...corners.map(p=>p.y))};
 }
 // 绕城可完整旋转，俯仰保留25–80°，避免贴地穿楼或越过俯视翻转。

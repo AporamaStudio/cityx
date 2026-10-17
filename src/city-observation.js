@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {viewCenter,viewDistance} from './city-view.js?v=3';
+import {viewCenter,viewDistance} from './city-view.js?v=5';
 
 // 仅用于已定位完成且父层不移动的静态景物；材质/可见性仍可更新，替换模型重新登记。
 export function freezeCityTransforms(object){
@@ -20,8 +20,8 @@ export function createCityObservation(scene,renderer){
   function setCamera(view){
     const {width,height,cell,yaw,elevation}=view,center=viewCenter(view),distance=viewDistance(view);
     camera=view.projection==='perspective'?perspective:orthographic;
-    if(camera===perspective){camera.fov=view.fov;camera.aspect=width/height;camera.near=distance*.05;camera.far=distance+300;}
-    else{camera.left=-width/(2*cell);camera.right=width/(2*cell);camera.top=height/(2*cell);camera.bottom=-height/(2*cell);camera.near=.1;camera.far=300;}
+    if(camera===perspective){camera.fov=view.fov;camera.aspect=width/height;camera.near=distance*.05;camera.far=distance+Math.max(300,(view.size??60)*3);}
+    else{camera.left=-width/(2*cell);camera.right=width/(2*cell);camera.top=height/(2*cell);camera.bottom=-height/(2*cell);camera.near=.1;camera.far=distance+Math.max(300,(view.size??60)*3);}
     camera.position.set(center.x+Math.sin(yaw)*Math.cos(elevation)*distance,Math.sin(elevation)*distance,center.y+Math.cos(yaw)*Math.cos(elevation)*distance);camera.up.set(0,Math.abs(Math.cos(elevation))<1e-6?0:1,Math.abs(Math.cos(elevation))<1e-6?-1:0);camera.lookAt(center.x,0,center.y);camera.updateProjectionMatrix();camera.updateMatrixWorld();
   }
   function bind(object){object.traverse(node=>{if(!node.isMesh&&!node.isLine)return;const material=node.material;if(material.userData.cityObserveFog)return;
@@ -58,6 +58,7 @@ export function createCityObservation(scene,renderer){
       fogTexture.image=mist;fogTexture.needsUpdate=true;
       fog.bounds.value.set(...mistBounds);
       setCamera(view);
+      const size=view.size??60;if(floor.userData.mapSize!==size){floor.matrixAutoUpdate=true;floor.scale.setScalar((size+16)/76);floor.position.set(size/2,-.014,size/2);freezeCityTransforms(floor);floor.userData.mapSize=size;}
       floor.visible=true;for(const object of [...objects,effects])object.visible=true;fog.enabled.value=1;
       // 敌人已按原插值中心渐隐；单独在雾上绘制，避免楼体遮住本应可见的敌群。
       enemies.visible=false;renderer.setClearColor(background,1);renderer.render(scene,camera);

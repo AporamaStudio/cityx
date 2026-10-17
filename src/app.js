@@ -1,11 +1,12 @@
+import {landmarkById} from './city-landmarks.js?v=1';
 import {poiMarkerSize} from './poi-marker-layout.js?v=2';
 import {createRenderMeter} from './render-meter.js?v=1';
 import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback} from './enemy-overlay.js?v=6';
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
-import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=4';
-import {createCity3D} from './city-3d.js?v=78';
+import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=5';
+import {createCity3D} from './city-3d.js?v=79';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -19,9 +20,9 @@ import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawCo
 import {poiBadgeSVG,drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=15';
 import {createGameAudio} from './audio.js?v=11';
 import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=99';
-import {poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=122';
-import {generateCityMap} from './city-map.js?v=14';
-import {readMapSettings} from './map-settings.js?v=2';
+import {poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=123';
+import {generateCityMap} from './city-map.js?v=15';
+import {readMapSettings} from './map-settings.js?v=4';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
 const mapSettings=readMapSettings(location.search);
 // 尺寸由本局URL和默认地图共同决定，禁止静默覆盖预览参数。
@@ -107,7 +108,7 @@ let pointerSample=null,pointerPending=false;
 const cameraView=()=>{
   const params=previewParams(),oblique=viewMode==='oblique';
   // 两种观察模式独立读取投影/FOV，模型、叠加信息和拾取仍共用同一份镜头。
-  const view={width,height,panX,panY,cell:base*zoom,zoom,projection:viewMode==='top'?'orthographic':oblique?params.obliqueProjection:params.freeProjection,fov:oblique?params.obliquePerspectiveFovDegrees:params.freePerspectiveFovDegrees,yaw:viewMode==='top'?0:viewYaw,elevation:viewMode==='top'?Math.PI/2:oblique?params.obliqueElevationDegrees*Math.PI/180:viewElevation};
+  const view={size:SIZE,width,height,panX,panY,cell:base*zoom,zoom,projection:viewMode==='top'?'orthographic':oblique?params.obliqueProjection:params.freeProjection,fov:oblique?params.obliquePerspectiveFovDegrees:params.freePerspectiveFovDegrees,yaw:viewMode==='top'?0:viewYaw,elevation:viewMode==='top'?Math.PI/2:oblique?params.obliqueElevationDegrees*Math.PI/180:viewElevation};
   return viewMode==='top'?view:observationView(view,SIZE);
 };
 function setViewMode(mode){
@@ -526,7 +527,7 @@ function cannonSoundView(id){
 // 静态城市描述随游戏状态更新一次；镜头和动效帧只消费结果。
 function citySceneDescriptor(view){
   const {controlled,controlState}=view;
-  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:['hospital','bank'].includes(p.site.role)?p.site.role:p.content.type,status:p.content.status,upgrade:state.banks.get(id)?.upgrade??null,powered:p.controlled&&(state.hospitals.has(id)||state.production.has(id)&&productionActive(state,id)||state.housing.has(id)||bankActive(state,id)),cellMeters:controlState.params.cellMeters}));
+  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.landmark??(['hospital','bank'].includes(p.site.role)?p.site.role:p.content.type),status:p.content.status,upgrade:state.banks.get(id)?.upgrade??null,powered:p.controlled&&(state.hospitals.has(id)||state.production.has(id)&&productionActive(state,id)||state.housing.has(id)||bankActive(state,id)),cellMeters:controlState.params.cellMeters}));
   const streetLamps=operatingStreetLamps(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
   const vehicles=streetVehicles(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys()]),lamps:streetLamps,cellMeters:controlState.params.cellMeters}),wrecks=vehicles.filter(car=>car.asset==='wreck');
   const streetDressing=[...operatingStreetProps(streetLamps,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys(),...vehicles.map(p=>key(Math.floor(p.x),Math.floor(p.y)))]),cellMeters:controlState.params.cellMeters}),...vehicles.filter(car=>car.asset!=='wreck')];
@@ -1172,11 +1173,12 @@ function updateMapInfo(view,mapDetail,potentials=[],linked=null){
     if(source){type=source.hp>0?'感染据点':'感染据点残骸';w=source.width??1;h=source.height??1;}
     else if(p?.role==='camp')type='火光广场';
     else if(p?.role==='hospital')type=state.hospitals.has(hoveredPlot)?'医院':'医院废墟';
+    else if(p?.role==='landmark')type=landmarkById(p.landmark)?.name??'城市地标';
     else if(p?.role==='bank')type=''; // 银行类型与状态由大标牌表达，不重复文字。
     else if(state.outposts.has(hover)){type='瞭望塔';w=h=1;}
     else if(state.playerWalls.has(hover)){type='墙';w=h=1;}
     else if(content)type=content.status==='empty'?'空地':content.type==='housing'?(content.status==='ruin'?'住房废墟':'住房'):(content.status==='ruin'?'生产废墟':'生产建筑');
-    else type=state.layout?.tiles[hover]==='road'?'道路':'自然地形';
+    else type=state.layout?.tiles[hover]==='rail'?'铁路用地':state.layout?.tiles[hover]==='road'?'道路':'自然地形';
     $('cellInfo').textContent=w&&h?`${w}×${h} 地块${type?' · '+type:''}`:type;
   }else $('cellInfo').textContent='';
   if(potentials.some(potential=>potential.sourceId===linked))$('cellInfo').textContent='潜在路线 · 今晚不出兵';

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
 import {MAP_DEFAULTS as LARGE_MAP_DEFAULTS,readMapSettings,mapSearch} from '../src/map-settings.js';
-const MAP_DEFAULTS={...LARGE_MAP_DEFAULTS,width:60,height:60};
+const MAP_DEFAULTS={...LARGE_MAP_DEFAULTS,width:60,height:60,landmarks:false};
 import {DEFAULTS} from '../src/config.js';
 import {visionField,enemyAction,createCampaign,key,productionCells,productionQuote,productionControlled,buildProduction,removeProduction,wallPreview,changeWall,placementError,buildTower,outpostError,buildOutpost,validateSources,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,rebuildTerrain,inControl,inGroundControl,isExplored,removeOutpost,clearPlot,plotContent} from '../src/model.js';
 

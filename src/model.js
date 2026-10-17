@@ -518,6 +518,7 @@ export const outpostAt=(state,id)=>state.outposts.has(id)?id:undefined;
 export function plotBuildError(state,id) {
   const cells=productionCells(id,state);
   if(!cells.length)return '请选择地块，建筑不能建在道路上。';
+  if(productionSite(id,state)?.role==='landmark')return '城市地标保留，暂未开放经营或拆改。';
   if(bankAt(state,id)!==null)return '银行为保留POI，不能拆除或改用途。';
   if(productionSite(id,state)?.role==='hospital')return '医院为保留地标，受控后可修复，不能拆除或换建。';
   if([...(state.enemySources?.values()??[])].some(s=>s.site===productionId(id,state)))return '感染据点保留，需在周边建筑架炮肃清，不能改建或拆除。';

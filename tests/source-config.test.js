@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DEFAULTS} from '../src/config.js';
 import {generateCityMap} from '../src/city-map.js';
 import {MAP_DEFAULTS as LARGE_MAP_DEFAULTS} from '../src/map-settings.js';
-const MAP_DEFAULTS={...LARGE_MAP_DEFAULTS,width:60,height:60};
+const MAP_DEFAULTS={...LARGE_MAP_DEFAULTS,width:60,height:60,landmarks:false};
 import {sourceMaxHP} from '../src/enemy-sources.js';
 import {applyTestScenario,configureSourceMap,configureSourceNight,createCampaign,restartCampaign,knownSources,beginBattle,stepBattle,key,sourceCells} from '../src/model.js';
 const setup=()=>createCampaign(DEFAULTS,undefined,generateCityMap(MAP_DEFAULTS));

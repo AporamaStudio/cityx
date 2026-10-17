@@ -1,12 +1,14 @@
 // 先划地块与道路，再给出初始内容；战斗中的清理与换建保存在独立运行状态。
+import {CITY_LANDMARKS} from './city-landmarks.js?v=1';
 import {addNaturalTerrain} from './natural-terrain.js?v=6';
-export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2,minBlock=2,maxBlock=5,special=false,specialMin=10,specialMax=30,touching=false,starterPlot=false,hospital=false,bankCount=0,nature=false}={}) {
+export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2,minBlock=2,maxBlock=5,special=false,specialMin=10,specialMax=30,touching=false,starterPlot=false,hospital=false,bankCount=0,nature=false,landmarks=false}={}) {
   for(const [name,value,min,max] of [['width',width,20,256],['height',height,20,256],['mainRoadWidth',mainRoadWidth,2,3],['minBlock',minBlock,2,8],['maxBlock',maxBlock,2,8],['specialMin',specialMin,10,30],['specialMax',specialMax,10,30]]) {
     if(!Number.isInteger(value)||value<min||value>max)throw new Error(`${name} 必须是 ${min}–${max} 的整数`);
   }
   if(minBlock>maxBlock||specialMin>specialMax)throw new Error('最小边长不能超过最大边长');
   if(hospital&&(width<26||height<26))throw new Error('医院地图至少需要 26×26 格');
   if(!Number.isInteger(bankCount)||bankCount<0||bankCount>4)throw new Error('银行数量须为0–4整数');
+  if(typeof landmarks!=='boolean')throw new Error('城市地标开关须为布尔值');
   if(typeof nature!=='boolean')throw new Error('自然地形开关须为布尔值');
   seed=String(seed);
   let hash=2166136261;
@@ -46,6 +48,31 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
       parcels({...rect,height:cut});parcels({...rect,y:rect.y+cut+1,height:rect.height-cut-1});
     }
   };
+  // 在普通街区细分前预留完整园区，余地继续分区，不事后删楼挖宽道路。
+  let railBand=null;
+  const pending=landmarks&&width>=120&&height>=120?CITY_LANDMARKS.map(p=>({...p,width:Math.ceil(p.meters[0]/20),height:Math.ceil(p.meters[1]/20)})):[];
+  const district=(rect,side)=>{
+    if(rect.width<minBlock||rect.height<minBlock)return;
+    // 站场两端预留连续铁路用地；主轴与城边道路作平交，避免轨道撞进普通楼体。
+    if(railBand&&rect.y===railBand.y&&!pending.some(p=>p.id==='railway'&&side==='east')){
+      paint({x:rect.x,y:rect.y,width:rect.width,height:2},'rail');
+      road({x:rect.x,y:rect.y+2,width:rect.width,height:1},'street');
+      district({...rect,y:rect.y+3,height:rect.height-3},side);return;
+    }
+    const due=pending.filter(p=>p.side===side&&rect.y+rect.height>=Math.floor(p.y*height)&&p.height<=rect.height&&p.width+6<=rect.width);
+    if(!due.length){parcels(rect);return;}
+    const spec=due[0],target=Math.round(spec.x*width-spec.width/2),x=Math.max(rect.x+3,Math.min(rect.x+rect.width-spec.width-3,target)),y=rect.y;
+    const p=addBlock({x,y,width:spec.width,height:spec.height},'building');p.special=true;p.role='landmark';p.landmark=spec.id;p.name=spec.name;p.ruinType='landmark';
+    pending.splice(pending.indexOf(spec),1);
+    // 完整一格支路围住园区，其余地块继续填满原街区带。
+    road({x:x-1,y,width:1,height:rect.height},'street');road({x:x+spec.width,y,width:1,height:rect.height},'street');
+    district({...rect,width:x-rect.x-1},side);
+    district({...rect,x:x+spec.width+1,width:rect.x+rect.width-x-spec.width-1},side);
+    if(rect.height>spec.height){
+      road({x,y:y+spec.height,width:spec.width,height:1},'street');
+      if(rect.height>spec.height+1)parcels({x,y:y+spec.height+1,width:spec.width,height:rect.height-spec.height-1});
+    }
+  };
   // 地图边缘也是明确道路；纵向主轴保留两格，实验高速路时改为三格。
   road({x:0,y:0,width,height:1},'street');road({x:0,y:height-1,width,height:1},'street');
   road({x:0,y:1,width:1,height:height-2},'street');road({x:width-1,y:1,width:1,height:height-2},'street');
@@ -56,27 +83,29 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
     const remaining=cityEnd-y;let h=Math.min(int(7,10),remaining);
     if(remaining-h<minBlock+2)h=remaining;
     if(special&&!specialPlaced&&(!hospital||y>1)&&width>=specialMin+minBlock+mainRoadWidth+3&&remaining>=specialMin+minBlock+3)h=int(specialMin,Math.min(specialMax,remaining-minBlock-3));
+    for(const p of pending)if(y+h>=Math.floor(p.y*height))h=Math.min(remaining,Math.max(h,p.height));
     let spine=Math.floor((width-mainRoadWidth)/2)+int(-2,2);
     if(special&&!specialPlaced&&(!hospital||y>1)&&h>=specialMin)spine=Math.max(spine,specialMin+1);
     if(hospital&&y===1){h=12;spine=Math.max(spine,12);}
     const bankBand=banksPlaced<bankCount&&y>=Math.floor(cityEnd*(banksPlaced+1)/(bankCount+1))&&remaining>=8&&width-spine-mainRoadWidth-1>=11;
     if(bankBand)h=Math.max(8,h);
+    if(y>1&&pending.some(p=>p.id==='railway'&&y+h>=Math.floor(p.y*height)))railBand={y,spine,roadWidth:mainRoadWidth};
     bands.push({y,height:h,spine,roadWidth:mainRoadWidth});
     road({x:spine,y,width:mainRoadWidth,height:h},mainRoadWidth===3?'highway':'main');
     if(hospital&&y===1){
       // 医院是固定目标地块，四周留路；不参与普通区块尺寸与随机特殊设施抽样。
       const b=addBlock({x:1,y:1,width:10,height:12},'building');b.special=true;b.role='hospital';b.name='医院';
-      parcels({x:12,y,width:spine-12,height:h});
+      district({x:12,y,width:spine-12,height:h},'west');
     }else if(special&&!specialPlaced&&h>=specialMin&&spine-1>=specialMin){
       const w=int(specialMin,Math.min(specialMax,spine-1)),b=addBlock({x:1,y,width:w,height:h},'building');b.special=true;b.name='大型设施';specialPlaced=true;
       parcels({x:w+2,y,width:spine-w-2,height:h});
-    }else parcels({x:1,y,width:spine-1,height:h});
+    }else district({x:1,y,width:spine-1,height:h},'west');
     if(bankBand){
       // 专用银行占地独立预留，四周沿用1格街道；不合并普通地块或挖宽道路。
       const bx=spine+mainRoadWidth,b=addBlock({x:bx,y,width:8,height:8},'building');b.special=true;b.role='bank';b.name='银行';banksPlaced++;
-      road({x:bx+8,y,width:1,height:h},'street');parcels({x:bx+9,y,width:width-bx-10,height:h});
+      road({x:bx+8,y,width:1,height:h},'street');district({x:bx+9,y,width:width-bx-10,height:h},'east');
       if(h>8){road({x:bx,y:y+8,width:8,height:1},'street');if(h>9)parcels({x:bx,y:y+9,width:8,height:h-9});}
-    }else parcels({x:spine+mainRoadWidth,y,width:width-1-spine-mainRoadWidth,height:h});
+    }else district({x:spine+mainRoadWidth,y,width:width-1-spine-mainRoadWidth,height:h},'east');
     y+=h;
     if(y<height-1){road({x:1,y,width:width-2,height:1},'street');y++;}
   }
@@ -127,16 +156,17 @@ export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2
     blocks.forEach((b,i)=>b.id=i);
   }
   const geography=nature?addNaturalTerrain({seed,width,height,tiles,blocks,bands,camp}):{};
+  if(railBand)geography.nonTraversable=[...(geography.nonTraversable??[]),...tiles.flatMap((t,id)=>t==='rail'?[id]:[])];
   // 按最终地形记录道路，包含桥梁与边缘余量，去掉被合拢的道路段。
   const roadKinds=new Map();
   for(const r of roads)if(r.kind!=='street')for(let cy=r.y;cy<r.y+r.height;cy++)for(let cx=r.x;cx<r.x+r.width;cx++)roadKinds.set(cy*width+cx,r.kind);
   roads.length=0;
   for(let cy=0;cy<height;cy++)for(let cx=0;cx<width;cx++)if(tiles[cy*width+cx]==='road')roads.push({x:cx,y:cy,width:1,height:1,kind:roadKinds.get(cy*width+cx)||'street'});
   // 在几何完成后分配原用途，避免改变既有 seed 的街道布局；起步生产点保留。
-  for(const b of blocks)if(b.kind==='building')b.ruinType=['hospital','bank'].includes(b.role)?b.role:['starter','starterLarge'].includes(b.role)?'production':b.role==='starterHousing'?'housing':random()<.35?'housing':'production';
+  for(const b of blocks)if(b.kind==='building')b.ruinType=b.role==='landmark'?'landmark':['hospital','bank'].includes(b.role)?b.role:['starter','starterLarge'].includes(b.role)?'production':b.role==='starterHousing'?'housing':random()<.35?'housing':'production';
   const buildings=blocks.filter(b=>b.kind==='building'),openSpaces=blocks.filter(b=>b.kind==='open');
   const occupied=tiles.filter(t=>t==='block').length;
-  return {version:6,seed,width,height,mainRoadWidth,minBlock,maxBlock,special,specialMin,specialMax,touching,starterPlot,hospital,nature,...geography,tiles,roads,blocks,buildings,openSpaces,camp,goal,stats:{banks:buildings.filter(b=>b.role==='bank').length,hospital:buildings.filter(b=>b.role==='hospital').length,special:buildings.filter(b=>b.special&&!['hospital','bank'].includes(b.role)).length,joined,buildings:buildings.length,openSpaces:openSpaces.length,occupied,water:tiles.filter(t=>t==='water').length,coverage:occupied/(width*height)}};
+  return {version:6,seed,width,height,mainRoadWidth,minBlock,maxBlock,special,specialMin,specialMax,touching,starterPlot,hospital,nature,landmarks,railBand,...geography,tiles,roads,blocks,buildings,openSpaces,camp,goal,stats:{banks:buildings.filter(b=>b.role==='bank').length,hospital:buildings.filter(b=>b.role==='hospital').length,special:buildings.filter(b=>b.special&&!['hospital','bank','landmark'].includes(b.role)).length,landmarks:buildings.filter(b=>b.role==='landmark').length,joined,buildings:buildings.length,openSpaces:openSpaces.length,occupied,water:tiles.filter(t=>t==='water').length,coverage:occupied/(width*height)}};
 }
 
 // 仅检查生成时的道路和空地连通；运行时通行由 model.js 的地块内容决定。

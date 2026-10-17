@@ -1,7 +1,7 @@
 import {drawNaturalTerrain} from './natural-terrain.js?v=6';
 import {drawBlockTexture} from './city-textures.js?v=3';
-import {readMapSettings,mapSearch} from './map-settings.js?v=2';
-import {generateCityMap,walkableDistances} from './city-map.js?v=14';
+import {readMapSettings,mapSearch} from './map-settings.js?v=4';
+import {generateCityMap,walkableDistances} from './city-map.js?v=15';
 const $=id=>document.getElementById(id),canvas=$('map'),ctx=canvas.getContext('2d'),viewport=$('viewport');
 let appliedSettings,map,lookup=[],scale=16,panX=0,panY=0,hover=-1,drag=null,width=0,height=0;
 // 地图可视化只依赖生成数据，点击不修改地形或模拟修复。
@@ -14,7 +14,7 @@ function draw(){
   ctx.fillStyle='#45564d';ctx.fillRect(0,0,map.width,map.height);
   for(let id=0;id<map.tiles.length;id++){
     const t=map.tiles[id],x=id%map.width,y=Math.floor(id/map.width);
-    if(t==='road'||t==='open'){ctx.fillStyle=t==='road'?'#697780':'#749e83';ctx.fillRect(x,y,1,1);}
+    if(t==='road'||t==='open'||t==='rail'){ctx.fillStyle=t==='rail'?'#696253':t==='road'?'#697780':'#749e83';ctx.fillRect(x,y,1,1);}
     if(scale>=9){ctx.strokeStyle='#a4b9ac25';ctx.lineWidth=1/scale;ctx.strokeRect(x,y,1,1);}
   }
   drawNaturalTerrain(ctx,map);
@@ -36,15 +36,15 @@ function draw(){
   ctx.restore();
   ctx.font='600 11px system-ui';ctx.textAlign='center';
   for(const [p,text,color] of [[map.camp,'起点','#ffe1a6'],[map.goal,'远端目标','#b9f4ff']]){const x=panX+(p.x+.5)*scale,y=panY+(p.y+.5)*scale;ctx.fillStyle='#132322ee';ctx.fillRect(x-30,y-27,60,18);ctx.fillStyle=color;ctx.fillText(text,x,y-14);}
-  for(const b of map.blocks.filter(b=>['hospital','bank'].includes(b.role))){ctx.fillStyle='#dbefeb';ctx.fillText(b.role==='bank'?'银行 · 8×8':'医院 · 10×12',panX+(b.x+b.width/2)*scale,panY+(b.y+b.height/2)*scale);}
+  for(const b of map.blocks.filter(b=>['hospital','bank','landmark'].includes(b.role))){ctx.fillStyle='#dbefeb';ctx.fillText(b.role==='landmark'?b.name:b.role==='bank'?'银行 · 8×8':'医院 · 10×12',panX+(b.x+b.width/2)*scale,panY+(b.y+b.height/2)*scale);}
   for(const [list,text] of [[map.natural?.lakes??[],'湖泊'],[map.natural?.hills??[],'小山']])for(const p of list){ctx.fillStyle='#eff2d6';ctx.fillText(text,panX+p.cx*scale,panY+p.cy*scale+4);}
-  if(hover>=0){const b=map.blocks[hover],x=panX+(b.x+b.width/2)*scale,y=panY+b.y*scale;ctx.fillStyle='#132322ee';ctx.fillRect(x-38,y-23,76,19);ctx.fillStyle='#ffe3a1';ctx.fillText(`${b.width} × ${b.height} ${b.kind==='open'?'空地':b.role==='hospital'?'医院':b.role==='bank'?'银行':b.ruinType==='housing'?'住房废墟':'生产废墟'}`,x,y-9);}
+  if(hover>=0){const b=map.blocks[hover],x=panX+(b.x+b.width/2)*scale,y=panY+b.y*scale;ctx.fillStyle='#132322ee';ctx.fillRect(x-38,y-23,76,19);ctx.fillStyle='#ffe3a1';ctx.fillText(`${b.width} × ${b.height} ${b.kind==='open'?'空地':b.role==='hospital'?'医院':b.role==='bank'?'银行':b.role==='landmark'?b.name:b.ruinType==='housing'?'住房废墟':'生产废墟'}`,x,y-9);}
 }
 function generate(){
   try{
     const settings={seed:$('seed').value,starterPlot:true,hospital:true};
     for(const name of ['width','height','mainRoadWidth','minBlock','maxBlock','specialMin','specialMax','bankCount'])settings[name]=Number($(name).value);
-    for(const name of ['special','touching','nature'])settings[name]=$(name).checked;
+    for(const name of ['special','touching','nature','landmarks'])settings[name]=$(name).checked;
     map=generateCityMap(settings);appliedSettings=settings;
     $('play').hidden=map.width!==map.height||![60,256].includes(map.width);
     $('play').href=`index.html?${mapSearch(appliedSettings)}`;
@@ -52,7 +52,7 @@ function generate(){
     lookup=new Int32Array(map.width*map.height).fill(-1);
     for(const b of map.blocks)for(let y=b.y;y<b.y+b.height;y++)for(let x=b.x;x<b.x+b.width;x++)lookup[y*map.width+x]=b.id;
     const distances=walkableDistances(map),walkable=map.tiles.filter(t=>['road','open'].includes(t)).length,reachable=distances.filter(d=>d>=0).length;
-    $('stats').textContent=`${map.buildings.length} 处建筑街区 · ${map.openSpaces.length} 处开放场地 · 特殊 ${map.stats.special} · 紧邻 ${map.stats.joined} 组 · 建筑占地 ${(map.stats.coverage*100).toFixed(1)}% · 水域 ${map.stats.water} 格 · 湖泊 ${map.natural?.lakes.length??0} 处 · 小山 ${map.natural?.hills.length??0} 处 · 通行区连通 ${reachable}/${walkable} 格 · 起终点最短路 ${distances[map.goal.y*map.width+map.goal.x]} 格`;
+    $('stats').textContent=`${map.buildings.length} 处建筑街区 · ${map.openSpaces.length} 处开放场地 · 地标 ${map.stats.landmarks} · 特殊 ${map.stats.special} · 紧邻 ${map.stats.joined} 组 · 建筑占地 ${(map.stats.coverage*100).toFixed(1)}% · 水域 ${map.stats.water} 格 · 湖泊 ${map.natural?.lakes.length??0} 处 · 小山 ${map.natural?.hills.length??0} 处 · 通行区连通 ${reachable}/${walkable} 格 · 起终点最短路 ${distances[map.goal.y*map.width+map.goal.x]} 格`;
     $('mapTitle').textContent=`${map.width} × ${map.height} · ${map.seed}`;$('error').textContent=map.special&&!map.stats.special?'当前地图放不下指定尺寸的特殊区块；请扩大地图或降低特殊最小边长。':map.nature&&!map.natural.river?'未找到完整可用的河道街区带，已保留原城市布局。':'';hover=-1;fit();
   }catch(error){$('error').textContent=error.message;}
 }
@@ -67,7 +67,7 @@ canvas.addEventListener('pointermove',e=>{
   const r=canvas.getBoundingClientRect(),x=Math.floor((e.clientX-r.left-panX)/scale),y=Math.floor((e.clientY-r.top-panY)/scale);
   const id=x>=0&&y>=0&&x<map.width&&y<map.height?y*map.width+x:-1;hover=id>=0?lookup[id]:-1;
   const block=hover>=0?map.blocks[hover]:null;
-  $('info').textContent=block?`${block.kind==='open'?'开放场地':block.role==='hospital'?'医院（收复目标）':block.role==='bank'?'银行POI':block.special?'特殊设施':'建筑街区'} ${block.id+1} · ${block.width}×${block.height} 格 · ${block.kind==='open'?'可通行 · 可建瞭望塔、墙或经营设施':block.role==='hospital'?'不可通行 · 控制覆盖可收复 · 不可清理换建':'废墟 · 不可通行 · 可修缮或清理换建'}`:id>=0&&['water','hill'].includes(map.tiles[id])?`(${x}, ${y}) · ${map.tiles[id]==='water'?'水域':'小山'} · 不可通行与建设`:id>=0?`(${x}, ${y}) · ${map.tiles[id]==='open'?'滨水地面':map.natural?.bridges.some(b=>x>=b.x&&x<b.x+b.w&&y>=b.y&&y<b.y+b.h)?'桥面':'道路'} · 可通行 · 可建墙或挑高瞭望塔；敌人只攻击挡路墙`:'悬停查看街区占地与通行规则';draw();
+  $('info').textContent=block?`${block.kind==='open'?'开放场地':block.role==='hospital'?'医院（收复目标）':block.role==='bank'?'银行POI':block.role==='landmark'?block.name:block.special?'特殊设施':'建筑街区'} ${block.id+1} · ${block.width}×${block.height} 格 · ${block.kind==='open'?'可通行 · 可建瞭望塔、墙或经营设施':block.role==='hospital'?'不可通行 · 控制覆盖可收复 · 不可清理换建':'废墟 · 不可通行 · 可修缮或清理换建'}`:id>=0&&['water','hill','rail'].includes(map.tiles[id])?`(${x}, ${y}) · ${map.tiles[id]==='water'?'水域':map.tiles[id]==='rail'?'铁路用地':'小山'} · 不可通行与建设`:id>=0?`(${x}, ${y}) · ${map.tiles[id]==='open'?'滨水地面':map.natural?.bridges.some(b=>x>=b.x&&x<b.x+b.w&&y>=b.y&&y<b.y+b.h)?'桥面':'道路'} · 可通行 · 可建墙或挑高瞭望塔；敌人只攻击挡路墙`:'悬停查看街区占地与通行规则';draw();
 });
 canvas.addEventListener('pointerup',()=>{drag=null;});canvas.addEventListener('pointercancel',()=>{drag=null;});canvas.addEventListener('lostpointercapture',()=>{drag=null;});canvas.addEventListener('pointerleave',()=>{hover=-1;draw();});
 const initial=readMapSettings(location.search);
