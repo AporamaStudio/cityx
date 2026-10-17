@@ -7,11 +7,11 @@ export function freezeCityTransforms(object){
 }
 
 // 原城市对象共用观察相机，不复制游戏状态；雾纹按世界XZ覆盖楼顶和地面。
-export function createCityObservation(scene,renderer){
+export function createCityObservation(scene,renderer,pointGrid=null){
   const orthographic=new THREE.OrthographicCamera(),perspective=new THREE.PerspectiveCamera();
   let camera=orthographic;
   const canvas=document.createElement('canvas'),enemyCanvas=document.createElement('canvas');
-  let pickCandidates=[],lastGeometryVersion=null,hasEnemyFrame=false;
+  let pickCandidates=[],lastGeometryVersion=null,hasEnemyFrame=false,enemyFrame=enemyCanvas;
   const ray=new THREE.Raycaster(),pointer=new THREE.Vector2(),pickMeshes=[],hits=[];
   const fogTexture=new THREE.CanvasTexture(document.createElement('canvas'));fogTexture.flipY=false;fogTexture.generateMipmaps=false;fogTexture.minFilter=THREE.LinearFilter;
   const fog={enabled:{value:0},texture:{value:fogTexture},bounds:{value:new THREE.Vector4(-8,-8,76,76)},fadeBounds:{value:new THREE.Vector4(-8,-8,76,76)}};
@@ -24,7 +24,7 @@ export function createCityObservation(scene,renderer){
     else{camera.left=-width/(2*cell);camera.right=width/(2*cell);camera.top=height/(2*cell);camera.bottom=-height/(2*cell);camera.near=.1;camera.far=distance+Math.max(300,(view.size??60)*3);}
     camera.position.set(center.x+Math.sin(yaw)*Math.cos(elevation)*distance,Math.sin(elevation)*distance,center.y+Math.cos(yaw)*Math.cos(elevation)*distance);camera.up.set(0,Math.abs(Math.cos(elevation))<1e-6?0:1,Math.abs(Math.cos(elevation))<1e-6?-1:0);camera.lookAt(center.x,0,center.y);camera.updateProjectionMatrix();camera.updateMatrixWorld();
   }
-  function bind(object){object.traverse(node=>{if(!node.isMesh&&!node.isLine)return;const material=node.material;if(material.userData.cityObserveFog)return;
+  function bind(object){object.traverse(node=>{if(!node.isMesh&&!node.isLine)return;const material=node.material;pointGrid?.bind(material);if(material.userData.cityObserveFog)return;
     material.userData.cityObserveFog=true;const previous=material.onBeforeCompile,key=material.customProgramCacheKey();
     material.onBeforeCompile=shader=>{
       previous.call(material,shader);shader.uniforms.cityObserveFog=fog.texture;shader.uniforms.cityObserveActive=fog.enabled;shader.uniforms.cityObserveBounds=fog.bounds;shader.uniforms.cityObserveFadeBounds=fog.fadeBounds;
@@ -39,18 +39,19 @@ export function createCityObservation(scene,renderer){
     prepareMaterials:bind,
     warmupRoot:()=>floor,
     warmupCamera:()=>camera,
-    enemiesFrame(){return hasEnemyFrame?enemyCanvas:null;},
+    enemiesFrame(){return hasEnemyFrame?enemyFrame:null;},
     pick(x,y,width,height,view){
       setCamera(view);pointer.set(x/width*2-1,1-y/height*2);ray.setFromCamera(pointer,camera);pickMeshes.length=0;hits.length=0;
       // 在检测三角面之前排除透明特效/装饰；根层为分层合成临时隐藏，不能据此排除楼体。
       for(const node of pickCandidates)if(!node.userData.cityBatchMesh&&!node.userData.cityConstructionPreview&&!node.material.transparent&&(!node.userData.cityDecoration||node.userData.cityGroundSurface))pickMeshes.push(node);
       const hit=ray.intersectObjects(pickMeshes,false,hits)[0];return hit?{x:hit.point.x,y:hit.point.z}:null;
     },
-    render({geometryVersion,mist,mistBounds,mistFadeBounds=mistBounds,view,background,objects,enemies,hasEnemies,effects}){
+    render({geometryVersion,mist,mistBounds,mistFadeBounds=mistBounds,view,background,objects,enemies,hasEnemies,effects,onBaseFrame}){
       // 外围纯景物不参加鼠标射线，避免每次移动鼠标检测整片郊野几何。
       // 只有网格增删/替换时重新登记材质和拾取候选；预览透明度仍在每次拾取时判断。
       if(lastGeometryVersion!==geometryVersion){
         pickCandidates=[];
+        enemies.traverse(node=>{if(node.material)pointGrid?.bind(node.material);});
         for(const object of [floor,...objects]){bind(object);if(!object.userData.cityNoPick)object.traverse(node=>{if(node.isMesh)pickCandidates.push(node);});}
         lastGeometryVersion=geometryVersion;
       }
@@ -64,15 +65,21 @@ export function createCityObservation(scene,renderer){
       floor.visible=true;for(const object of [...objects,effects])object.visible=true;fog.enabled.value=mist?1:0;
       // 敌人已按原插值中心渐隐；单独在雾上绘制，避免楼体遮住本应可见的敌群。
       enemies.visible=false;renderer.setClearColor(background,1);renderer.render(scene,camera);
-      if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}
-      const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(renderer.domElement,0,0);
+      // 主游戏在同一帧立即合成，避免WebGL→中转Canvas→主Canvas的两次整屏复制。
+      if(onBaseFrame)onBaseFrame(renderer.domElement);
+      else{
+        if(canvas.width!==renderer.domElement.width||canvas.height!==renderer.domElement.height){canvas.width=renderer.domElement.width;canvas.height=renderer.domElement.height;}
+        const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(renderer.domElement,0,0);
+      }
       floor.visible=false;objects.forEach(object=>object.visible=false);effects.visible=false;fog.enabled.value=0;
       // 空敌人也恢复透明清屏，防止切回俯视后设施/特效层盖住整座城市。
       renderer.setClearColor('#000000',0);hasEnemyFrame=hasEnemies;if(!hasEnemies)return canvas;enemies.visible=true;
       // 单独交回敌人图层，让Canvas路线在实体下面、HP在实体上面。
       renderer.render(scene,camera);
+      if(onBaseFrame){enemyFrame=renderer.domElement;enemies.visible=false;return null;}
       if(enemyCanvas.width!==canvas.width||enemyCanvas.height!==canvas.height){enemyCanvas.width=canvas.width;enemyCanvas.height=canvas.height;}
       const enemyContext=enemyCanvas.getContext('2d');enemyContext.clearRect(0,0,enemyCanvas.width,enemyCanvas.height);enemyContext.drawImage(renderer.domElement,0,0);enemies.visible=false;
+      enemyFrame=enemyCanvas;
       return canvas;
     },
   };

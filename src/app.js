@@ -6,7 +6,7 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
 import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=6';
-import {createCity3D} from './city-3d.js?v=84';
+import {createCity3D} from './city-3d.js?v=85';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -1202,8 +1202,9 @@ function paintCityScene(view,fogTime){
     m.setTransform(1,0,0,1,0,0);m.clearRect(0,0,observationMist.width,observationMist.height);m.setTransform(fogPx,0,0,fogPx,-area.left*fogPx,-area.top*fogPx);
     drawFog(m,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom,area);
   }
-  const image=city3D.observationFrame({mist:mistEnabled?observationMist:null,mistBounds:[area.left,area.top,mistWidth,mistHeight],mistFadeBounds:[-mistBorder,-mistBorder,mistSpan,mistSpan],view:camera,background:fogColor(nightMix)});
-  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.clearRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);
+  city3D.observationFrame({mist:mistEnabled?observationMist:null,mistBounds:[area.left,area.top,mistWidth,mistHeight],mistFadeBounds:[-mistBorder,-mistBorder,mistSpan,mistSpan],view:camera,background:fogColor(nightMix),onBaseFrame:image=>{
+    ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.clearRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);
+  }});
 }
 function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,fogTime,operationValid=false){
   const size=base*zoom,camera=cameraView();paintCityScene(view,fogTime);

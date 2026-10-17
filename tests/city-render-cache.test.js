@@ -84,6 +84,18 @@ test('静态变换保留屋顶拾取和包围盒，镜头帧不重算矩阵，�
   assert.equal(new THREE.Box3().setFromObject(replacement).getCenter(new THREE.Vector3()).x,12);
 });
 
+test('主画面在敌人覆盖前直接合成，无敌人时不复制中转画布，敌人仍在同帧返回',async()=>{
+  const previous=globalThis.document;let copies=0,renders=0;
+  globalThis.document={createElement:()=>({width:64,height:64,getContext:()=>({clearRect(){},drawImage(){copies++;}})})};
+  try{
+    const {createCityObservation}=await loadBrowserModule('city-observation.js'),scene=new THREE.Scene(),enemies=new THREE.Group(),effects=new THREE.Group();scene.add(enemies,effects);
+    const renderer={domElement:{width:64,height:64},setClearColor(){},render(){renders++;}},observation=createCityObservation(scene,renderer),seen=[];
+    const options={geometryVersion:1,mist:null,mistBounds:[0,0,60,60],view:{width:64,height:64,cell:2,panX:0,panY:0,yaw:0,elevation:Math.PI/2},background:'#000',objects:[],enemies,effects,onBaseFrame:image=>{assert.equal(image,renderer.domElement);seen.push(renders);}};
+    observation.render({...options,hasEnemies:false});assert.equal(copies,0);assert.equal(renders,1);assert.equal(observation.enemiesFrame(),null);
+    observation.render({...options,hasEnemies:true});assert.deepEqual(seen,[1,2]);assert.equal(renders,3);assert.equal(copies,0);assert.equal(observation.enemiesFrame(),renderer.domElement);assert.equal(enemies.visible,false);
+  }finally{globalThis.document=previous;}
+});
+
 test('3D建设方案共用单色实体材质，蒙版可关闭并保留原楼材质与着色回调',async()=>{
  const {constructionAppearance,constructionMaskTexture,bindConstructionMask,setConstructionMask}=await loadBrowserModule('city-construction-preview.js');
  const root=new THREE.Group(),texture=new THREE.Texture(),old=new THREE.MeshStandardMaterial({map:texture,color:'#aabbcc'});

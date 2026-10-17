@@ -27,6 +27,7 @@ export function createShaderSamples(){
         const target=new THREE.Scene();target.environment=scene.environment;target.fog=scene.fog;
         const kinds=[];
         for(const light of sources){
+          if(light.userData.cityPointGrid)continue;
           if(!night&&light.userData.cityNightOnly)continue;
           const copy=light.clone();copy.visible=true;target.add(copy);kinds.push(light.type+':'+light.castShadow);
         }

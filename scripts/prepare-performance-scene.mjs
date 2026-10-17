@@ -12,8 +12,8 @@ if(ref){
 }else for(const file of ['index.html','style.css','src'])await cp(resolve(root,file),resolve(directory,file),{recursive:true,force:true});
 try{await symlink(resolve(root,'assets'),resolve(directory,'assets'));}catch(error){if(error.code!=='EEXIST')throw error;}
 let observe=await readFile(resolve(directory,'src/city-observation.js'),'utf8');
-observe=observe.replace('let camera=orthographic;','let camera=orthographic;let perfGroups={};');
-observe=observe.replace('for(const object of [floor,...objects]){bind(object);',`for(const [groupIndex,object] of [floor,...objects].entries()){object.traverse(node=>{if(!node.isMesh)return;const key=['floor','railway','exterior','nature','unknown','buildings','facilities','streets','roads'][groupIndex];node.onAfterRender=()=>{const row=perfGroups[key]??={draw:0,shadow:0};row.draw++;};node.onAfterShadow=()=>{const row=perfGroups[key]??={draw:0,shadow:0};row.shadow++;};});bind(object);`);
+observe=observe.replace('let camera=orthographic;',"let camera=orthographic;let perfGroups={};const perfProfile=new URLSearchParams(location.search).get('benchGroups')==='1';");
+observe=observe.replace('for(const object of [floor,...objects]){bind(object);',`for(const [groupIndex,object] of [floor,...objects].entries()){if(perfProfile)object.traverse(node=>{if(!node.isMesh)return;const key=['floor','railway','exterior','nature','unknown','buildings','facilities','streets','roads'][groupIndex];node.onAfterRender=()=>{const row=perfGroups[key]??={draw:0,shadow:0};row.draw++;};node.onAfterShadow=()=>{const row=perfGroups[key]??={draw:0,shadow:0};row.shadow++;};});bind(object);`);
 observe=observe.replace('enemies.visible=false;renderer.setClearColor(background,1);renderer.render(scene,camera);',`enemies.visible=false;renderer.setClearColor(background,1);perfGroups={};renderer.render(scene,camera);document.body.dataset.performanceGroups=JSON.stringify(perfGroups);`);
 await writeFile(resolve(directory,'src/city-observation.js'),observe);
 let source=await readFile(resolve(directory,'src/app.js'),'utf8');
@@ -23,7 +23,7 @@ const perfArgs=new URLSearchParams(location.search),perfOutput=document.createEl
 perfOutput.id='performanceOutput';perfButton.id='performanceRun';perfButton.textContent='运行旋转性能对照';
 Object.assign(perfOutput.style,{position:'fixed',left:'12px',bottom:'112px',zIndex:2000,background:'#fff',color:'#111',maxHeight:'300px',maxWidth:'700px',overflow:'auto',fontSize:'11px'});
 Object.assign(perfButton.style,{position:'fixed',left:'12px',bottom:'80px',zIndex:2000});const perfDetails=document.createElement('details'),perfSummary=document.createElement('summary');perfSummary.textContent='性能结果';Object.assign(perfDetails.style,{position:'fixed',left:'12px',bottom:'114px',zIndex:2000});perfDetails.append(perfSummary,perfOutput);document.body.append(perfButton,perfDetails);
-let perfRun=null;const originalPaintMap=paintMap;
+let perfRun=null,perfLastStats=null;const originalPaintMap=paintMap,originalRecordRenderStats=recordRenderStats;recordRenderStats=function(cpu,stats,total){perfLastStats=stats;return originalRecordRenderStats(cpu,stats,total);};
 paintMap=function(){const start=performance.now(),result=originalPaintMap();if(perfRun){const frame={at:performance.now(),cpu:performance.now()-start};perfRun.allFrames.push(frame);if(perfRun.waitReady&&!perfRun.readyAt&&city3D.isPrepared()){perfRun.readyAt=performance.now();perfRun.measureAt=perfRun.readyAt+3000;}if(performance.now()>=perfRun.measureAt)perfRun.frames.push(frame);}return result;};
 const timings={};
 for(const key of ['render','renderFacilities','observationFrame']){const original=city3D[key];city3D[key]=function(...args){const start=performance.now(),result=original.apply(this,args);if(perfRun&&performance.now()>=perfRun.measureAt)(timings[key]??=[]).push(performance.now()-start);return result;};}
@@ -38,7 +38,7 @@ perfButton.onclick=()=>{
     rotateView((now-last)*.6/1000,0);last=now;
     if((perfRun.waitReady?performance.now()<perfRun.measureAt+12000:now-started<15000)&&performance.now()-started<90000){requestAnimationFrame(tick);return;}
     const frames=perfRun.frames,intervals=frames.slice(1).map((f,i)=>f.at-frames[i].at).sort((a,b)=>a-b),summary=values=>({mean:values.length?values.reduce((s,n)=>s+n,0)/values.length:null,p95:[...values].sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1]});
-    const result={size:SIZE,area,fog:$('showFog').checked,width,height,cell:base*zoom,firstFrameMs:perfRun.allFrames[0]?.at-started,readyMs:perfRun.readyAt?perfRun.readyAt-started:null,maxDrawMs:Math.max(...perfRun.allFrames.map(f=>f.cpu)),frames:frames.length,fps:frames.length>1?(frames.length-1)*1000/(frames.at(-1).at-frames[0].at):null,intervalMs:summary(intervals),cpuMs:summary(frames.map(f=>f.cpu)),sections:Object.fromEntries(Object.entries(timings).map(([k,v])=>[k,summary(v)])),groups:JSON.parse(document.body.dataset.performanceGroups??'{}'),stats:$('renderStats').title};
+    const result={size:SIZE,area,fog:$('showFog').checked,width,height,cell:base*zoom,firstFrameMs:perfRun.allFrames[0]?.at-started,readyMs:perfRun.readyAt?perfRun.readyAt-started:null,maxDrawMs:Math.max(...perfRun.allFrames.map(f=>f.cpu)),frames:frames.length,fps:frames.length>1?(frames.length-1)*1000/(frames.at(-1).at-frames[0].at):null,intervalMs:summary(intervals),cpuMs:summary(frames.map(f=>f.cpu)),sections:Object.fromEntries(Object.entries(timings).map(([k,v])=>[k,summary(v)])),groups:JSON.parse(document.body.dataset.performanceGroups??'{}'),rawStats:perfLastStats,stats:$('renderStats').title};
     perfOutput.textContent=JSON.stringify(result,null,2);perfRun=null;perfButton.disabled=false;
   };requestAnimationFrame(tick);
 };

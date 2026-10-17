@@ -15,9 +15,9 @@ import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {PLANT_MODELS} from './city-vegetation.js?v=2';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=15';
-import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=24';
+import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=25';
 import {createNightShaderWarmup} from './city-shader-warmup.js?v=3';
-import {createShaderSamples,cloneWarmupMaterial} from './city-shader-samples.js?v=1';
+import {createShaderSamples,cloneWarmupMaterial} from './city-shader-samples.js?v=2';
 import {createShotVFX,createImpactVFX} from './cannon-vfx.js?v=1';
 import {createZombieCrowds} from './city-enemies.js?v=8';
 import {constructionAppearance,constructionMaskTexture,bindConstructionMask,setConstructionMask} from './city-construction-preview.js?v=1';
@@ -25,6 +25,7 @@ import {createUpgradePreview} from './city-upgrade-preview.js?v=2';
 import {spatialChunks} from './city-spatial-cache.js?v=1';
 import {batchStaticPlots} from './city-static-batch.js?v=2';
 import {cityCasterPadding} from './city-view.js?v=6';
+import {createCityPointGrid} from './city-point-grid.js?v=1';
 
 // 城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
@@ -91,6 +92,7 @@ export function createCity3D({onReady,onProgress,onError}){
   let exterior=new THREE.Group();scene.add(exterior);
   const localLights=[];
   const effects=createCityEffects(scene);
+  const pointGrid=createCityPointGrid();
   const upgradeEffects=createUpgradePreview(effects.group);
   let unknown=new THREE.Group(),unknownKey='';scene.add(unknown);
   const landmarkLoads=new Map();let visibleLandmarksPending=false;
@@ -109,7 +111,7 @@ export function createCity3D({onReady,onProgress,onError}){
     return modelMeasures.get(key);
   }
   const zombieCrowds=createZombieCrowds(enemies);
-  const observation=createCityObservation(scene,renderer);
+  const observation=createCityObservation(scene,renderer,pointGrid);
   let initialPrepared=false;
   const shaderSamples=createShaderSamples();
   const shaderWarmup=createNightShaderWarmup(renderer,scene,{prepare:shaderSamples.prepare,enabled:()=>ready,onReady:()=>{if(!initialPrepared){initialPrepared=true;onReady();}},onError:error=>{if(!initialPrepared)onError(error);else console.warn('夜景材质准备未完成。',error);}});
@@ -175,9 +177,9 @@ export function createCity3D({onReady,onProgress,onError}){
   }
   return {
     // 重开/重试释放本局保留的峰值槽位；下一帧按真实设施重新分配。
-    resetLighting(){shaderWarmup.reset();shaderWarmup.release(()=>shaderSamples.reset());effects.resetLights();for(const light of localLights){light.removeFromParent();light.dispose();}localLights.length=0;},
+    resetLighting(){shaderWarmup.reset();shaderWarmup.release(()=>shaderSamples.reset());effects.resetLights();pointGrid.reset();for(const light of localLights){light.removeFromParent();light.dispose();}localLights.length=0;},
     beginStats(){renderer.info.autoReset=false;renderer.info.reset();},
-    renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats(),streetLights:localLights.length,...effects.lightStats(),programs:renderer.info.programs.length};renderer.info.autoReset=true;return stats;},
+    renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats(),...pointGrid.stats(),streetLights:localLights.length,...effects.lightStats(),programs:renderer.info.programs.length};renderer.info.autoReset=true;return stats;},
     isReady(){return ready;},
     isPrepared(){return initialPrepared&&!visibleLandmarksPending;},
     observationPick(x,y,width,height,view){return ready?observation.pick(x,y,width,height,view):null;},
@@ -346,6 +348,7 @@ export function createCity3D({onReady,onProgress,onError}){
       for(const material of streetMaterials){if(material.map)material.opacity=night*.32;else if(material.name==='#ffe1a3'){material.emissive.set('#ffb75c');material.emissiveIntensity=night*1.8;}}
       const lightItems=[...fx.sweeps,...fx.fires].filter(item=>{const range=item.asset==='watch'?(item.target?24:item.w*4):item.asset==='wreck'?2.3*(item.fireScale??1):4;return !lightViewport||item.x>=lightViewport.left-range&&item.x<=lightViewport.right+range&&item.y>=lightViewport.top-range&&item.y<=lightViewport.bottom+range;}).map(item=>{const {size}=measureModel(item.asset);return {...item,height:naturalGroundAt(layout,item.x,item.y,cellMeters)+size.y*Math.min(item.w/size.x,item.h/size.z)*(item.asset==='watch'?.84:.65)};});
       effects.updateLights(lightItems,fx.time,night,visible);
+      pointGrid.update(effects.nightLights().filter(light=>light.isPointLight&&!light.castShadow));
       // 静态云纹/悬停刷新复用城市画面；扫光与火光读取同一动效时间重画承光层。
       const shapes=plots.map(p=>`${p.id}:${entries.get(p.id).signature}`).join('|');
       const signature=shapes+plantKey+'|plan:'+nextConstruction+'|nature:'+natureKey+'|'+plots.map(p=>p.powered?'1':'0').join('')+streetKey+roadKey+JSON.stringify(lightItems)+`/${width}:${height}:${panX}:${panY}:${cell}:${night}:${lightBudget}:${fx.time}`;
