@@ -281,8 +281,9 @@ def building(name,x,y,w,d,h,floors=2,spacing=3.7,windows=True,flat=True):
             box('屋顶空调',(x+dx,y+1,h+1.6),(2,1.8,1.1),concrete,.07)
             for k in range(5):box('空调散热格栅',(x+dx-.7+k*.35,y+.06,h+1.6),(.06,.04,.8),steel,.005)
     if abandoned:
-        for i in range(max(4,int(w/5))):
-            px=x-w*.42+i*w*.84/max(1,int(w/5)-1)
+        stains=max(4,int(w/5))
+        for i in range(stains):
+            px=x-w*.42+i*w*.84/(stains-1)
             box('立面风化水痕',(px,y-d/2-.014,h*.6),(.24+random.random()*.6,.018,h*.5+random.random()),soil,0)
 
     for obj in set(source.objects)-before:obj['poiStructure']=name
@@ -439,9 +440,3 @@ def finish(options):
             point.data.spot_size=angle*2;point.data.spot_blend=.5;point.rotation_euler=(Vector((tx,-nty,tz))-point.location).to_track_quat('-Z','Y').to_euler()
         scene.render.filepath=str(out/'renders'/(stem+'-night.png'));bpy.ops.render.render(write_still=True)
     print('POI_DONE',stem,round(time.monotonic()-started,1),flush=True)
-
-
-
-def roof_damage(name,x,y,z,radius=3.0):
-    """旧局部屋面破口入口；废弃结构统一由poi_damage按建筑特点处理。"""
-    return

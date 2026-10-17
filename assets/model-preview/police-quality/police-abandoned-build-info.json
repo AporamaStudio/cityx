@@ -9,9 +9,9 @@
   "sourceObjects": 4177,
   "materials": 33,
   "triangles": 264368,
-  "glbBytes": 17549804,
+  "glbBytes": 17549800,
   "nightLights": 0,
   "nightSpotLights": 0,
   "blender": "5.2.0 LTS",
-  "elapsedSeconds": 24.3
+  "elapsedSeconds": 22.7
 }

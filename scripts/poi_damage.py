@@ -42,7 +42,7 @@ def sheet(q,name,center,size,angles,metal=False):
     else:
         for dx in (-w*.28,w*.28):q.beam('断板外露钢筋',(dx,-d/2-.4,0),(dx,d/2+.4,0),.025,q.rust)
     matrix=Matrix.Translation(Vector(center))@Euler(angles,'XYZ').to_matrix().to_4x4()
-    for obj in set(q.source.objects)-before:obj.matrix_world=matrix@obj.matrix_world
+    for obj in set(q.source.objects)-before:obj.matrix_world=matrix@obj.matrix_basis
 
 
 def heap(q,x,y,w,d,height=2.0,count=60,base=.2):
