@@ -1,5 +1,7 @@
 // 首轮实验参数；只用于快速试玩，不代表平衡结论。
-export const SIZE = 60;
+import {readMapSettings,battleMapSize} from './map-settings.js?v=3';
+// 浏览器每次进入新局固定尺寸；Node历史规则检查保留60格，256格检查显式提供URL。
+export const SIZE = typeof location==='undefined'?60:battleMapSize(readMapSettings(location.search));
 export const DEFAULTS = {
   // 每格的现实边长，用于比例尺与3D实体尺度；战斗和建设仍按格计算。
   cellMeters: 20,

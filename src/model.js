@@ -55,13 +55,15 @@ function campPath(state,path) {
 // 新一轮保留已应用参数、玩家墙和炮台；集合复制避免重试修改旧布局。
 export function createState(sources = DEFAULTS.sources, towers = new Map(), playerWalls = new Set(), params = DEFAULTS, outposts = new Map(), layout = null) {
   const sites=layout?(layout.blocks??layout.buildings??[]):PRODUCTION_SITES;
+  const siteByCell=Array(SIZE*SIZE);
+  for(const p of sites)for(let y=p.y;y<p.y+(p.height??p.size);y++)for(let x=p.x;x<p.x+(p.width??p.size);x++)siteByCell[key(x,y)]=p;
   // 非建筑固定障碍独立于经营内容；道路、广场与空地都可作为通行地面。
-  const fixedWalls=layout?new Set([...(layout.nonTraversable??[]),...layout.tiles.flatMap((t,id)=>t==='block'&&!productionSite(id,{sites})?[id]:[])]):makeWalls();
+  const fixedWalls=layout?new Set([...(layout.nonTraversable??[]),...layout.tiles.flatMap((t,id)=>t==='block'&&!siteByCell[id]?[id]:[])]):makeWalls();
   const blocked=new Set(layout?layout.tiles.flatMap((t,id)=>t==='block'?[id]:[]):[]),walls=new Set([...fixedWalls,...blocked,...playerWalls]);
   const terrainWalls=new Set([...fixedWalls,...blocked]);
   const camp = layout?key(layout.camp.x,layout.camp.y):key(...DEFAULTS.camp), field = routeField(camp, terrainWalls);
   const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), banks:new Map(), hospitals:new Map(), bankEarned:0, debtInterestCap:0, nightInterest:0, bankSettledDay:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, nightBuildSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
-    layout, blocked, terrainWalls, sites, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
+    layout, blocked, terrainWalls, sites, siteByCell:layout?.version>=6?siteByCell:null, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
     hp: params.campHP, enemies: [], enemyOutcomes:new Map(), events: [], spawned: 0, prevented:0, removed: 0, damage: 0, leaked: 0, merges: 0 };
@@ -73,7 +75,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
 
 // 只保留一局实验和一次战前快照；无存档、回放或通用关卡框架。
 export function createCampaign(params=DEFAULTS, waves=WAVES, layout=null,sourceCatalog=null) {
-  if(layout&&(layout.width!==SIZE||layout.height!==SIZE))throw new Error('当前战斗地图须为 60×60；其他尺寸可在布局预览实验。');
+  if(layout&&(layout.width!==SIZE||layout.height!==SIZE))throw new Error(`当前战斗坐标为 ${SIZE}×${SIZE}，请用对应尺寸开启新局。`);
   if(layout&&waves===WAVES){
     const initial=createState([],new Map(),new Set(),params,new Map(),layout);
     const plan=generateEnemySources(layout,params,initial.field);
@@ -843,7 +845,7 @@ function finishBattleNight(state){
 
 // 地块内容与几何分开；修缮与换建共用整块身份，夜末按控制资格结算。
 // 任一格映射到同一街区；状态仅按左上角存一次，收益不按格重复。
-export const productionSite=(id,state)=>id==null?undefined:(state?.sites??PRODUCTION_SITES).find(p=>{const [x,y]=xy(id);return x>=p.x&&x<p.x+(p.width??p.size)&&y>=p.y&&y<p.y+(p.height??p.size);});
+export const productionSite=(id,state)=>id==null?undefined:state?.siteByCell?state.siteByCell[id]:(state?.sites??PRODUCTION_SITES).find(p=>{const [x,y]=xy(id);return x>=p.x&&x<p.x+(p.width??p.size)&&y>=p.y&&y<p.y+(p.height??p.size);});
 export const productionId=(id,state)=>{const p=productionSite(id,state);return p?key(p.x,p.y):null;};
 export function productionCells(id,state) {
   const p=productionSite(id,state);return p?Array.from({length:(p.width??p.size)*(p.height??p.size)},(_,i)=>key(p.x+i%(p.width??p.size),p.y+Math.floor(i/(p.width??p.size)))):[];

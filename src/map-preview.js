@@ -46,9 +46,9 @@ function generate(){
     for(const name of ['width','height','mainRoadWidth','minBlock','maxBlock','specialMin','specialMax','bankCount'])settings[name]=Number($(name).value);
     for(const name of ['special','touching','nature'])settings[name]=$(name).checked;
     map=generateCityMap(settings);appliedSettings=settings;
-    $('play').hidden=map.width!==60||map.height!==60;
+    $('play').hidden=map.width!==map.height||![60,256].includes(map.width);
     $('play').href=`index.html?${mapSearch(appliedSettings)}`;
-    $('playHint').textContent=$('play').hidden?'战斗目前支持 60×60；大地图仅预览。':'链接使用最后成功生成的参数，打开后开始新的一局。';
+    $('playHint').textContent=$('play').hidden?'试玩支持60×60或256×256；当前尺寸仅预览。':'链接使用最后成功生成的参数，打开后开始新的一局。';
     lookup=new Int32Array(map.width*map.height).fill(-1);
     for(const b of map.blocks)for(let y=b.y;y<b.y+b.height;y++)for(let x=b.x;x<b.x+b.width;x++)lookup[y*map.width+x]=b.id;
     const distances=walkableDistances(map),walkable=map.tiles.filter(t=>['road','open'].includes(t)).length,reachable=distances.filter(d=>d>=0).length;
@@ -58,7 +58,7 @@ function generate(){
 }
 $('settings').onsubmit=e=>{e.preventDefault();generate();};
 $('next').onclick=()=>{$('seed').value=`cityx-${Math.floor(Math.random()*1000000)}`;generate();};
-$('large').onclick=()=>{$('width').value=50;$('height').value=100;generate();};
+$('large').onclick=()=>{$('width').value=256;$('height').value=256;generate();};
 $('fit').onclick=fit;$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);
 canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();zoom(e.deltaY<0?1.15:1/1.15,e.clientX-r.left,e.clientY-r.top);},{passive:false});
 canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);});

@@ -1,7 +1,7 @@
 // 先划地块与道路，再给出初始内容；战斗中的清理与换建保存在独立运行状态。
 import {addNaturalTerrain} from './natural-terrain.js?v=6';
 export function generateCityMap({seed='cityx',width=30,height=30,mainRoadWidth=2,minBlock=2,maxBlock=5,special=false,specialMin=10,specialMax=30,touching=false,starterPlot=false,hospital=false,bankCount=0,nature=false}={}) {
-  for(const [name,value,min,max] of [['width',width,20,240],['height',height,20,240],['mainRoadWidth',mainRoadWidth,2,3],['minBlock',minBlock,2,8],['maxBlock',maxBlock,2,8],['specialMin',specialMin,10,30],['specialMax',specialMax,10,30]]) {
+  for(const [name,value,min,max] of [['width',width,20,256],['height',height,20,256],['mainRoadWidth',mainRoadWidth,2,3],['minBlock',minBlock,2,8],['maxBlock',maxBlock,2,8],['specialMin',specialMin,10,30],['specialMax',specialMax,10,30]]) {
     if(!Number.isInteger(value)||value<min||value>max)throw new Error(`${name} 必须是 ${min}–${max} 的整数`);
   }
   if(minBlock>maxBlock||specialMin>specialMax)throw new Error('最小边长不能超过最大边长');

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
 import {generateCityMap} from '../src/city-map.js';
-import {MAP_DEFAULTS} from '../src/map-settings.js';
+import {MAP_DEFAULTS as LARGE_MAP_DEFAULTS} from '../src/map-settings.js';
+const MAP_DEFAULTS={...LARGE_MAP_DEFAULTS,width:60,height:60};
 import {sourceMaxHP,sourceDeparture} from '../src/enemy-sources.js';
 import {finishIdleNight,rebuildTerrain,enemyAction,forecastAttacks,buildProduction,funds,enemyBatchStatus,battleRoutes,lockAttacks,nightCleanupState,key,createCampaign,knownSources,sourceCells,sourcePlans,sourceControlled,sourceAttackPlan,beginBattle,stepBattle,restoreNight,restartCampaign,enterMorning,settleEconomy,validateParams,validateSources,visionField,revealControl,plotBuildError,syncSourceHealth} from '../src/model.js';
 

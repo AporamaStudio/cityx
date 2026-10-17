@@ -4,7 +4,8 @@ import {emptyLandPlants} from '../src/city-vegetation.js';
 import {generateCityMap} from '../src/city-map.js';
 import {naturalPlants} from '../src/natural-terrain.js';
 import {surroundingLandscape} from '../src/city-surroundings.js';
-import {MAP_DEFAULTS} from '../src/map-settings.js';
+import {MAP_DEFAULTS as LARGE_MAP_DEFAULTS} from '../src/map-settings.js';
+const MAP_DEFAULTS={...LARGE_MAP_DEFAULTS,width:60,height:60};
 import {DEFAULTS} from '../src/config.js';
 import {createCampaign,buildProduction,plotContent,key,funds,economyBuildQuote} from '../src/model.js';
 

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateCityMap} from '../src/city-map.js';
-import {MAP_DEFAULTS} from '../src/map-settings.js';
+import {MAP_DEFAULTS as LARGE_MAP_DEFAULTS} from '../src/map-settings.js';
+const MAP_DEFAULTS={...LARGE_MAP_DEFAULTS,width:60,height:60};
 import {surroundingLandscape,exteriorRiver,exteriorHeight,outsideDistance,segmentDistance} from '../src/city-surroundings.js';
 import {riverBanks} from '../src/natural-terrain.js';
 import {exteriorFogExtent} from '../src/visibility.js';

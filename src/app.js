@@ -24,7 +24,7 @@ import {generateCityMap} from './city-map.js?v=14';
 import {readMapSettings} from './map-settings.js?v=2';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
 const mapSettings=readMapSettings(location.search);
-mapSettings.width=SIZE;mapSettings.height=SIZE;
+// 尺寸由本局URL和默认地图共同决定，禁止静默覆盖预览参数。
 const cityLayout=generateCityMap(mapSettings);
 const $ = id => document.getElementById(id);
 // Canvas 报价直接复用钱包与工具 SVG，资源和炮图标不另建一套图形。
@@ -122,7 +122,7 @@ function setViewMode(mode){
 function updateViewHelp(){
   const returnToTop=previewParams().returnToTopOnAction,action=returnToTop?'建设操作返回俯视':'单击建设，保持当前视角';
   $('viewActionGuide').textContent=returnToTop?'侧栏操作先回俯视，地图首击回俯视。':'三种视角均可直接建设。';
-  canvas.setAttribute('aria-label',viewMode==='top'?'60乘60防守棋盘，单击布置，拖动或WASD平移':viewMode==='free'?`自由观察，拖动或WASD平移，Shift拖动或方向键旋转；${action}`:`城市斜视，拖动或WASD平移；${action}`);
+  canvas.setAttribute('aria-label',viewMode==='top'?`${SIZE}乘${SIZE}防守棋盘，单击布置，拖动或WASD平移`:viewMode==='free'?`自由观察，拖动或WASD平移，Shift拖动或方向键旋转；${action}`:`城市斜视，拖动或WASD平移；${action}`);
   document.querySelector('[data-city-view="oblique"]').title=`固定斜视；${action}`;
   document.querySelector('[data-city-view="free"]').title=`自由观察；Shift拖动/中键拖动或方向键旋转；${action}`;
 }

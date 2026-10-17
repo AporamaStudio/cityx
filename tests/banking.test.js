@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {MAP_DEFAULTS} from '../src/map-settings.js';
+import {MAP_DEFAULTS as LARGE_MAP_DEFAULTS} from '../src/map-settings.js';
+const MAP_DEFAULTS={...LARGE_MAP_DEFAULTS,width:60,height:60};
 import {generateCityMap,walkableDistances} from '../src/city-map.js';
 import {economyConstructionPreview,createCampaign,key,funds,population,bankFinance,bankContribution,bankActive,bankDiscovered,bankCapacityFor,pendingBanks,bankUpgradeQuote,bankUpgradeError,upgradeBank,bankError,restoreBank,canAfford,availableFunds,changeWall,repairFacility,repairQuote,buildTower,buildProduction,clearPlot,productionControlled,productionCells,applyTestScenario,settleEconomy,beginBattle,restoreNight,restartCampaign,stepBattle,enterMorning,finishIdleNight,lockAttacks,validateParams,removeOutpost,controlMask,placementError} from '../src/model.js';
 import {createTowerOverlayCache} from '../src/tower-overlay.js';

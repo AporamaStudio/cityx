@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS} from '../src/config.js';
-import {MAP_DEFAULTS} from '../src/map-settings.js';
+import {MAP_DEFAULTS as LARGE_MAP_DEFAULTS} from '../src/map-settings.js';
+const MAP_DEFAULTS={...LARGE_MAP_DEFAULTS,width:60,height:60};
 import {generateCityMap} from '../src/city-map.js';
 import {createCampaign,routeTimingReport,key,beginBattle,stepBattle,campCells,potentialSourceRoute,rebuildTerrain} from '../src/model.js';
 

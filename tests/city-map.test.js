@@ -38,7 +38,7 @@ test('街区之间至少留一格道路，普通尺寸包含横竖形状和大�
   for(const shape of ['2x3','3x2','3x3','3x4','4x4','5x5'])assert.ok(dimensions.has(shape),shape);
 });
 test('拒绝非法地图尺寸和主路宽度',()=>{
-  for(const options of [{width:0},{height:250},{width:30.5},{mainRoadWidth:1},{mainRoadWidth:NaN}])assert.throws(()=>generateCityMap(options));
+  for(const options of [{width:0},{height:257},{width:30.5},{mainRoadWidth:1},{mainRoadWidth:NaN}])assert.throws(()=>generateCityMap(options));
 });
 
 // 地形决定可达性，修缮状态不改变路线；所有非道路格都属于明确街区。
