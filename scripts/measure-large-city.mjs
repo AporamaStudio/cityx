@@ -39,6 +39,6 @@ console.log(JSON.stringify({environment:{node:process.version,platform:platform(
   timings:{generation,campaign,control,lookup100k:lookup,scan100k:scan,visibilityColdMs:visibility.ms},
   memory:{nodeRss:after.rss,nodeArrayBuffersDelta:after.arrayBuffers-before.arrayBuffers,fogRasterSize:field.n,pixels,
     // 3个距离场+2个密度场+flags；Canvas/纹理是字节量估算，不是浏览器/GPU内存采样。
-    visibilityArrayBytes:pixels*21+size*size,fogTransitionFloatBytes:pixels*16,fogCanvasesRGBABytes:pixels*16},
+    visibilityArrayBytes:field.arrayBytes,fogWorldRasterSize:field.span*4,fogWindowSteadyFloatBytesPerPixel:8,fogWindowTransitionFloatBytesPerPixel:24,fogCanvasesRGBABytesPerPixel:16},
   routes:{deadline:routes.nightTicks,totalGroups:routes.total,lateGroups:routes.late,unreachable:routes.unreachable,farthest:routes.farthest,firstNight:routes.nights[0]},assets,
   assetTotals:assets.reduce((sum,p)=>Object.fromEntries(Object.keys(sum).map(k=>[k,sum[k]+p[k]])),{bytes:0,triangles:0,primitives:0,geometryBytes:0})},null,2));

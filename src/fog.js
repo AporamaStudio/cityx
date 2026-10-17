@@ -1,5 +1,5 @@
 // 信息层由探索/视野决定；云纹只改变外观，流动与缩放不能揭示新情报。
-import {VISIBILITY_PX} from './visibility.js?v=9';
+import {VISIBILITY_PX} from './visibility.js?v=10';
 const CLOUD_SPAN=48,TEXTURE_PX=512,MASK_PX=VISIBILITY_PX;
 let textures=null,field=null;
 const smooth=t=>t*t*(3-2*t);
@@ -13,6 +13,7 @@ export const cloudStrength=zoom=>.68+.32*smooth(Math.max(0,Math.min(1,(zoom-1)/2
 // 保持每格4像素，只裁掉当前镜头及高楼/阴影余量之外不会采样的雾纹。
 export function fogRasterBounds(visibility,viewport,padding=16){
   const min=-visibility.border,max=visibility.size+visibility.border;
+  if(viewport.left<=0&&viewport.right>=visibility.size&&viewport.top<=0&&viewport.bottom>=visibility.size)return {left:min,top:min,right:max,bottom:max};
   const left=Math.max(min,Math.min(max-1,Math.floor((viewport.left-padding)/16)*16)),top=Math.max(min,Math.min(max-1,Math.floor((viewport.top-padding)/16)*16));
   return {left,top,right:Math.max(left+1,Math.min(max,Math.ceil((viewport.right+padding)/16)*16)),bottom:Math.max(top+1,Math.min(max,Math.ceil((viewport.bottom+padding)/16)*16))};
 }
@@ -93,47 +94,54 @@ export function drawCloudBackdrop(ctx,night,time,bounds,dusk=0,ambient=false){
   ctx.restore();
 }
 // 共用逻辑区域场；只有区域或新局变化时更新遮罩，云纹流动不改权限。
-function updateField(visibility,explored,time){
-  if(field?.visibility===visibility&&field.explored===explored)return;
-  const {size,span,n,border,flags,cloud:target,veil:veilTarget}=visibility;
-  const previous=field&&field.size===size&&field.n===n&&field.explored===explored?field:null;
-  const mask=previous?.mask??surface(n),layer=previous?.layer??surface(1),veil=previous?.veil??surface(n);
-  const from=previous?new Float32Array(previous.current):new Float32Array(target);
-  const veilFrom=previous?new Float32Array(previous.veilCurrent):new Float32Array(veilTarget);
-  // S0/S1立即保持清晰可读；外围退雾短暂过渡，失去视野立即增强遮挡。
-  for(let i=0;i<target.length;i++){
-    from[i]=flags[i]<2?target[i]:Math.max(from[i],target[i]);
-    veilFrom[i]=flags[i]<2?veilTarget[i]:Math.max(veilFrom[i],veilTarget[i]);
+function updateField(visibility,explored,time,area){
+  const key=[area.left,area.top,area.right,area.bottom].join(':');
+  if(field?.visibility===visibility&&field.explored===explored&&field.areaKey===key)return;
+  const {size}=visibility,previous=field&&field.size===size&&field.explored===explored?field:null,changed=previous?.visibility!==visibility;
+  const raster=visibility.raster(area),{width,height,flags,cloud:target,veil:veilTarget}=raster;
+  const mask=previous?.mask??surface(width,height),layer=previous?.layer??surface(width,height),veil=previous?.veil??surface(width,height);
+  for(const canvas of [mask,layer,veil]){if(canvas.width!==width)canvas.width=width;if(canvas.height!==height)canvas.height=height;}
+  const until=changed?(previous&&time?time+.36:0):previous.until,from=until?new Float32Array(target):target,veilFrom=until?new Float32Array(veilTarget):veilTarget,sourceVisibility=changed?previous?.visibility:previous?.fromVisibility;
+  for(let i=0;previous&&until&&i<target.length;i++){
+    if(flags[i]<2)continue;
+    const x=area.left+(i%width+.5)/MASK_PX,y=area.top+(Math.floor(i/width)+.5)/MASK_PX,px=Math.floor((x-previous.area.left)*MASK_PX),py=Math.floor((y-previous.area.top)*MASK_PX);
+    let old;
+    if(px>=0&&py>=0&&px<previous.width&&py<previous.height){const j=py*previous.width+px;old={cloud:(changed?previous.current:previous.from)[j],veil:(changed?previous.veilCurrent:previous.veilFrom)[j]};}
+    else old=sourceVisibility?.fogAt(x,y)??{cloud:target[i],veil:veilTarget[i]};
+    from[i]=Math.max(old.cloud,target[i]);veilFrom[i]=Math.max(old.veil,veilTarget[i]);
   }
-  field={visibility,size,span,n,border,explored,veil,veilTarget,veilFrom,veilCurrent:new Float32Array(veilFrom),target,from,current:new Float32Array(from),mask,layer,at:time,until:previous&&time?time+.36:0,painted:false};
+  // 换窗口不重启退雾计时；重叠部分沿用同一世界像素，新进入画面的部分仍按旧视野插值。
+  field={visibility,size,width,height,area,areaKey:key,explored,mask,layer,veil,target,veilTarget,from,veilFrom,current:until?new Float32Array(from):target,veilCurrent:until?new Float32Array(veilFrom):veilTarget,at:changed?time:previous.at,until,fromVisibility:sourceVisibility,painted:false};
 }
 export const fogTransitionActive=()=>!!field?.until;
+export function resetFogResources(){
+  if(!field)return;field.visibility.clearRasterCache?.();for(const canvas of [field.mask,field.layer,field.veil])canvas.width=canvas.height=1;field=null;
+}
+// 诊断只统计实际保留的数组和名义Canvas像素，不冒充浏览器/驱动总内存。
+export function fogResourceStats(){
+  if(!field)return null;const buffers=new Set([field.target,field.veilTarget,field.from,field.veilFrom,field.current,field.veilCurrent].map(a=>a.buffer));
+  return {width:field.width,height:field.height,arrayBytes:[...buffers].reduce((sum,b)=>sum+b.byteLength,0),canvasRGBABytes:field.width*field.height*12,visibilityArrayBytes:field.visibility.arrayBytes,exteriorCacheBytes:field.visibility.rasterCacheBytes};
+}
 
 export function drawFog(ctx,visibility,explored,night,time,cloudTime=time,dusk=0,zoom=2,bounds=null){
-  updateField(visibility,explored,time);
+  const area=bounds??{left:-visibility.border,top:-visibility.border,right:visibility.size+visibility.border,bottom:visibility.size+visibility.border};
+  updateField(visibility,explored,time,area);
   const f=field,t=f.until&&time?Math.min(1,(time-f.at)/.36):1,strength=cloudStrength(zoom);
   if(!f.painted||f.until||f.strength!==strength){
-    const g=f.mask.getContext('2d'),pixels=g.createImageData(f.n,f.n),vg=f.veil.getContext('2d'),veilPixels=vg.createImageData(f.n,f.n),ease=smooth(Math.max(0,t));
+    const g=f.mask.getContext('2d'),pixels=g.createImageData(f.width,f.height),vg=f.veil.getContext('2d'),veilPixels=vg.createImageData(f.width,f.height),ease=smooth(Math.max(0,t));
     for(let i=0;i<f.target.length;i++){
       const alpha=f.from[i]+(f.target[i]-f.from[i])*ease;f.current[i]=alpha;
-      // 外围强度已由同一世界区域场计算，不能在地图边界再次衰减成一圈晴空。
-      const x=(i%f.n+.5)/MASK_PX-f.border,y=(Math.floor(i/f.n)+.5)/MASK_PX-f.border,outside=x<0||y<0||x>=f.size||y>=f.size;
+      const x=area.left+(i%f.width+.5)/MASK_PX,y=area.top+(Math.floor(i/f.width)+.5)/MASK_PX,outside=x<0||y<0||x>=f.size||y>=f.size;
       pixels.data[i*4+3]=Math.round(alpha*(outside?1:strength+(1-strength)*alpha)*255);
-      const density=f.veilFrom[i]+(f.veilTarget[i]-f.veilFrom[i])*ease;f.veilCurrent[i]=density;
-      veilPixels.data[i*4+3]=Math.round(density*255);
+      const density=f.veilFrom[i]+(f.veilTarget[i]-f.veilFrom[i])*ease;f.veilCurrent[i]=density;veilPixels.data[i*4+3]=Math.round(density*255);
     }
-    g.putImageData(pixels,0,0);vg.putImageData(veilPixels,0,0);f.color=null;f.strength=strength;f.painted=true;if(t===1)f.until=0;
+    g.putImageData(pixels,0,0);vg.putImageData(veilPixels,0,0);f.color=null;f.strength=strength;f.painted=true;if(t===1){f.until=0;f.fromVisibility=null;f.from=f.current=f.target;f.veilFrom=f.veilCurrent=f.veilTarget;}
   }
   const color=fogColor(night);
-  if(f.color!==color){const vg=f.veil.getContext('2d');vg.globalCompositeOperation='source-in';vg.fillStyle=color;vg.fillRect(0,0,f.n,f.n);vg.globalCompositeOperation='source-over';f.color=color;}
-  const area=bounds??{left:-f.border,top:-f.border,right:f.size+f.border,bottom:f.size+f.border},w=area.right-area.left,h=area.bottom-area.top,sx=(area.left+f.border)*MASK_PX,sy=(area.top+f.border)*MASK_PX;
-  if(f.layer.width!==w*MASK_PX)f.layer.width=w*MASK_PX;if(f.layer.height!==h*MASK_PX)f.layer.height=h*MASK_PX;
-  const g=f.layer.getContext('2d');g.setTransform(MASK_PX,0,0,MASK_PX,-area.left*MASK_PX,-area.top*MASK_PX);
-  g.clearRect(area.left,area.top,w,h);
-  drawCloudBackdrop(g,night,cloudTime,area,dusk);
-  g.setTransform(1,0,0,1,0,0);g.globalCompositeOperation='destination-in';g.drawImage(f.mask,-sx,-sy);g.globalCompositeOperation='source-over';
+  if(f.color!==color){const vg=f.veil.getContext('2d');vg.globalCompositeOperation='source-in';vg.fillStyle=color;vg.fillRect(0,0,f.width,f.height);vg.globalCompositeOperation='source-over';f.color=color;}
+  const w=area.right-area.left,h=area.bottom-area.top,g=f.layer.getContext('2d');g.setTransform(MASK_PX,0,0,MASK_PX,-area.left*MASK_PX,-area.top*MASK_PX);
+  g.clearRect(area.left,area.top,w,h);drawCloudBackdrop(g,night,cloudTime,area,dusk);
+  g.setTransform(1,0,0,1,0,0);g.globalCompositeOperation='destination-in';g.drawImage(f.mask,0,0);g.globalCompositeOperation='source-over';
   ctx.save();ctx.imageSmoothingEnabled=true;
-  // S0清晰、S1薄雾静止、S12/S23渐入流动浓雾；全城仍保护未知地形。
-  if(bounds)ctx.drawImage(f.veil,sx,sy,w*MASK_PX,h*MASK_PX,area.left,area.top,w,h);else ctx.drawImage(f.veil,-f.border,-f.border,f.span,f.span);
-  ctx.drawImage(f.layer,area.left,area.top,w,h);ctx.restore();
+  ctx.drawImage(f.veil,area.left,area.top,w,h);ctx.drawImage(f.layer,area.left,area.top,w,h);ctx.restore();
 }

@@ -6,12 +6,12 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
 import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=6';
-import {createCity3D} from './city-3d.js?v=89';
+import {createCity3D} from './city-3d.js?v=90';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
-import {createVisibility} from './visibility.js?v=9';
-import {drawFog,fogColor,fogTransitionActive,fogRasterBounds} from './fog.js?v=23';
+import {createVisibility} from './visibility.js?v=10';
+import {drawFog,fogColor,fogTransitionActive,fogRasterBounds,resetFogResources} from './fog.js?v=24';
 import {createTowerOverlayCache} from './tower-overlay.js?v=26';
 import {roadMarkings} from './city-roads.js?v=1';
 import {createCityLoading} from './city-loading.js?v=1';
@@ -1203,7 +1203,7 @@ function paintCityScene(view,fogTime){
     if(observationMist.width!==mistWidth*fogPx)observationMist.width=mistWidth*fogPx;if(observationMist.height!==mistHeight*fogPx)observationMist.height=mistHeight*fogPx;
     m.setTransform(1,0,0,1,0,0);m.clearRect(0,0,observationMist.width,observationMist.height);m.setTransform(fogPx,0,0,fogPx,-area.left*fogPx,-area.top*fogPx);
     drawFog(m,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom,area);
-  }
+  }else if(observationMist.width>1||observationMist.height>1){resetFogResources();view.visibility.clearRasterCache?.();observationMist.width=observationMist.height=1;}
   city3D.observationFrame({mist:mistEnabled?observationMist:null,mistBounds:[area.left,area.top,mistWidth,mistHeight],mistFadeBounds:[-mistBorder,-mistBorder,mistSpan,mistSpan],view:camera,background:fogColor(nightMix),onBaseFrame:image=>{
     ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.clearRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);
   }});

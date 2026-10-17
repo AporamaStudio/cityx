@@ -17,28 +17,37 @@ observe=observe.replace('for(const object of [floor,...objects]){bind(object);',
 observe=observe.replace('enemies.visible=false;renderer.setClearColor(background,1);renderer.render(scene,camera);',`enemies.visible=false;renderer.setClearColor(background,1);perfGroups={};renderer.render(scene,camera);document.body.dataset.performanceGroups=JSON.stringify(perfGroups);`);
 await writeFile(resolve(directory,'src/city-observation.js'),observe);
 let source=await readFile(resolve(directory,'src/app.js'),'utf8');
+const hasFogStats=(await readFile(resolve(directory,'src/fog.js'),'utf8')).includes('export function fogResourceStats');
+if(hasFogStats)source=source.replace(/(import \{)([^}]+)(\} from '\.\/fog\.js[^']*';)/,'$1$2,fogResourceStats$3');
 source+=`
 // 本地性能对照：计数真实paintMap帧，不使用1000/CPU耗时推算FPS。
 const perfArgs=new URLSearchParams(location.search),perfOutput=document.createElement('pre'),perfButton=document.createElement('button');
 perfOutput.id='performanceOutput';perfButton.id='performanceRun';perfButton.textContent='运行旋转性能对照';
 Object.assign(perfOutput.style,{position:'fixed',left:'12px',bottom:'112px',zIndex:2000,background:'#fff',color:'#111',maxHeight:'300px',maxWidth:'700px',overflow:'auto',fontSize:'11px'});
 Object.assign(perfButton.style,{position:'fixed',left:'12px',bottom:'80px',zIndex:2000});const perfDetails=document.createElement('details'),perfSummary=document.createElement('summary');perfSummary.textContent='性能结果';Object.assign(perfDetails.style,{position:'fixed',left:'12px',bottom:'114px',zIndex:2000});perfDetails.append(perfSummary,perfOutput);document.body.append(perfButton,perfDetails);
-let perfRun=null,perfLastStats=null;const originalPaintMap=paintMap,originalRecordRenderStats=recordRenderStats;recordRenderStats=function(cpu,stats,total){perfLastStats=stats;return originalRecordRenderStats(cpu,stats,total);};
+let perfRun=null,perfLastStats=null,perfStress=0,perfPoints=[];const originalPaintMap=paintMap,originalRecordRenderStats=recordRenderStats;recordRenderStats=function(cpu,stats,total){perfLastStats=stats;return originalRecordRenderStats(cpu,stats,total);};
 paintMap=function(){const start=performance.now(),result=originalPaintMap();if(perfRun){const frame={at:performance.now(),cpu:performance.now()-start};perfRun.allFrames.push(frame);if(perfRun.waitReady&&!perfRun.readyAt&&city3D.isPrepared()){perfRun.readyAt=performance.now();perfRun.measureAt=perfRun.readyAt+3000;}if(performance.now()>=perfRun.measureAt)perfRun.frames.push(frame);}return result;};
 const timings={};
-for(const key of ['render','renderFacilities','observationFrame']){const original=city3D[key];city3D[key]=function(...args){const start=performance.now(),result=original.apply(this,args);if(perfRun&&performance.now()>=perfRun.measureAt)(timings[key]??=[]).push(performance.now()-start);return result;};}
+for(const key of ['render','renderFacilities','observationFrame']){const original=city3D[key];city3D[key]=function(...args){const start=performance.now();if(key==='renderFacilities'&&perfStress){const fx=args[2];args[0]=[...args[0],...perfPoints.map((p,i)=>({id:'perf-enemy:'+i,asset:'enemy',x:p.x+Math.sin(fx.time+i)*.02,y:p.y,ground:naturalGroundAt(state.layout,p.x,p.y,state.params.cellMeters),cellMeters:state.params.cellMeters,members:1,health:1,moving:true,alpha:1,fogAlpha:1,angle:0}))];}const result=original.apply(this,args);if(perfRun&&performance.now()>=perfRun.measureAt)(timings[key]??=[]).push(performance.now()-start);return result;};}
 perfButton.onclick=()=>{
-  if(!cityLoading.isShown())return;perfButton.disabled=true;setViewMode('free');viewYaw=Math.PI/4;viewElevation=Math.PI/4;
+  if(!cityLoading.isShown())return;const buttonAt=performance.now();perfButton.disabled=true;setViewMode(perfArgs.get('benchView')??'free');viewYaw=Math.PI/4;viewElevation=Math.PI/4;
   const area=perfArgs.get('benchArea')??'camp',whole=area==='whole',civic=area==='civic',anchor=civic?[SIZE/2,SIZE/2+10]:whole?[SIZE/2-.5,SIZE/2+10]:xy(state.camp),cell=Number(perfArgs.get('benchCell')??18);
   zoom=whole?1:cell/base;panX=width/2-(anchor[0]+.5)*base*zoom;panY=height/2-(anchor[1]-10)*base*zoom;
-  $('showFog').checked=perfArgs.get('benchFog')!=='0';update();
+  $('showFog').checked=perfArgs.get('benchFog')!=='0';
+  if(perfArgs.get('benchExplored')==='1')state.explored=new Set(Array.from({length:SIZE*SIZE},(_,i)=>i));
+  if(perfArgs.get('benchNight')==='1'&&state.phase==='build'){
+    const tower=Array.from({length:SIZE*SIZE},(_,i)=>i).find(i=>!placementError(state,i));if(tower!==undefined)buildTower(state,tower,'A');update();startNight();paused=true;update();
+  }
+  update();perfStress=Math.max(0,Math.min(128,Number(perfArgs.get('benchEnemies')??0)));
+  const targetView=cameraView(),cx=(width/2-panX)/(base*zoom),cy=(height/2-panY)/(base*zoom);
+  perfPoints=state.layout.tiles.flatMap((type,id)=>{if(type!=='road')return [];const p={x:id%SIZE+.5,y:Math.floor(id/SIZE)+.5},screen=projectView(p.x,p.y,0,targetView);return !screen.hidden&&screen.x>20&&screen.y>20&&screen.x<width-20&&screen.y<height-20?[p]:[];}).sort((a,b)=>Math.hypot(a.x-cx,a.y-cy)-Math.hypot(b.x-cx,b.y-cy)).slice(0,perfStress);
   for(const key of Object.keys(timings))delete timings[key];
-  const started=performance.now(),waitReady=perfArgs.get('benchWaitReady')==='1';perfRun={measureAt:waitReady?Infinity:started+3000,waitReady,frames:[],allFrames:[]};let last=started;
+  const panOrigin={x:panX,y:panY},started=performance.now(),setupMs=started-buttonAt,waitReady=perfArgs.get('benchWaitReady')==='1';perfRun={measureAt:waitReady?Infinity:started+3000,waitReady,frames:[],allFrames:[]};let last=started;
   const tick=now=>{
-    rotateView((now-last)*.6/1000,0);last=now;
+    if(perfArgs.get('benchStill')==='1'){effectTime=0;cloudTime=0;draw();}else if(viewMode==='top'){panX=panOrigin.x+Math.sin((now-started)/1000)*base*zoom;panY=panOrigin.y;draw();}else rotateView((now-last)*.6/1000,0);if(perfArgs.get('benchNight')==='1')effectTime+=(now-last)/1000;last=now;
     if((perfRun.waitReady?performance.now()<perfRun.measureAt+12000:now-started<15000)&&performance.now()-started<90000){requestAnimationFrame(tick);return;}
     const frames=perfRun.frames,intervals=frames.slice(1).map((f,i)=>f.at-frames[i].at).sort((a,b)=>a-b),summary=values=>({mean:values.length?values.reduce((s,n)=>s+n,0)/values.length:null,p95:[...values].sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1]});
-    const result={size:SIZE,area,fog:$('showFog').checked,width,height,cell:base*zoom,firstFrameMs:perfRun.allFrames[0]?.at-started,readyMs:perfRun.readyAt?perfRun.readyAt-started:null,maxDrawMs:Math.max(...perfRun.allFrames.map(f=>f.cpu)),frames:frames.length,fps:frames.length>1?(frames.length-1)*1000/(frames.at(-1).at-frames[0].at):null,intervalMs:summary(intervals),cpuMs:summary(frames.map(f=>f.cpu)),sections:Object.fromEntries(Object.entries(timings).map(([k,v])=>[k,summary(v)])),groups:JSON.parse(document.body.dataset.performanceGroups??'{}'),resources:city3D.resourceStats?.(),rawStats:perfLastStats,stats:$('renderStats').title};
+    const result={size:SIZE,area,viewMode,phase:state.phase,stressGroups:perfPoints.length,setupMs,fog:$('showFog').checked,width,height,cell:base*zoom,firstFrameMs:perfRun.allFrames[0]?.at-started,readyMs:perfRun.readyAt?perfRun.readyAt-started:null,maxDrawMs:Math.max(...perfRun.allFrames.map(f=>f.cpu)),frames:frames.length,fps:frames.length>1?(frames.length-1)*1000/(frames.at(-1).at-frames[0].at):null,intervalMs:summary(intervals),cpuMs:summary(frames.map(f=>f.cpu)),sections:Object.fromEntries(Object.entries(timings).map(([k,v])=>[k,summary(v)])),groups:JSON.parse(document.body.dataset.performanceGroups??'{}'),resources:city3D.resourceStats?.(),fogResources:${hasFogStats?'fogResourceStats()':'null'},mistCanvasBytes:observationMist.width*observationMist.height*4,rawStats:perfLastStats,stats:$('renderStats').title};
     perfOutput.textContent=JSON.stringify(result,null,2);perfRun=null;perfButton.disabled=false;
   };requestAnimationFrame(tick);
 };

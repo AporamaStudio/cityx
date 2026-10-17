@@ -15,7 +15,7 @@ import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {PLANT_MODELS} from './city-vegetation.js?v=2';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=15';
-import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=26';
+import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=27';
 import {createNightShaderWarmup} from './city-shader-warmup.js?v=3';
 import {createShaderSamples,cloneWarmupMaterial} from './city-shader-samples.js?v=2';
 import {createShotVFX,createImpactVFX} from './cannon-vfx.js?v=1';
@@ -192,7 +192,8 @@ export function createCity3D({onReady,onProgress,onError}){
       const add=attribute=>{const array=attribute?.array??attribute?.data?.array;if(array)buffers.add(array.buffer);};
       const visit=root=>root.traverse(node=>{if(!node.isMesh)return;meshes++;const geometry=node.geometry;if(!geometries.has(geometry)){geometries.add(geometry);Object.values(geometry.attributes).forEach(add);add(geometry.index);}add(node.instanceMatrix);add(node.instanceColor);});
       visit(scene);for(const model of models.values())visit(model);
-      return {cpuGeometryBytes:[...buffers].reduce((sum,buffer)=>sum+buffer.byteLength,0),geometryObjects:geometries.size,meshObjects:meshes,gpuGeometries:renderer.info.memory.geometries,gpuTextures:renderer.info.memory.textures};
+      const gl=renderer.getContext(),debug=gl.getExtension('WEBGL_debug_renderer_info');
+      return {cpuGeometryBytes:[...buffers].reduce((sum,buffer)=>sum+buffer.byteLength,0),geometryObjects:geometries.size,meshObjects:meshes,gpuGeometries:renderer.info.memory.geometries,gpuTextures:renderer.info.memory.textures,renderer:gl.getParameter(debug?.UNMASKED_RENDERER_WEBGL??gl.RENDERER),pixelRatio:renderer.getPixelRatio(),renderWidth:renderer.domElement.width,renderHeight:renderer.domElement.height,maxTextureSize:renderer.capabilities.maxTextureSize};
     },
     isReady(){return ready;},
     isPrepared(){return initialPrepared&&!visibleLandmarksPending;},
