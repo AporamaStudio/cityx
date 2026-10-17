@@ -5,13 +5,13 @@ import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback} from './enemy-overlay.js?v=6';
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
-import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=5';
-import {createCity3D} from './city-3d.js?v=80';
+import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=6';
+import {createCity3D} from './city-3d.js?v=84';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
 import {createVisibility} from './visibility.js?v=9';
-import {drawFog,fogColor,fogTransitionActive} from './fog.js?v=22';
+import {drawFog,fogColor,fogTransitionActive,fogRasterBounds} from './fog.js?v=23';
 import {createTowerOverlayCache} from './tower-overlay.js?v=26';
 import {roadMarkings} from './city-roads.js?v=1';
 import {createCityLoading} from './city-loading.js?v=1';
@@ -728,7 +728,7 @@ function paintMap() {
   cityTransitions=cityTransitions.filter(event=>effectTime-event.at<.8&&currentlyVisible(event.cell));
   const effectView=cameraView();
   defenseHits=defenseHits.filter(hit=>effectTime-hit.at<.65&&currentlyVisible(hit.cell));
-  const fx={upgrades,upgradeStyle:controlState.params,hazeColor:backdrop,defenseHits:reducedMotion.matches||state.phase!=='battle'?[]:defenseHits.map(hit=>({...hit,ground:naturalGroundAt(state.layout,hit.x,hit.y,controlState.params.cellMeters),alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),night:nightMix,enemyFiguresPerGroup:controlState.params.enemyFiguresPerGroup,cameraKey:JSON.stringify(effectView),time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),pixelsAt:(x,y,z)=>viewPixelScale(x,y,z,effectView),reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
+  const fx={view:effectView,upgrades,upgradeStyle:controlState.params,hazeColor:backdrop,defenseHits:reducedMotion.matches||state.phase!=='battle'?[]:defenseHits.map(hit=>({...hit,ground:naturalGroundAt(state.layout,hit.x,hit.y,controlState.params.cellMeters),alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),night:nightMix,enemyFiguresPerGroup:controlState.params.enemyFiguresPerGroup,cameraKey:JSON.stringify(effectView),time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),pixelsAt:(x,y,z)=>viewPixelScale(x,y,z,effectView),reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
   const plantKey=(hover!==null&&tool==='wall'?'wall:'+hover:'')+(postGhost?'post:'+hover:'');
@@ -1196,13 +1196,13 @@ function updateCameraLabels(size,params){
 function paintCityScene(view,fogTime){
   const fogPx=4,camera=cameraView(),m=observationMist.getContext('2d');
   const {border:mistBorder,span:mistSpan}=view.visibility;
-  const mistEnabled=mapFogEnabled();
+  const mistEnabled=mapFogEnabled(),area=fogRasterBounds(view.visibility,viewBounds(camera)),mistWidth=area.right-area.left,mistHeight=area.bottom-area.top;
   if(mistEnabled){
-  if(observationMist.width!==mistSpan*fogPx)observationMist.width=observationMist.height=mistSpan*fogPx;
-  m.setTransform(1,0,0,1,0,0);m.clearRect(0,0,observationMist.width,observationMist.height);m.setTransform(fogPx,0,0,fogPx,mistBorder*fogPx,mistBorder*fogPx);
-  drawFog(m,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom);
+    if(observationMist.width!==mistWidth*fogPx)observationMist.width=mistWidth*fogPx;if(observationMist.height!==mistHeight*fogPx)observationMist.height=mistHeight*fogPx;
+    m.setTransform(1,0,0,1,0,0);m.clearRect(0,0,observationMist.width,observationMist.height);m.setTransform(fogPx,0,0,fogPx,-area.left*fogPx,-area.top*fogPx);
+    drawFog(m,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom,area);
   }
-  const image=city3D.observationFrame({mist:mistEnabled?observationMist:null,mistBounds:[-mistBorder,-mistBorder,mistSpan,mistSpan],view:camera,background:fogColor(nightMix)});
+  const image=city3D.observationFrame({mist:mistEnabled?observationMist:null,mistBounds:[area.left,area.top,mistWidth,mistHeight],mistFadeBounds:[-mistBorder,-mistBorder,mistSpan,mistSpan],view:camera,background:fogColor(nightMix)});
   ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.clearRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);
 }
 function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,fogTime,operationValid=false){

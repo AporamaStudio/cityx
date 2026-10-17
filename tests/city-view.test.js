@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {projectView,groundAt,panView,keyboardPanStep,viewCenter,observationView,orbitView} from '../src/city-view.js';
+import {projectView,groundAt,panView,keyboardPanStep,viewCenter,viewDistance,viewBounds,cityCasterPadding,observationView,orbitView} from '../src/city-view.js';
 
 test('WASD按真实时间平移，相反方向抵消，斜向不更快，慢帧有上限',()=>{
   const one=keyboardPanStep(new Set(['KeyW']),50,480),two=keyboardPanStep(new Set(['KeyW','KeyD']),50,480);
@@ -8,6 +8,24 @@ test('WASD按真实时间平移，相反方向抵消，斜向不更快，慢帧�
   assert.deepEqual(keyboardPanStep(new Set(['KeyW','KeyS','KeyA','KeyD']),50,480),{x:0,y:0});
   const short=keyboardPanStep(new Set(['KeyW']),25,480);assert.equal(short.y*2,one.y);
   assert.equal(keyboardPanStep(new Set(['KeyW']),1000,480).y,48);assert.equal(keyboardPanStep(new Set(['KeyW']),50,0).y,0);
+});
+
+test('离屏余量覆盖画面边缘的高楼及斜向投影，低俯角朝天时不裁剪',()=>{
+  for(const projection of ['perspective','orthographic'])for(const elevation of [25,45,80])for(const fov of [20,40,60])for(const yaw of [-2,0,1.3]){
+    const view={width:702,height:580,cell:18,panX:-2000,panY:-1800,size:256,yaw,elevation:elevation*Math.PI/180,fov,projection},bounds=viewBounds(view),center=viewCenter(view),distance=viewDistance(view),camera={x:center.x+Math.sin(yaw)*Math.cos(view.elevation)*distance,y:Math.sin(view.elevation)*distance,z:center.y+Math.cos(yaw)*Math.cos(view.elevation)*distance};
+    for(const height of [.6,1.2,8]){
+      const padding=cityCasterPadding(view,height);
+      for(const [px,py] of [[0,0],[702,0],[0,580],[702,580],[351,290]]){
+        const ground=groundAt(px,py,view);if(ground.sky)continue;
+        for(const receiver of [0,height*.5,height]){
+          const x=projection==='perspective'?ground.x+(camera.x-ground.x)*receiver/camera.y:ground.x+Math.sin(yaw)*receiver/Math.tan(view.elevation),y=projection==='perspective'?ground.y+(camera.z-ground.y)*receiver/camera.y:ground.y+Math.cos(yaw)*receiver/Math.tan(view.elevation);
+          const casterX=x-(height-receiver),casterY=y-(height-receiver)/6;
+          assert.ok(casterX>=bounds.left-padding&&casterX<=bounds.right+padding&&casterY>=bounds.top-padding&&casterY<=bounds.bottom+padding);
+        }
+      }
+    }
+  }
+  assert.equal(cityCasterPadding({width:702,height:580,elevation:25*Math.PI/180,fov:60,projection:'perspective'},1),Infinity);
 });
 
 test('旋转及两种投影下，WASD仍沿画面方向移动而非固定世界轴',()=>{

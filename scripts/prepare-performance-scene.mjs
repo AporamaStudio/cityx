@@ -22,9 +22,9 @@ source+=`
 const perfArgs=new URLSearchParams(location.search),perfOutput=document.createElement('pre'),perfButton=document.createElement('button');
 perfOutput.id='performanceOutput';perfButton.id='performanceRun';perfButton.textContent='运行旋转性能对照';
 Object.assign(perfOutput.style,{position:'fixed',left:'12px',bottom:'112px',zIndex:2000,background:'#fff',color:'#111',maxHeight:'300px',maxWidth:'700px',overflow:'auto',fontSize:'11px'});
-Object.assign(perfButton.style,{position:'fixed',left:'12px',bottom:'80px',zIndex:2000});document.body.append(perfButton,perfOutput);
+Object.assign(perfButton.style,{position:'fixed',left:'12px',bottom:'80px',zIndex:2000});const perfDetails=document.createElement('details'),perfSummary=document.createElement('summary');perfSummary.textContent='性能结果';Object.assign(perfDetails.style,{position:'fixed',left:'12px',bottom:'114px',zIndex:2000});perfDetails.append(perfSummary,perfOutput);document.body.append(perfButton,perfDetails);
 let perfRun=null;const originalPaintMap=paintMap;
-paintMap=function(){const start=performance.now(),result=originalPaintMap();if(perfRun&&performance.now()>=perfRun.measureAt)perfRun.frames.push({at:performance.now(),cpu:performance.now()-start});return result;};
+paintMap=function(){const start=performance.now(),result=originalPaintMap();if(perfRun){const frame={at:performance.now(),cpu:performance.now()-start};perfRun.allFrames.push(frame);if(perfRun.waitReady&&!perfRun.readyAt&&city3D.isPrepared()){perfRun.readyAt=performance.now();perfRun.measureAt=perfRun.readyAt+3000;}if(performance.now()>=perfRun.measureAt)perfRun.frames.push(frame);}return result;};
 const timings={};
 for(const key of ['render','renderFacilities','observationFrame']){const original=city3D[key];city3D[key]=function(...args){const start=performance.now(),result=original.apply(this,args);if(perfRun&&performance.now()>=perfRun.measureAt)(timings[key]??=[]).push(performance.now()-start);return result;};}
 perfButton.onclick=()=>{
@@ -33,12 +33,12 @@ perfButton.onclick=()=>{
   zoom=whole?1:cell/base;panX=width/2-(anchor[0]+.5)*base*zoom;panY=height/2-(anchor[1]-10)*base*zoom;
   $('showFog').checked=perfArgs.get('benchFog')!=='0';update();
   for(const key of Object.keys(timings))delete timings[key];
-  const started=performance.now();perfRun={measureAt:started+3000,frames:[]};let last=started;
+  const started=performance.now(),waitReady=perfArgs.get('benchWaitReady')==='1';perfRun={measureAt:waitReady?Infinity:started+3000,waitReady,frames:[],allFrames:[]};let last=started;
   const tick=now=>{
     rotateView((now-last)*.6/1000,0);last=now;
-    if(now-started<15000){requestAnimationFrame(tick);return;}
-    const frames=perfRun.frames,intervals=frames.slice(1).map((f,i)=>f.at-frames[i].at).sort((a,b)=>a-b),summary=values=>({mean:values.reduce((s,n)=>s+n,0)/values.length,p95:[...values].sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1]});
-    const result={size:SIZE,area,fog:$('showFog').checked,width,height,cell:base*zoom,frames:frames.length,fps:(frames.length-1)*1000/(frames.at(-1).at-frames[0].at),intervalMs:summary(intervals),cpuMs:summary(frames.map(f=>f.cpu)),sections:Object.fromEntries(Object.entries(timings).map(([k,v])=>[k,summary(v)])),groups:JSON.parse(document.body.dataset.performanceGroups??'{}'),stats:$('renderStats').title};
+    if((perfRun.waitReady?performance.now()<perfRun.measureAt+12000:now-started<15000)&&performance.now()-started<90000){requestAnimationFrame(tick);return;}
+    const frames=perfRun.frames,intervals=frames.slice(1).map((f,i)=>f.at-frames[i].at).sort((a,b)=>a-b),summary=values=>({mean:values.length?values.reduce((s,n)=>s+n,0)/values.length:null,p95:[...values].sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1]});
+    const result={size:SIZE,area,fog:$('showFog').checked,width,height,cell:base*zoom,firstFrameMs:perfRun.allFrames[0]?.at-started,readyMs:perfRun.readyAt?perfRun.readyAt-started:null,maxDrawMs:Math.max(...perfRun.allFrames.map(f=>f.cpu)),frames:frames.length,fps:frames.length>1?(frames.length-1)*1000/(frames.at(-1).at-frames[0].at):null,intervalMs:summary(intervals),cpuMs:summary(frames.map(f=>f.cpu)),sections:Object.fromEntries(Object.entries(timings).map(([k,v])=>[k,summary(v)])),groups:JSON.parse(document.body.dataset.performanceGroups??'{}'),stats:$('renderStats').title};
     perfOutput.textContent=JSON.stringify(result,null,2);perfRun=null;perfButton.disabled=false;
   };requestAnimationFrame(tick);
 };

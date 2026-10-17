@@ -156,3 +156,25 @@ test('品质地标共享原索引几何与PBR贴图，米制缩放不按地块�
   const clone=object.children[0].children[0];assert.strictEqual(clone.geometry,geometry);assert.notStrictEqual(clone.material,material);assert.strictEqual(clone.material.normalMap,normalMap);assert.equal(clone.material.metalness,.3);
   assert.ok(geometry.index);assert.deepEqual(new THREE.Box3().setFromObject(object).getCenter(new THREE.Vector3()).toArray(),[120,.75,117.5]);
 });
+
+test('废墟合批保留世界几何、颜色和原地块屋顶拾取，数组共享且重复合批不重复染色',async()=>{
+  const {batchStaticPlots}=await loadBrowserModule('city-static-batch.js');
+  const make=(x,color)=>{const root=new THREE.Group(),material=new THREE.MeshStandardMaterial({color,roughness:.95}),mesh=new THREE.Mesh(new THREE.BoxGeometry(2,4,3).toNonIndexed(),material);root.position.set(x,2,10);root.add(mesh);root.updateMatrixWorld(true);return root;};
+  const a=make(20,'#a5b698'),b=make(24,'#b3a784'),bounds=new THREE.Box3().setFromObject(a),color=a.children[0].material.color.clone(),ray=new THREE.Raycaster(new THREE.Vector3(20,30,10),new THREE.Vector3(0,-1,0));
+  const first=batchStaticPlots([a,b]);assert.equal(first.children.length,1);assert.equal(first.children[0].geometry.attributes.position.count,72);assert.equal(first.children[0].castShadow,true);
+  assert.ok(new THREE.Box3().setFromObject(a).equals(bounds));assert.equal(ray.intersectObject(a,true)[0].point.y,4);
+  const source=a.children[0].geometry,merged=first.children[0].geometry;
+  assert.equal(source.attributes.position.array.buffer,merged.attributes.position.array.buffer);assert.deepEqual([...merged.attributes.color.array.slice(0,3)],[...new Float32Array([color.r,color.g,color.b])]);
+  const before=[...source.attributes.position.array],colors=[...source.attributes.color.array],second=batchStaticPlots([a]);
+  assert.deepEqual([...source.attributes.position.array],before);assert.deepEqual([...source.attributes.color.array],colors);assert.equal(ray.intersectObject(a,true)[0].point.y,4);
+  assert.equal(second.children[0].geometry.attributes.position.count,36);assert.equal(first.userData.citySharedTextures,true);
+});
+
+test('同源铺装合批保留各楼重复纹理尺度，退出合批后原网格仍保持相同UV',async()=>{
+  const {batchStaticPlots}=await loadBrowserModule('city-static-batch.js'),image={width:128,height:128};
+  const make=repeat=>{const root=new THREE.Group(),map=new THREE.Texture(image);map.wrapS=map.wrapT=THREE.RepeatWrapping;map.repeat.set(repeat,repeat+1);const mesh=new THREE.Mesh(new THREE.PlaneGeometry(2,2).toNonIndexed(),new THREE.MeshStandardMaterial({map}));root.add(mesh);return root;};
+  const a=make(3),b=make(5),root=batchStaticPlots([a,b]);assert.equal(root.children.length,1);
+  assert.equal(root.children[0].material.map.repeat.x,1);assert.equal(a.children[0].material.map.repeat.x,1);
+  assert.equal(Math.max(...a.children[0].geometry.attributes.uv.array),4);assert.equal(Math.max(...b.children[0].geometry.attributes.uv.array),6);
+  const uv=[...b.children[0].geometry.attributes.uv.array];batchStaticPlots([b]);assert.deepEqual([...b.children[0].geometry.attributes.uv.array],uv);
+});

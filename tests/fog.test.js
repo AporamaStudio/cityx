@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {drawFog,fogTransitionActive,cloudStrength} from '../src/fog.js';
+import {drawFog,fogTransitionActive,cloudStrength,fogRasterBounds} from '../src/fog.js';
 import {createVisibility} from '../src/visibility.js';
 
 // 记录真实绘制函数生成的静态/动态遮罩，测试信息层级，不测试云纹形状。
@@ -88,4 +88,15 @@ test('远处实时揭示形成局部S1薄雾，撤回后立即回浓雾且保留
   assert.equal(alpha(26.5,5.5),0);assert.ok(alpha.veil(26.5,5.5)>0&&alpha.veil(26.5,5.5)<=77);
   sight.clear();block(sight,3,3,8,8);alpha=render(controlled,explored,601,0,0,2,3,3,sight);
   assert.equal(alpha(26.5,5.5),255);assert.equal(alpha.veil(26.5,5.5),255);assert.ok(explored.has(id(26,5)));
+});
+
+test('局部雾纹只裁剪绘制窗口，保留4像素精度和原世界遮罩；越界不会生成负尺寸',()=>{
+  const visibility=createVisibility(size,new Set([id(10,10)]),new Set([id(10,10)]),3,3),explored=new Set(),ctx=new CanvasStub().ctx;
+  drawFog(ctx,visibility,explored,0,800,3,0,2);const fullMask=ctx.last.image.ctx.mask;
+  const area={left:8,top:9,right:20,bottom:22},cropped=new CanvasStub().ctx;drawFog(cropped,visibility,explored,0,800,3,0,2,area);
+  assert.equal(cropped.last.image.width,48);assert.equal(cropped.last.image.height,52);assert.equal(cropped.last.image.ctx.mask,fullMask);
+  assert.deepEqual(cropped.last.rect,[8,9,12,13]);assert.equal(cropped.images[0],ctx.images[0]);
+  for(const viewport of [{left:-999,right:-900,top:-999,bottom:-900},{left:900,right:999,top:900,bottom:999},{left:4,right:12,top:6,bottom:15}]){
+    const bounds=fogRasterBounds(visibility,viewport);assert.ok(bounds.right>bounds.left&&bounds.bottom>bounds.top);assert.ok(bounds.left>=-visibility.border&&bounds.right<=size+visibility.border);
+  }
 });

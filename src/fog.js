@@ -10,6 +10,13 @@ export const fogColor=night=>`rgb(${blend([198,210,212],[52,68,93],night).join('
 // 全城只减弱过渡带的云纹，远处浓云始终完整，不因缩放透出整座城市。
 export const cloudStrength=zoom=>.68+.32*smooth(Math.max(0,Math.min(1,(zoom-1)/2)));
 
+// 保持每格4像素，只裁掉当前镜头及高楼/阴影余量之外不会采样的雾纹。
+export function fogRasterBounds(visibility,viewport,padding=16){
+  const min=-visibility.border,max=visibility.size+visibility.border;
+  const left=Math.max(min,Math.min(max-1,Math.floor((viewport.left-padding)/16)*16)),top=Math.max(min,Math.min(max-1,Math.floor((viewport.top-padding)/16)*16));
+  return {left,top,right:Math.max(left+1,Math.min(max,Math.ceil((viewport.right+padding)/16)*16)),bottom:Math.max(top+1,Math.min(max,Math.ceil((viewport.bottom+padding)/16)*16))};
+}
+
 function surface(width,height=width){
   const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;
 }
@@ -90,7 +97,7 @@ function updateField(visibility,explored,time){
   if(field?.visibility===visibility&&field.explored===explored)return;
   const {size,span,n,border,flags,cloud:target,veil:veilTarget}=visibility;
   const previous=field&&field.size===size&&field.n===n&&field.explored===explored?field:null;
-  const mask=previous?.mask??surface(n),layer=previous?.layer??surface(n),veil=previous?.veil??surface(n);
+  const mask=previous?.mask??surface(n),layer=previous?.layer??surface(1),veil=previous?.veil??surface(n);
   const from=previous?new Float32Array(previous.current):new Float32Array(target);
   const veilFrom=previous?new Float32Array(previous.veilCurrent):new Float32Array(veilTarget);
   // S0/S1立即保持清晰可读；外围退雾短暂过渡，失去视野立即增强遮挡。
@@ -102,7 +109,7 @@ function updateField(visibility,explored,time){
 }
 export const fogTransitionActive=()=>!!field?.until;
 
-export function drawFog(ctx,visibility,explored,night,time,cloudTime=time,dusk=0,zoom=2){
+export function drawFog(ctx,visibility,explored,night,time,cloudTime=time,dusk=0,zoom=2,bounds=null){
   updateField(visibility,explored,time);
   const f=field,t=f.until&&time?Math.min(1,(time-f.at)/.36):1,strength=cloudStrength(zoom);
   if(!f.painted||f.until||f.strength!==strength){
@@ -119,12 +126,14 @@ export function drawFog(ctx,visibility,explored,night,time,cloudTime=time,dusk=0
   }
   const color=fogColor(night);
   if(f.color!==color){const vg=f.veil.getContext('2d');vg.globalCompositeOperation='source-in';vg.fillStyle=color;vg.fillRect(0,0,f.n,f.n);vg.globalCompositeOperation='source-over';f.color=color;}
-  const g=f.layer.getContext('2d');g.setTransform(MASK_PX,0,0,MASK_PX,f.border*MASK_PX,f.border*MASK_PX);
-  g.clearRect(-f.border,-f.border,f.span,f.span);
-  drawCloudBackdrop(g,night,cloudTime,{left:-f.border,top:-f.border,right:f.size+f.border,bottom:f.size+f.border},dusk);
-  g.setTransform(1,0,0,1,0,0);g.globalCompositeOperation='destination-in';g.drawImage(f.mask,0,0);g.globalCompositeOperation='source-over';
+  const area=bounds??{left:-f.border,top:-f.border,right:f.size+f.border,bottom:f.size+f.border},w=area.right-area.left,h=area.bottom-area.top,sx=(area.left+f.border)*MASK_PX,sy=(area.top+f.border)*MASK_PX;
+  if(f.layer.width!==w*MASK_PX)f.layer.width=w*MASK_PX;if(f.layer.height!==h*MASK_PX)f.layer.height=h*MASK_PX;
+  const g=f.layer.getContext('2d');g.setTransform(MASK_PX,0,0,MASK_PX,-area.left*MASK_PX,-area.top*MASK_PX);
+  g.clearRect(area.left,area.top,w,h);
+  drawCloudBackdrop(g,night,cloudTime,area,dusk);
+  g.setTransform(1,0,0,1,0,0);g.globalCompositeOperation='destination-in';g.drawImage(f.mask,-sx,-sy);g.globalCompositeOperation='source-over';
   ctx.save();ctx.imageSmoothingEnabled=true;
   // S0清晰、S1薄雾静止、S12/S23渐入流动浓雾；全城仍保护未知地形。
-  ctx.drawImage(f.veil,-f.border,-f.border,f.span,f.span);
-  ctx.drawImage(f.layer,-f.border,-f.border,f.span,f.span);ctx.restore();
+  if(bounds)ctx.drawImage(f.veil,sx,sy,w*MASK_PX,h*MASK_PX,area.left,area.top,w,h);else ctx.drawImage(f.veil,-f.border,-f.border,f.span,f.span);
+  ctx.drawImage(f.layer,area.left,area.top,w,h);ctx.restore();
 }

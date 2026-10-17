@@ -7,7 +7,7 @@ import {addBuildingFoundation,buildingVariation} from './city-building-style.js?
 import {operatingLights} from './city-building-lights.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
 import {createUnknownCity} from './city-unknown.js?v=1';
-import {createRoadModel} from './city-road-model.js?v=3';
+import {createRoadModel} from './city-road-model.js?v=6';
 import {createNaturalModel} from './city-natural-model.js?v=8';
 import {createSurroundingModel} from './city-surrounding-model.js?v=11';
 import {updateWater} from './city-water.js?v=3';
@@ -15,7 +15,7 @@ import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {PLANT_MODELS} from './city-vegetation.js?v=2';
 import {groundGlow} from './model-preview-effects.js?v=4';
 import {createCityEffects,facilityMotion,animateFacility} from './city-effects.js?v=15';
-import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=22';
+import {createCityObservation,freezeCityTransforms} from './city-observation.js?v=24';
 import {createNightShaderWarmup} from './city-shader-warmup.js?v=3';
 import {createShaderSamples,cloneWarmupMaterial} from './city-shader-samples.js?v=1';
 import {createShotVFX,createImpactVFX} from './cannon-vfx.js?v=1';
@@ -23,6 +23,8 @@ import {createZombieCrowds} from './city-enemies.js?v=8';
 import {constructionAppearance,constructionMaskTexture,bindConstructionMask,setConstructionMask} from './city-construction-preview.js?v=1';
 import {createUpgradePreview} from './city-upgrade-preview.js?v=2';
 import {spatialChunks} from './city-spatial-cache.js?v=1';
+import {batchStaticPlots} from './city-static-batch.js?v=2';
+import {cityCasterPadding} from './city-view.js?v=6';
 
 // 城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
 const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
@@ -94,6 +96,7 @@ export function createCity3D({onReady,onProgress,onError}){
   const landmarkLoads=new Map();let visibleLandmarksPending=false;
   const models=new Map(),entries=new Map(),props=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',lastProps='',pixels='',geometryVersion=0;
   let plotInput=null,plantInput=null,plantPlots=new Map(),plantSignature='',unknownInput=null,roadInput=null;
+  const buildingBatches=new Map();let facilityViewport=null;
   let constructionEntry=null,constructionBase=null,constructionKey='';
   // 模板只读；按原模型与旋转复用实际包围盒，不改变米制缩放或楼体选型。
   const modelMeasures=new Map();let streetLightOffset=null;
@@ -137,7 +140,7 @@ export function createCity3D({onReady,onProgress,onError}){
     models.set(name,(await loader.loadAsync(resource(file))).scene);onProgress(++loaded,Object.keys(files).length);
   })).then(()=>{ready=true;onReady();}).catch(error=>{ready=false;onError(error);});
   function release(entry){
-    geometryVersion++;entry.object.removeFromParent();shaderWarmup.release(()=>{const maps=new Set();entry.object.traverse(node=>{if(node.isMesh){if(node.material.map?.userData.cityOwned)maps.add(node.material.map);node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});for(const map of maps)map.dispose();});
+    geometryVersion++;entry.object.removeFromParent();shaderWarmup.release(()=>{const maps=new Set(entry.object.userData.cityBatchTextures??[]);entry.object.traverse(node=>{if(node.isMesh){if(!entry.object.userData.citySharedTextures&&node.material.map?.userData.cityOwned)maps.add(node.material.map);node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});for(const map of maps)map.dispose();});
   }
   function build(plot,sample=false){
     if(!sample)geometryVersion++;
@@ -192,6 +195,7 @@ export function createCity3D({onReady,onProgress,onError}){
     render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,night,layout,lamps=[],dressing=[],plants=[],plantPreview=null,constructionPreview=null,naturalOccupied=[],roadCells=[],unknownPlots=[],fx}){
       if(!ready)return null;
       const geographyChanged=natureLayout!==layout||natureMeters!==cellMeters;
+      facilityViewport=lightViewport;
       if(natureLayout!==layout)effects.resetLights();
       // 只读实际设施占格；道路上的墙/塔不重建林地，悬停预览不触发整片几何更新。
       const clearCells=naturalOccupied.filter(id=>layout.tiles[id]==='open'&&layout.natural?.regions.some(r=>id%layout.width>=r.x&&id%layout.width<r.x+r.w&&Math.floor(id/layout.width)>=r.y&&Math.floor(id/layout.width)<r.y+r.h)).sort((a,b)=>a-b),nextNature=clearCells.join(',');
@@ -206,9 +210,10 @@ export function createCity3D({onReady,onProgress,onError}){
         plotInput=plots;
       }
       // 只构造镜头附近会贡献画面/阴影的细节；已访问楼体保留到其状态真正消失。
-      const intersects=p=>!lightViewport||p.x+p.w>=lightViewport.left-16&&p.x<=lightViewport.right+16&&p.y+p.h>=lightViewport.top-16&&p.y<=lightViewport.bottom+16;
-      for(const plot of plots)if(entries.has(plot.id))entries.get(plot.id).object.visible=intersects(plot);
-      plots=plots.filter(intersects);
+      const intersects=(p,padding=16)=>!lightViewport||p.x+p.w>=lightViewport.left-padding&&p.x<=lightViewport.right+padding&&p.y+p.h>=lightViewport.top-padding&&p.y<=lightViewport.bottom+padding;
+      const plotPadding=p=>cityCasterPadding(fx.view,entries.get(p.id)?.roof??(['housing','production'].includes(p.type)?24/cellMeters:8));
+      for(const plot of plots)if(entries.has(plot.id))entries.get(plot.id).object.visible=intersects(plot,plotPadding(plot));
+      plots=plots.filter(p=>intersects(p,plotPadding(p)));
       visibleLandmarksPending=false;
       for(const plot of plots){
         const landmark=landmarkById(plot.type);
@@ -226,6 +231,27 @@ export function createCity3D({onReady,onProgress,onError}){
         }
       }
       plots=plots.filter(p=>entries.has(p.id));
+      const batchPlots=new Map();
+      for(const plot of plots){
+        const entry=entries.get(plot.id),staticRuin=plot.status==='ruin'&&['housing','production'].includes(plot.type)&&plot.id!==constructionPreview?.id;
+        if(!staticRuin){entry.object.visible=true;continue;}
+        entry.object.visible=false;
+        const x=Math.floor(plot.x/16)*16,y=Math.floor(plot.y/16)*16,id=x+':'+y;
+        if(!batchPlots.has(id))batchPlots.set(id,{x,y,w:16,h:16,plots:[]});batchPlots.get(id).plots.push(plot);
+      }
+      // 块成员必须来自完整描述，镜头只开关可见性；不能随旋转拆散已有合批。
+      const allBatchPlots=new Map();
+      for(const plot of plotInput)if(plot.status==='ruin'&&['housing','production'].includes(plot.type)&&plot.id!==constructionPreview?.id&&entries.has(plot.id)){
+        const id=Math.floor(plot.x/16)*16+':'+Math.floor(plot.y/16)*16;
+        if(!allBatchPlots.has(id))allBatchPlots.set(id,[]);allBatchPlots.get(id).push(plot);
+      }
+      for(const [id,batch] of buildingBatches){batch.object.visible=batchPlots.has(id);if(!allBatchPlots.has(id)){release(batch);buildingBatches.delete(id);}}
+      for(const [id,chunk] of batchPlots){
+        const members=allBatchPlots.get(id),signature=members.map(p=>p.id+':'+entries.get(p.id).signature).join('|'),previous=buildingBatches.get(id);
+        if(previous?.signature===signature)continue;
+        const object=batchStaticPlots(members.map(p=>entries.get(p.id).object));
+        if(previous)release(previous);buildings.add(object);freezeCityTransforms(object);geometryVersion++;buildingBatches.set(id,{object,signature});
+      }
       // 仅目标/用途/新增格变化时准备一份方案；同栋移动、缩放与云雾帧复用模型。
       const plan=constructionPreview,nextConstruction=plan?`${plan.id}:${plan.type}:${plan.w}:${plan.h}:${plan.cellMeters}:${plan.cells.join(',')}`:'';
       if(constructionBase){setConstructionMask(constructionBase.planMask,null);constructionBase=null;}
@@ -342,6 +368,8 @@ export function createCity3D({onReady,onProgress,onError}){
       const active=new Set(items.map(p=>p.id));for(const [id,entry] of props)if(!active.has(id)){release(entry);props.delete(id);}
       for(const item of items){
         if(item.asset==='enemy')continue;
+        const near=!facilityViewport||item.x+(item.w??1)>=facilityViewport.left-16&&item.x-(item.w??1)<=facilityViewport.right+16&&item.y+(item.h??1)>=facilityViewport.top-16&&item.y-(item.h??1)<=facilityViewport.bottom+16;
+        if(props.has(item.id))props.get(item.id).object.visible=near;if(!near)continue;
         const shape=`${item.asset}:${item.w}:${item.h}:${item.connections??''}:${item.cellMeters??''}:${item.dead??false}:${item.color??''}`;
         if(props.get(item.id)?.signature!==shape){
           if(props.has(item.id))release(props.get(item.id));
