@@ -7,6 +7,7 @@ export const QUALITY_POIS=[
   {id:'waterworks',name:'水厂',footprint:[120,140],sheet:'02-infrastructure',description:'三座开放沉淀池、双过滤池、管桥阀门、控制楼与泵房；废弃池水积污和栏杆缺损，接通后恢复维护区照明。'},
   {id:'logistics',name:'物流中心',footprint:[140,160],sheet:'02-infrastructure',description:'多跨仓库、六处装卸月台、采光带、货车/集装箱/托盘和叉车。三态同址，接通后月台与维护照明恢复，不新增物流模拟。'},
   {id:'fire-station',name:'消防站',footprint:[60,80],sheet:'03-city-services',description:'三车位消防库、两辆消防车、值班生活翼与训练塔。废弃车库局部屋面和卷帘受损，接通后车库/入口照明恢复；车辆为静态样件。'},
-  {id:'police',name:'警察局',footprint:[80,100],sheet:'03-city-services',description:'现代公共办公楼、蓝灰玻璃入口、后勤翼与巡逻车小院。废弃版东端上层坍塌、断楼板与脏乱场地，修复与接通分开，不新增警务玩法。'}
+  {id:'police',name:'警察局',footprint:[80,100],sheet:'03-city-services',description:'现代公共办公楼、蓝灰玻璃入口、后勤翼与巡逻车小院。废弃版东端上层坍塌、断楼板与脏乱场地，修复与接通分开，不新增警务玩法。'},
+  {id:'communications',name:'通信中心',footprint:[80,100],sheet:'03-city-services',description:'设备楼、35m格构塔、板状天线与曲面卫星锅。废弃设备楼塌陷、塔身上段折弯，接通后恢复设备区及入口照明。'}
 ];
 export const poiState=state=>({ruined:'abandoned',intact:'intact',operating:'connected'})[state];
