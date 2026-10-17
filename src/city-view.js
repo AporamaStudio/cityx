@@ -73,6 +73,12 @@ export function cityCasterPadding(view,height){
   const horizontal=Math.hypot(Math.cos(elevation)+tan*Math.sin(elevation),tan*view.width/view.height);
   return 1+Math.max(0,height)*(horizontal/down+Math.hypot(1,1/6));
 }
+// 全城镜头可复用同一世界阴影；升到4096保证世界每纹素精度至少等于原2048跟随镜头。
+export function cityShadowVolume(bounds,width,height,exterior){
+  const extent=Math.max(64,Math.hypot(bounds.right-bounds.left,bounds.bottom-bounds.top)/2+16),worldExtent=Math.hypot(width+2*exterior,height+2*exterior)/2+16;
+  const stable=width>=128&&height>=128&&bounds.left<=0&&bounds.right>=width&&bounds.top<=0&&bounds.bottom>=height&&extent>=worldExtent/2;
+  return stable?{x:width/2,y:height/2,extent:worldExtent,resolution:4096,stable:true}:{x:(bounds.left+bounds.right)/2,y:(bounds.top+bounds.bottom)/2,extent,resolution:2048,stable:false};
+}
 // 绕城可完整旋转，俯仰保留25–80°，避免贴地穿楼或越过俯视翻转。
 export function orbitView(yaw,elevation,turn,tilt){
   return {yaw:((yaw+turn+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI,elevation:Math.max(25*Math.PI/180,Math.min(80*Math.PI/180,elevation+tilt))};

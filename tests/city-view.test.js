@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {projectView,groundAt,panView,keyboardPanStep,viewCenter,viewDistance,viewBounds,cityCasterPadding,observationView,orbitView} from '../src/city-view.js';
+import {projectView,groundAt,panView,keyboardPanStep,viewCenter,viewDistance,viewBounds,cityCasterPadding,cityShadowVolume,observationView,orbitView} from '../src/city-view.js';
 
 test('WASD按真实时间平移，相反方向抵消，斜向不更快，慢帧有上限',()=>{
   const one=keyboardPanStep(new Set(['KeyW']),50,480),two=keyboardPanStep(new Set(['KeyW','KeyD']),50,480);
@@ -26,6 +26,13 @@ test('离屏余量覆盖画面边缘的高楼及斜向投影，低俯角朝天�
     }
   }
   assert.equal(cityCasterPadding({width:702,height:580,elevation:25*Math.PI/180,fov:60,projection:'perspective'},1),Infinity);
+});
+
+test('全城阴影覆盖全部郊野且纹素精度不退步，普通近景和60格保留2048',()=>{
+  const a={left:-100,right:356,top:-100,bottom:356},b={left:-180,right:436,top:-180,bottom:436},first=cityShadowVolume(a,256,256,205),second=cityShadowVolume(b,256,256,205);
+  assert.equal(first.stable,true);assert.deepEqual(first,second);assert.equal(first.resolution,4096);
+  const originalExtent=Math.hypot(a.right-a.left,a.bottom-a.top)/2+16;assert.ok(first.extent/first.resolution<=originalExtent/2048);assert.ok(first.extent>=Math.hypot(666,666)/2);
+  assert.equal(cityShadowVolume({left:100,right:150,top:100,bottom:150},256,256,205).resolution,2048);assert.equal(cityShadowVolume({left:-20,right:80,top:-20,bottom:80},60,60,48).stable,false);
 });
 
 test('旋转及两种投影下，WASD仍沿画面方向移动而非固定世界轴',()=>{

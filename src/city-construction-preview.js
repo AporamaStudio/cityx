@@ -9,7 +9,7 @@ export function bindConstructionMask(object,keepSelected){
     material.onBeforeCompile=shader=>{
       previous.call(material,shader);
       Object.assign(shader.uniforms,{cityPlanActive:uniforms.active,cityPlanCells:uniforms.cells,cityPlanBounds:uniforms.bounds,cityPlanSide:uniforms.side});
-      shader.vertexShader='varying vec2 cityPlanXZ;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncityPlanXZ=(modelMatrix*vec4(transformed,1.)).xz;');
+      shader.vertexShader='varying vec2 cityPlanXZ;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvec4 cityPlanLocal=vec4(transformed,1.);\n#ifdef USE_INSTANCING\ncityPlanLocal=instanceMatrix*cityPlanLocal;\n#endif\ncityPlanXZ=(modelMatrix*cityPlanLocal).xz;');
       shader.fragmentShader='uniform float cityPlanActive;\nuniform sampler2D cityPlanCells;\nuniform vec4 cityPlanBounds;\nuniform float cityPlanSide;\nvarying vec2 cityPlanXZ;\n'+shader.fragmentShader.replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\nif(cityPlanActive>.5){vec2 planUV=(cityPlanXZ-cityPlanBounds.xy)/cityPlanBounds.zw;bool marked=all(greaterThanEqual(planUV,vec2(0.)))&&all(lessThan(planUV,vec2(1.)))&&texture2D(cityPlanCells,planUV).r>.5;if(marked!=(cityPlanSide>.5))discard;}');
     };
     material.customProgramCacheKey=()=>cacheKey+':cityx-construction-mask';material.needsUpdate=true;

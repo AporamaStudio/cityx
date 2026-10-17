@@ -12,8 +12,8 @@ export function batchStaticPlots(objects){
     object.traverse(node=>{
       if(!node.isMesh)return;
       const material=node.material,source=node.geometry;
-      const key=JSON.stringify([material.type,imageKey(material.map),material.normalMap?.uuid,material.roughness,material.metalness,material.emissive?.getHex(),material.emissiveIntensity,material.opacity,material.transparent,material.side,material.customProgramCacheKey(),Object.keys(source.attributes).filter(k=>k!=='color').sort()]);
-      if(!groups.has(key))groups.set(key,{material,sources:[],geometries:[]});
+      const key=JSON.stringify([material.type,imageKey(material.map),material.normalMap?.uuid,material.roughness,material.metalness,material.emissive?.getHex(),material.emissiveIntensity,material.opacity,material.transparent,material.side,node.castShadow,node.receiveShadow,material.customProgramCacheKey(),Object.keys(source.attributes).filter(k=>k!=='color').sort()]);
+      if(!groups.has(key))groups.set(key,{material,castShadow:node.castShadow,receiveShadow:node.receiveShadow,sources:[],geometries:[]});
       const batch=groups.get(key),geometry=source.index?source.toNonIndexed():source.clone(),count=geometry.attributes.position.count;
       geometry.applyMatrix4(node.matrixWorld);
       if(material.map&&geometry.attributes.uv){material.map.updateMatrix();geometry.attributes.uv.applyMatrix3(material.map.matrix);maps.add(material.map);}
@@ -23,11 +23,11 @@ export function batchStaticPlots(objects){
       batch.sources.push({node,count});batch.geometries.push(geometry);
     });
   }
-  for(const {material,sources,geometries} of groups.values()){
+  for(const {material,castShadow,receiveShadow,sources,geometries} of groups.values()){
     const geometry=mergeGeometries(geometries),copy=material.clone();copy.onBeforeCompile=material.onBeforeCompile;copy.customProgramCacheKey=material.customProgramCacheKey;
     if(copy.map){copy.map=copy.map.clone();copy.map.repeat.set(1,1);copy.map.offset.set(0,0);copy.map.center.set(0,0);copy.map.rotation=0;copy.map.updateMatrix();copy.map.needsUpdate=true;root.userData.cityBatchTextures.push(copy.map);}
     copy.color.set('#ffffff');copy.vertexColors=true;
-    const mesh=new THREE.Mesh(geometry,copy);mesh.castShadow=mesh.receiveShadow=true;mesh.userData.ownGeometry=true;mesh.userData.cityBatchMesh=true;root.add(mesh);
+    const mesh=new THREE.Mesh(geometry,copy);mesh.castShadow=castShadow;mesh.receiveShadow=receiveShadow;mesh.userData.ownGeometry=true;mesh.userData.cityBatchMesh=true;root.add(mesh);
     let offset=0;
     for(const {node,count} of sources){
       const source=node.geometry;source.dispose();source.setIndex(null);

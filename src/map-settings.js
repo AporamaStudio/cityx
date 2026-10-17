@@ -9,6 +9,6 @@ export const mapSearch=settings=>new URLSearchParams(Object.entries(settings).ma
 
 // 单局仍使用统一方形坐标；保留旧60格对照，避免矩形预览被静默裁成另一张图。
 export function battleMapSize(settings){
-  if(settings.width!==settings.height||![60,256].includes(settings.width))throw new Error('试玩地图支持60×60或256×256；其他尺寸请用布局预览。');
+  if(settings.width!==settings.height||![60,128,256].includes(settings.width))throw new Error('试玩地图支持60×60、128×128或256×256；其他尺寸请用布局预览。');
   return settings.width;
 }

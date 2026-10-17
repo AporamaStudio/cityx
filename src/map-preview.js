@@ -1,6 +1,6 @@
 import {drawNaturalTerrain} from './natural-terrain.js?v=6';
 import {drawBlockTexture} from './city-textures.js?v=3';
-import {readMapSettings,mapSearch} from './map-settings.js?v=4';
+import {readMapSettings,mapSearch} from './map-settings.js?v=5';
 import {generateCityMap,walkableDistances} from './city-map.js?v=15';
 const $=id=>document.getElementById(id),canvas=$('map'),ctx=canvas.getContext('2d'),viewport=$('viewport');
 let appliedSettings,map,lookup=[],scale=16,panX=0,panY=0,hover=-1,drag=null,width=0,height=0;
@@ -46,9 +46,9 @@ function generate(){
     for(const name of ['width','height','mainRoadWidth','minBlock','maxBlock','specialMin','specialMax','bankCount'])settings[name]=Number($(name).value);
     for(const name of ['special','touching','nature','landmarks'])settings[name]=$(name).checked;
     map=generateCityMap(settings);appliedSettings=settings;
-    $('play').hidden=map.width!==map.height||![60,256].includes(map.width);
+    $('play').hidden=map.width!==map.height||![60,128,256].includes(map.width);
     $('play').href=`index.html?${mapSearch(appliedSettings)}`;
-    $('playHint').textContent=$('play').hidden?'试玩支持60×60或256×256；当前尺寸仅预览。':'链接使用最后成功生成的参数，打开后开始新的一局。';
+    $('playHint').textContent=$('play').hidden?'试玩支持60×60、128×128或256×256；当前尺寸仅预览。':'链接使用最后成功生成的参数，打开后开始新的一局。';
     lookup=new Int32Array(map.width*map.height).fill(-1);
     for(const b of map.blocks)for(let y=b.y;y<b.y+b.height;y++)for(let x=b.x;x<b.x+b.width;x++)lookup[y*map.width+x]=b.id;
     const distances=walkableDistances(map),walkable=map.tiles.filter(t=>['road','open'].includes(t)).length,reachable=distances.filter(d=>d>=0).length;

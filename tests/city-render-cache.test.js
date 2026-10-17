@@ -171,7 +171,7 @@ test('品质地标共享原索引几何与PBR贴图，米制缩放不按地块�
 
 test('废墟合批保留世界几何、颜色和原地块屋顶拾取，数组共享且重复合批不重复染色',async()=>{
   const {batchStaticPlots}=await loadBrowserModule('city-static-batch.js');
-  const make=(x,color)=>{const root=new THREE.Group(),material=new THREE.MeshStandardMaterial({color,roughness:.95}),mesh=new THREE.Mesh(new THREE.BoxGeometry(2,4,3).toNonIndexed(),material);root.position.set(x,2,10);root.add(mesh);root.updateMatrixWorld(true);return root;};
+  const make=(x,color)=>{const root=new THREE.Group(),material=new THREE.MeshStandardMaterial({color,roughness:.95}),mesh=new THREE.Mesh(new THREE.BoxGeometry(2,4,3).toNonIndexed(),material);mesh.castShadow=mesh.receiveShadow=true;root.position.set(x,2,10);root.add(mesh);root.updateMatrixWorld(true);return root;};
   const a=make(20,'#a5b698'),b=make(24,'#b3a784'),bounds=new THREE.Box3().setFromObject(a),color=a.children[0].material.color.clone(),ray=new THREE.Raycaster(new THREE.Vector3(20,30,10),new THREE.Vector3(0,-1,0));
   const first=batchStaticPlots([a,b]);assert.equal(first.children.length,1);assert.equal(first.children[0].geometry.attributes.position.count,72);assert.equal(first.children[0].castShadow,true);
   assert.ok(new THREE.Box3().setFromObject(a).equals(bounds));assert.equal(ray.intersectObject(a,true)[0].point.y,4);
@@ -189,4 +189,35 @@ test('同源铺装合批保留各楼重复纹理尺度，退出合批后原网�
   assert.equal(root.children[0].material.map.repeat.x,1);assert.equal(a.children[0].material.map.repeat.x,1);
   assert.equal(Math.max(...a.children[0].geometry.attributes.uv.array),4);assert.equal(Math.max(...b.children[0].geometry.attributes.uv.array),6);
   const uv=[...b.children[0].geometry.attributes.uv.array];batchStaticPlots([b]);assert.deepEqual([...b.children[0].geometry.attributes.uv.array],uv);
+});
+
+test('重复废墟共享索引几何，保留完整三角面、米制变换、屋顶拾取和贴图/纯色差异',async()=>{
+  const {ruinInstanceTemplates,createRuinInstances}=await loadBrowserModule('city-ruin-instances.js'),template=new THREE.Group(),geometry=new THREE.BoxGeometry(2,4,3),map=new THREE.Texture({width:16,height:16});
+  const colored=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:'#997755'})),textured=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({map,side:THREE.DoubleSide}));textured.position.x=4;template.add(colored,textured);
+  const parts=ruinInstanceTemplates(template,object=>object.traverse(node=>{if(node.material?.map)node.material.color.set('#a29c87');}));assert.equal(parts.length,2);assert.ok(parts.every(p=>p.geometry.index));assert.equal(template.children[0].geometry,geometry);
+  const matrix=new THREE.Matrix4().makeTranslation(20,1,30).multiply(new THREE.Matrix4().makeScale(.5,.5,.5)),slots=[{parts,matrix,tint:'#e5ece8'}],source=createRuinInstances(slots),batch=createRuinInstances([...slots,{...slots[0],matrix:new THREE.Matrix4().makeTranslation(30,1,30)}],true);source.updateMatrixWorld(true);
+  assert.equal(source.children[0].geometry,batch.children[0].geometry);assert.equal(batch.children[0].count,2);assert.equal(batch.children[0].userData.cityBatchMesh,true);
+  assert.deepEqual(new THREE.Box3().setFromObject(source).getSize(new THREE.Vector3()).toArray(),[3,2,1.5]);
+  assert.equal(new THREE.Raycaster(new THREE.Vector3(20,10,30),new THREE.Vector3(0,-1,0)).intersectObject(source,true)[0].point.y,2);
+  const mapped=source.children.find(m=>m.material.map);assert.equal(mapped.material.map,map);assert.equal(mapped.material.side,THREE.DoubleSide);assert.deepEqual([...mapped.instanceColor.array],[1,1,1]);
+  assert.equal(parts.reduce((n,p)=>n+p.geometry.index.count/3,0),24);
+});
+
+test('精确索引逐三角面保留全部属性与顺序，不合并硬法线或不同UV',async()=>{
+  const {indexExactGeometry}=await loadBrowserModule('city-ruin-instances.js'),geometry=new THREE.BoxGeometry(2,3,4).toNonIndexed(),before=geometry.clone();indexExactGeometry(geometry);
+  assert.equal(geometry.index.count,36);assert.equal(geometry.attributes.position.count,24);
+  for(const [name,attribute] of Object.entries(before.attributes))for(let i=0;i<attribute.count;i++)for(let c=0;c<attribute.itemSize;c++)assert.equal(geometry.attributes[name].getComponent(geometry.index.getX(i),c),attribute.getComponent(i,c));
+});
+
+test('燃烧车实例保持车身染色、焦痕、碎片和四层轻烟的原世界变换，增减数量不留残影',async()=>{
+  const previous=globalThis.document;globalThis.document={createElement:()=>({getContext:()=>({createRadialGradient:()=>({addColorStop(){}}),fillRect(){}})})};
+  try{
+    const {createWreckInstances,createWreckDressing,updateWreckDressing,styleWreckBody}=await loadBrowserModule('city-wrecks.js'),template=new THREE.Group(),material=new THREE.MeshStandardMaterial({color:'#59615b'});material.name='#59615b';template.add(new THREE.Mesh(new THREE.BoxGeometry(.48,.4,.95),material));
+    const root=new THREE.Group(),renderer=createWreckInstances(root,()=>template),item={id:'a',asset:'wreck',x:20,y:30,w:.12,h:.23,angle:.7,color:'#688d9b'},time=2.1;
+    assert.equal(renderer.update([item],time,1,false),true);const meshes=root.children[0].children;assert.equal(meshes.length,9);assert.ok(meshes.every(m=>m.count===1));
+    const old=new THREE.Group();old.position.set(item.x,0,item.y);old.rotation.y=item.angle;const dressing=createWreckDressing(old,item.w,item.h);updateWreckDressing(dressing,time,1,false);old.updateMatrixWorld(true);
+    for(let k=0;k<4;k++){const actual=new THREE.Matrix4();meshes[5+k].getMatrixAt(0,actual);const expected=dressing.smoke[k].matrixWorld;actual.elements.forEach((v,i)=>assert.ok(Math.abs(v-expected.elements[i])<1e-6));assert.equal(meshes[5+k].material.opacity,dressing.smoke[k].material.opacity);}
+    const styled=template.clone(true);styled.children[0].material=material.clone();styleWreckBody(styled,item.color);const paint=new THREE.Color();meshes[0].getColorAt(0,paint);for(const key of ['r','g','b'])assert.ok(Math.abs(paint[key]-styled.children[0].material.color[key])<1e-7);
+    assert.equal(renderer.update([],time,1,false),false);assert.ok(meshes.every(m=>m.count===0));renderer.update([item],time,0,true);assert.ok(meshes.every(m=>m.count===1));
+  }finally{globalThis.document=previous;}
 });

@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {cpus,platform,arch} from 'node:os';
 // 每次进程只测一张尺寸，保证所有模块与真实主游戏共用一致的格号。
 const size=Number(process.argv[2]??256);
-if(![60,256].includes(size))throw new Error('尺寸请选择60或256');
+if(![60,128,256].includes(size))throw new Error('尺寸请选择60、128或256');
 globalThis.location={search:`?width=${size}&height=${size}`};
 const {DEFAULTS}=await import('../src/config.js');
 const {MAP_DEFAULTS}=await import('../src/map-settings.js');

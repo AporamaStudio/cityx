@@ -10,9 +10,10 @@ export function createSurroundingModel(layout,models,cellMeters=20){
     if(geometry.index){const plain=geometry.toNonIndexed();geometry.dispose();geometry=plain;}
     // 每240m分块；全局合批的大包围球会让近景仍提交整片离屏林地。
     geometry.computeBoundingBox();geometry.boundingBox.getCenter(center);
-    const material=typeof source==='string'?{color:new THREE.Color(source)}:source,key=[Math.floor(center.x/12),Math.floor(center.z/12),material.color.getHexString(),material.map?.uuid??'',abandoned].join(':');
+    const material=typeof source==='string'?{color:new THREE.Color(source)}:source,water=material.color.getHexString()==='528592',key=[Math.floor(center.x/12),Math.floor(center.z/12),water,material.map?.uuid??'',abandoned,cast].join(':');
     for(const name of Object.keys(geometry.attributes))if(!['position','normal',...(material.map?['uv']:[]),...(material.color.getHexString()==='528592'?['cityWaterDepth']:[])].includes(name))geometry.deleteAttribute(name);
-    if(!batches.has(key))batches.set(key,{geometries:[],color:material.color,map:material.map,cast,abandoned});const batch=batches.get(key);batch.geometries.push(geometry);batch.cast||=cast;
+    if(!water){const colors=new Float32Array(geometry.attributes.position.count*3);for(let i=0;i<colors.length;i+=3)colors.set([material.color.r,material.color.g,material.color.b],i);geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));}
+    if(!batches.has(key))batches.set(key,{geometries:[],water,map:material.map,cast,abandoned});const batch=batches.get(key);batch.geometries.push(geometry);
   };
   const quad=(a,b,c,d,color,depth=[0,1,0,1])=>{const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute([...a,...b,...c,...c,...b,...d],3));if(color==='#528592')geometry.setAttribute('cityWaterDepth',new THREE.Float32BufferAttribute([depth[0],depth[1],depth[2],depth[2],depth[1],depth[3]],1));geometry.computeVertexNormals();add(geometry,color);};
   const ground=(x,y)=>[x,.001+exteriorHeight(layout,land,x,y,cellMeters),y],step=2;
@@ -44,7 +45,7 @@ export function createSurroundingModel(layout,models,cellMeters=20){
   for(const building of land.buildings)place(building,true);
   for(const prop of land.props)place(prop);
   for(const batch of batches.values()){
-    const geometry=mergeGeometries(batch.geometries,false);batch.geometries.forEach(g=>g.dispose());const material=batch.color.getHexString()==='528592'?createWaterMaterial():new THREE.MeshStandardMaterial({color:batch.color,map:batch.map??null,roughness:1,side:THREE.DoubleSide});
+    const geometry=mergeGeometries(batch.geometries,false);batch.geometries.forEach(g=>g.dispose());const material=batch.water?createWaterMaterial():new THREE.MeshStandardMaterial({vertexColors:true,map:batch.map??null,roughness:1,side:THREE.DoubleSide});
     // 外围建筑只表示废弃景物；沿用城内废墟的褪色，不把林地和水面一起灰化。
     if(batch.abandoned){material.color.multiply(new THREE.Color('#a29c87'));material.emissive.set(0);}
     const previous=material.onBeforeCompile,key=material.customProgramCacheKey();material.userData.cityExterior=true;material.onBeforeCompile=shader=>{

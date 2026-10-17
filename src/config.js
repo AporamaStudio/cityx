@@ -1,5 +1,5 @@
 // 首轮实验参数；只用于快速试玩，不代表平衡结论。
-import {readMapSettings,battleMapSize} from './map-settings.js?v=4';
+import {readMapSettings,battleMapSize} from './map-settings.js?v=5';
 // 浏览器每次进入新局固定尺寸；Node历史规则检查保留60格，256格检查显式提供URL。
 export const SIZE = typeof location==='undefined'?60:battleMapSize(readMapSettings(location.search));
 export const DEFAULTS = {

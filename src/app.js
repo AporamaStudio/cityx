@@ -6,7 +6,7 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
 import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=6';
-import {createCity3D} from './city-3d.js?v=85';
+import {createCity3D} from './city-3d.js?v=89';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -22,7 +22,7 @@ import {createGameAudio} from './audio.js?v=11';
 import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=99';
 import {poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=123';
 import {generateCityMap} from './city-map.js?v=15';
-import {readMapSettings} from './map-settings.js?v=4';
+import {readMapSettings} from './map-settings.js?v=5';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
 const mapSettings=readMapSettings(location.search);
 // 尺寸由本局URL和默认地图共同决定，禁止静默覆盖预览参数。
@@ -533,6 +533,8 @@ function citySceneDescriptor(view){
   const streetDressing=[...operatingStreetProps(streetLamps,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys(),...vehicles.map(p=>key(Math.floor(p.x),Math.floor(p.y)))]),cellMeters:controlState.params.cellMeters}),...vehicles.filter(car=>car.asset!=='wreck')];
   const emptyPlots=[...view.towers.plots].filter(([,p])=>p.content.status==='empty').map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,kind:p.site.kind,role:p.site.role,status:p.content.status}));
   const debris=ruinStreetProps(cityPlots,{layout:state.layout,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
+  // 碎屑是静态街景；沿用原高度和无阴影材质，随地块修缮一起失效。
+  streetDressing.push(...debris.map(p=>({...p,angle:0,ground:0,castShadow:false,receiveShadow:false})));
   const roadCells=state.layout.tiles.flatMap((type,id)=>type==='road'&&visibleCell(id)?[id]:[]);
   const detailed=new Set(cityPlots.map(p=>p.id)),unknownPlots=state.sites.filter(p=>p.role!=='camp'&&!detailed.has(key(p.x,p.y))&&view.towers.plots.get(key(p.x,p.y)).footprint.length).map(p=>({x:p.x,y:p.y,w:p.width??p.size,h:p.height??p.size}));
   return {cityPlots,streetLamps,wrecks,streetDressing,emptyPlots,debris,roadCells,unknownPlots};
@@ -748,7 +750,7 @@ function paintMap() {
   const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,campWidth,campWidth,{dead:state.hp<=0});
   const campPlot=state.sites.find(p=>p.role==='camp');if(campPlot)prop('camp-plaza','plaza',campPlot.x+(campPlot.width??campPlot.size)/2,campPlot.y+(campPlot.height??campPlot.size)/2,campPlot.width??campPlot.size,campPlot.height??campPlot.size);
   for(const source of displayedEnemySources()){const w=source.width??1,h=source.height??1;prop('source:'+sourceIdentity(source),source.hp===0?'sourceRuined':'source',(source.bx??source.x)+w/2,(source.by??source.y)+h/2,w*.72,h*.72,{dead:source.hp===0,roof:city3D?.baseAt(source.site)??0});}
-  facilityItems.push(...wrecks,...debris);
+  facilityItems.push(...wrecks);
   for(const frame of enemyFrames)if(frame.alpha>0){
     const action=motion?.actions.get(enemyKey(frame.enemy))??frame.enemy,attacking=action.attackType==='wall'&&state.wallHealth.get(action.attackId)?.hp>0,wall=attacking?xy(action.attackId):null;
     const screen=projectView(frame.x+.5,frame.y+.5,.05,effectView),margin=Math.max(32,viewPixelScale(frame.x+.5,frame.y+.5,.05,effectView)*.55);
