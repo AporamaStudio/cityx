@@ -1,3 +1,4 @@
+import {civilianPoses} from './civilization-visuals.js?v=1';
 import {landmarkById} from './city-landmarks.js?v=1';
 import {createLandmarkModel,createRailwayModel} from './city-landmark-model.js?v=126';
 import * as THREE from 'three';
@@ -91,6 +92,24 @@ export function createCity3D({onReady,onProgress,onError}){
   let railway=new THREE.Group();scene.add(railway);
   let nature=new THREE.Group(),natureLayout=null,natureMeters=0,natureKey='';scene.add(nature);
   let exterior=new THREE.Group();scene.add(exterior);
+  // 米制生活人物复用三组合批几何，仅渲染已接通且在镜头附近的院落活动。
+  let residentCapacity=0,residentMeshes=[];const residentMatrix=new THREE.Object3D();
+  function updateResidents(plots,fx,view,meters,night){
+    const poses=civilianPoses(plots,{time:fx.reducedMotion?0:fx.time,night,perPlot:fx.upgradeStyle.civilianFiguresPerBuilding,cellMeters:meters,view});
+    if(poses.length>residentCapacity){
+      for(const m of residentMeshes){streets.remove(m);m.geometry.dispose();m.material.dispose();}
+      residentCapacity=2**Math.ceil(Math.log2(Math.max(1,poses.length)));
+      residentMeshes=[new THREE.InstancedMesh(new THREE.BoxGeometry(.48,.72,.3),new THREE.MeshStandardMaterial({color:'#4f7772',roughness:1}),residentCapacity),new THREE.InstancedMesh(new THREE.SphereGeometry(.14,6,5),new THREE.MeshStandardMaterial({color:'#c99d78',roughness:1}),residentCapacity),new THREE.InstancedMesh(new THREE.BoxGeometry(.14,.72,.16),new THREE.MeshStandardMaterial({color:'#4d514c',roughness:1}),residentCapacity*2)];
+      for(const m of residentMeshes){m.frustumCulled=false;streets.add(m);}
+    }
+    residentMeshes.forEach((m,index)=>{m.count=poses.length*(index===2?2:1);});
+    poses.forEach((p,i)=>{
+      const put=(mesh,index,x,h,z)=>{residentMatrix.position.set(x,p.ground+h/meters,z);residentMatrix.scale.setScalar(1/meters);residentMatrix.updateMatrix();mesh.setMatrixAt(index,residentMatrix.matrix);};
+      put(residentMeshes[0],i,p.x,1.13,p.y);put(residentMeshes[1],i,p.x,1.65,p.y);
+      put(residentMeshes[2],i*2,p.x-.12/meters,.38+p.step*meters,p.y);put(residentMeshes[2],i*2+1,p.x+.12/meters,.38-p.step*meters,p.y);
+    });
+    for(const m of residentMeshes)m.instanceMatrix.needsUpdate=true;
+  }
   const localLights=[];
   const effects=createCityEffects(scene);
   const pointGrid=createCityPointGrid();
@@ -211,6 +230,7 @@ export function createCity3D({onReady,onProgress,onError}){
     },
     render(plots,{width,height,panX,panY,cell,cellMeters,lightBudget=24,lightViewport,ruinBatch=true,pointGridEnabled=true,worldShadow=true,night,layout,lamps=[],dressing=[],plants=[],plantPreview=null,constructionPreview=null,naturalOccupied=[],roadCells=[],unknownPlots=[],fx}){
       if(!ready)return null;
+      updateResidents(plots,fx,lightViewport,cellMeters,night);
       // 只在切换实验路径时重建实际楼体；跨帧不能让两套几何重叠或拾取旧对象。
       if(ruinBatchEnabled!==ruinBatch){
         for(const entry of entries.values())release(entry);entries.clear();

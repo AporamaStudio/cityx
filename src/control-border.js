@@ -62,3 +62,11 @@ export function drawControlBorderLegend(canvas,params,mix){
   paintBands(ctx,boundary,inside,{left:0,top:0,width:3.5,height:2.75},params,mix);
   drawControlBorderLine(ctx,boundary,canvas.width/3.5,{...params,controlBorderLinePx:params.controlBorderLinePx*2},mix);
 }
+
+// 暖色文明线只表达运营范围，不表现物理屏障；控制线仍独立保留。
+export function drawCivilizationBorderLine(ctx,path,cellPx,params,mix){
+  if(!params.civilBorderLinePx||!params.civilBorderOpacity)return;
+  ctx.save();ctx.globalAlpha=params.civilBorderOpacity/100;ctx.setLineDash([6/cellPx,4/cellPx]);ctx.lineJoin='round';
+  ctx.strokeStyle='#4b3928';ctx.lineWidth=(params.civilBorderLinePx+2)/cellPx;ctx.stroke(path);
+  ctx.strokeStyle=color([203,149,69],[255,218,134],mix);ctx.lineWidth=params.civilBorderLinePx/cellPx;ctx.stroke(path);ctx.restore();
+}

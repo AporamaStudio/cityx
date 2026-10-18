@@ -1,5 +1,5 @@
 // 云雾与移动敌人共用区域场；只在控制、实时视野或雾带宽度变化时重建。
-import {DEFAULTS} from './config.js?v=101';
+import {DEFAULTS} from './config.js?v=103';
 export const VISIBILITY_PX=4;
 // 包住同比增长的外围过渡及远雾；与郊野几何共用，不能让大地图的渐变被48格裁断。
 export const exteriorFogExtent=size=>Math.max(48,Math.ceil(size*.8));

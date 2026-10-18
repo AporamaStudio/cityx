@@ -37,3 +37,10 @@ test('银行可提前修复，文明接入才授信，停业不丢投资和债�
  s.debugGold-=funds(s)+20;s.debtInterestCap=100;s.params.campCivilRadius=1;revealControl(s);
  assert.equal(bankFinance(s).capacity,0);assert.equal(bankFinance(s).interest,-2);assert.ok(s.banks.has(bank));assert.equal(buildingStatus(s,bank),'repaired');
 });
+
+test('文明边界不切开整栋建筑，生活与边界参数仅改变表现',()=>{
+ const s=district();s.params.campCivilRadius=1;const absent=civilizationMask(s);assert.ok(!absent.has(key(17,24)));
+ s.params.campCivilRadius=4;const mask=civilizationMask(s);for(const id of [key(17,24),key(18,24),key(17,25),key(18,25)])assert.ok(mask.has(id));
+ const before=rawControlMask(s);for(const civilianFiguresPerBuilding of [0,2,6]){assert.equal(validateParams({...s.params,civilianFiguresPerBuilding},s,false),'');assert.deepEqual(rawControlMask(s),before);}
+ assert.match(validateParams({...s.params,civilianFiguresPerBuilding:7},s,false),/生活人数/);
+});

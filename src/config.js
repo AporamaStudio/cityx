@@ -35,6 +35,7 @@ export const DEFAULTS = {
   // 两条倍率分界划分远/中/近景；报价另按实际空间保住可读字号。
   mapMidZoomPercent: 160, mapNearZoomPercent: 300,
   // 控制边缘内侧明显、外侧轻薄；宽度按格、强度按百分比，仅改变表现。
+  civilBorderLinePx:2, civilBorderOpacity:85, civilianFiguresPerBuilding:2,
   controlBorderInnerCells:0.5, controlBorderOuterCells:0.5,
   controlBorderInnerOpacity:36, controlBorderOuterOpacity:10, controlBorderLinePx:3,
   // 升级定位保留真实建筑；光流仅当前目标播放，米制高度不随地块大小放大。
@@ -94,7 +95,7 @@ export const DEFAULTS = {
 
 
 // 视觉实验独立应用的白名单；不能借此修改战斗、经济或控制参数。
-export const VISUAL_PARAM_KEYS = [...LARGE_CITY_OPTIMIZATION_KEYS,'cellMeters', 'mapMaxCellPx', 'obliqueElevationDegrees', 'obliqueProjection', 'obliquePerspectiveFovDegrees', 'freeProjection', 'freePerspectiveFovDegrees', 'keyboardPanSpeedPx', 'returnToTopOnAction', 'streetLightBudget', 'enemyFiguresPerGroup', 'showRenderStats', 'fireNumbersMinCellPx', 'mapMidZoomPercent', 'mapNearZoomPercent', 'controlBorderInnerCells', 'controlBorderOuterCells', 'controlBorderInnerOpacity', 'controlBorderOuterOpacity', 'controlBorderLinePx', 'upgradeFlowHeightMeters', 'upgradeFlowMinPx', 'upgradeFlowCycleMs', 'upgradeFlowOpacity', 'poiMarkerMinSizePx', 'poiMarkerSizePx', 'poiMarkerBorderPx', 'poiMarkerRouteOpacity', 'poiMarkerNightOpacity', 'cloudSpeedMultiplier', 'fogS12', 'fogS23', 'exteriorFogTransitionPercent', 'exteriorFogClearPercent', 'exteriorFogFarOpacity', 'enemyFogFadeCells', 'campWarningPercent', 'nightIdleTransitionMs', 'incomeReportMs', 'resourceHoverMs', 'resourceHoverTolerancePx'];
+export const VISUAL_PARAM_KEYS = [...LARGE_CITY_OPTIMIZATION_KEYS,'cellMeters', 'mapMaxCellPx', 'obliqueElevationDegrees', 'obliqueProjection', 'obliquePerspectiveFovDegrees', 'freeProjection', 'freePerspectiveFovDegrees', 'keyboardPanSpeedPx', 'returnToTopOnAction', 'streetLightBudget', 'enemyFiguresPerGroup', 'showRenderStats', 'fireNumbersMinCellPx', 'mapMidZoomPercent', 'mapNearZoomPercent', 'civilBorderLinePx','civilBorderOpacity','civilianFiguresPerBuilding','controlBorderInnerCells', 'controlBorderOuterCells', 'controlBorderInnerOpacity', 'controlBorderOuterOpacity', 'controlBorderLinePx', 'upgradeFlowHeightMeters', 'upgradeFlowMinPx', 'upgradeFlowCycleMs', 'upgradeFlowOpacity', 'poiMarkerMinSizePx', 'poiMarkerSizePx', 'poiMarkerBorderPx', 'poiMarkerRouteOpacity', 'poiMarkerNightOpacity', 'cloudSpeedMultiplier', 'fogS12', 'fogS23', 'exteriorFogTransitionPercent', 'exteriorFogClearPercent', 'exteriorFogFarOpacity', 'enemyFogFadeCells', 'campWarningPercent', 'nightIdleTransitionMs', 'incomeReportMs', 'resourceHoverMs', 'resourceHoverTolerancePx'];
 
 // 十五晚实验：前五晚保留原节奏，后十晚逐步增加强度；参数仍须真人试玩。
 const OPENING_WAVES = [

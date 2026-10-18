@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS, LARGE_CITY_OPTIMIZATION_KEYS } from './config.js?v=101';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS, LARGE_CITY_OPTIMIZATION_KEYS } from './config.js?v=103';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -375,7 +375,12 @@ function connectedOutposts(state){
 }
 // 文明覆盖只与控制求交，不授予额外施工权限。
 export function civilizationCoverage(state,id){return state.hp>0&&inStationRange(id,state.camp,state.params.campCivilRadius);}
-export function civilizationMask(state,controlled=controlMask(state)) {return new Set([...controlled].filter(id=>civilizationCoverage(state,id)));}
+export function civilizationMask(state,controlled=controlMask(state)) {
+  const mask=new Set([...controlled].filter(id=>civilizationCoverage(state,id)));
+  // 建筑按同一中心整栋接入，表现边界绕楼走，不在楼里切出半栋文明。
+  for(const p of state.sites){const id=key(p.x,p.y),cells=buildingCells(state,id),active=buildingCivilized(state,id);for(const cell of cells)if(active&&controlled.has(cell))mask.add(cell);else mask.delete(cell);}
+  return mask;
+}
 export function buildingCivilized(state,id){
   const p=productionSite(id,state);if(!p||!productionControlled(state,id))return false;
   return civilizationCoverage(state,key(p.x+Math.floor((p.width??p.size)/2),p.y+Math.floor((p.height??p.size)/2)));
@@ -665,6 +670,7 @@ export function validateVisualParams(params){
   if(!['controlBorderInnerCells','controlBorderOuterCells'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=2))return '控制边缘内/外渐隐宽度须为 0–2 格，0 关闭，可使用小数。';
   if(!integer(params.controlBorderInnerOpacity,0,60)||!integer(params.controlBorderOuterOpacity,0,60))return '控制边缘内/外色带强度须为 0–60% 整数。';
   if(!Number.isFinite(params.controlBorderLinePx)||params.controlBorderLinePx<1||params.controlBorderLinePx>6)return '控制边缘主线粗细须为 1–6 像素，可使用小数。';
+  if(!integer(params.civilBorderLinePx,0,6)||!integer(params.civilBorderOpacity,0,100)||!integer(params.civilianFiguresPerBuilding,0,6))return '文明线宽0–6、强度0–100%、每栋生活人数0–6，均为整数。';
   if(!integer(params.poiMarkerSizePx,32,80)||!integer(params.poiMarkerMinSizePx,32,params.poiMarkerSizePx)||!integer(params.poiMarkerBorderPx,2,6))return 'POI标牌最小/最大尺寸须为32–80像素整数且最小≤最大，边框须为2–6像素整数。';
   if(!integer(params.poiMarkerRouteOpacity,0,100)||!integer(params.poiMarkerNightOpacity,0,100))return 'POI标牌不透明度须为0–100%整数。';
   if(!Number.isFinite(params.upgradeFlowHeightMeters)||params.upgradeFlowHeightMeters<0||params.upgradeFlowHeightMeters>12)return '升级光流高度须为0–12米，0关闭光幕。';

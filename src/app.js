@@ -6,7 +6,7 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
 import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=6';
-import {createCity3D} from './city-3d.js?v=93';
+import {createCity3D} from './city-3d.js?v=95';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
@@ -18,11 +18,11 @@ import {createTowerOverlayCache} from './tower-overlay.js?v=26';
 import {roadMarkings} from './city-roads.js?v=1';
 import {createCityLoading} from './city-loading.js?v=1';
 import {cameraScale,limitZoom,limitPan,limitObservationPan} from './map-camera.js?v=4';
-import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
+import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend,drawCivilizationBorderLine} from './control-border.js?v=3';
 import {poiBadgeSVG,drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=15';
 import {createGameAudio} from './audio.js?v=11';
-import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=101';
-import {buildingStatus,buildingCivilized,housingResidents,hospitalActive,poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=126';
+import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=103';
+import {civilizationMask,watchRadius,buildingStatus,buildingCivilized,housingResidents,hospitalActive,poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=128';
 import {generateCityMap} from './city-map.js?v=15';
 import {readMapSettings} from './map-settings.js?v=6';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -510,13 +510,15 @@ function mapDisplay(){
     const boundary=controlBoundary(controlled),boundaryPath=new Path2D(),controlPath=new Path2D();
     for(const [a,b,c,d] of boundary){boundaryPath.moveTo(a,b);boundaryPath.lineTo(c,d);}
     for(const id of controlled){const [x,y]=xy(id);controlPath.rect(x,y,1,1);}
-    mapView={controlState,raw,controlled,boundary,boundaryPath,controlPath,visibility:(params.largeCityFog?createVisibility:createReferenceVisibility)(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells,params),dirty:paramsDirty(),
+    const civil=civilizationMask(controlState,controlled),civilBoundary=controlBoundary(civil),civilPath=new Path2D();
+    for(const [a,b,c,d] of civilBoundary){civilPath.moveTo(a,b);civilPath.lineTo(c,d);}
+    mapView={controlState,raw,controlled,boundary,boundaryPath,controlPath,civil,civilBoundary,civilPath,visibility:(params.largeCityFog?createVisibility:createReferenceVisibility)(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells,params),dirty:paramsDirty(),
       towers:towerOverlayCache.get(state,controlled,new Set(motion?.actors.map(e=>e.to))),
       controlBorder:controlBorderTexture(SIZE,controlled,boundaryPath,controlPath,params),
       sourceSites:new Set([...state.enemySources.values()].map(s=>s.site)),
       sourceFootprint:new Set([...state.enemySources.values()].flatMap(sourceCells))};
     const vision=visionField(controlState),range=params.outpostRadius+params.outpostS01*(state.phase==='build'?params.daySightMultiplier:params.nightSightMultiplier)*params.eventSightMultiplier+2;
-    mapView.searchVision=vision;mapView.searchSectors=new Map([...state.outposts.keys()].map(id=>[id,searchTargets(id,controlled,vision,range,outpostFrontier(id,params.outpostRadius,controlled))]));
+    mapView.searchVision=vision;mapView.searchSectors=new Map([...state.outposts.keys()].map(id=>[id,searchTargets(id,controlled,vision,range,outpostFrontier(id,watchRadius(controlState,id),controlled))]));
   }
   return mapView;
 }
@@ -529,7 +531,7 @@ function cannonSoundView(id){
 // 静态城市描述随游戏状态更新一次；镜头和动效帧只消费结果。
 function citySceneDescriptor(view){
   const {controlled,controlState}=view;
-  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.landmark??(['hospital','bank'].includes(p.site.role)?p.site.role:p.content.type),status:p.content.status,upgrade:state.banks.get(id)?.upgrade??null,powered:p.controlled&&(hospitalActive(state,id)||state.production.has(id)&&productionActive(state,id)||state.housing.has(id)&&buildingCivilized(state,id)||bankActive(state,id)),cellMeters:controlState.params.cellMeters}));
+  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:p.site.landmark??(['hospital','bank'].includes(p.site.role)?p.site.role:p.content.type),status:p.content.status,civilState:buildingStatus(state,id),upgrade:state.banks.get(id)?.upgrade??null,powered:p.controlled&&(hospitalActive(state,id)||state.production.has(id)&&productionActive(state,id)||state.housing.has(id)&&buildingCivilized(state,id)||bankActive(state,id)),cellMeters:controlState.params.cellMeters}));
   const streetLamps=operatingStreetLamps(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
   const vehicles=streetVehicles(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys()]),lamps:streetLamps,cellMeters:controlState.params.cellMeters}),wrecks=vehicles.filter(car=>car.asset==='wreck');
   const streetDressing=[...operatingStreetProps(streetLamps,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys(),...vehicles.map(p=>key(Math.floor(p.x),Math.floor(p.y)))]),cellMeters:controlState.params.cellMeters}),...vehicles.filter(car=>car.asset!=='wreck')];
@@ -733,7 +735,7 @@ function paintMap() {
   const effectView=cameraView();
   defenseHits=defenseHits.filter(hit=>effectTime-hit.at<.65&&currentlyVisible(hit.cell));
   const fx={view:effectView,upgrades,upgradeStyle:controlState.params,hazeColor:backdrop,defenseHits:reducedMotion.matches||state.phase!=='battle'?[]:defenseHits.map(hit=>({...hit,ground:naturalGroundAt(state.layout,hit.x,hit.y,controlState.params.cellMeters),alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),night:nightMix,enemyFiguresPerGroup:controlState.params.enemyFiguresPerGroup,cameraKey:JSON.stringify(effectView),time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),pixelsAt:(x,y,z)=>viewPixelScale(x,y,z,effectView),reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
-  for(const id of state.outposts.keys())if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5,y:y+.5,w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
+  for(const [id,post] of state.outposts)if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5+(post.starter?.32:0),y:y+.5+(post.starter?.32:0),w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
   const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
   const plantKey=(hover!==null&&tool==='wall'?'wall:'+hover:'')+(postGhost?'post:'+hover:'');
   if(view.plantKey!==plantKey){
@@ -747,7 +749,7 @@ function paintMap() {
   const facilityItems=[];
   const prop=(id,asset,x,y,w=.86,h=.86,extra={})=>facilityItems.push({id,asset,x,y,w,h,roof:naturalGroundAt(state.layout,x,y,controlState.params.cellMeters),...extra});
   for(const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])])if(currentlyVisible(id)){const [x,y]=xy(id),plot=productionId(id,state);prop('tower:'+id,type==='B'?'far':'near',x+.5,y+.5,(type==='B'?3:4)/controlState.params.cellMeters,(type==='B'?6:5)/controlState.params.cellMeters,{alpha:ghost&&id===hover?.45:1,roof:city3D?.roofAt(plot,x+.5,y+.5)??0});}
-  for(const [id,p] of previewState.outposts)if(currentlyVisible(id)){const [x,y]=xy(id);prop('post:'+id,'watch',x+.5,y+.5,5.2/controlState.params.cellMeters,5.2/controlState.params.cellMeters,{alpha:postGhost&&id===hover?.45:1,target:fx.sweeps.find(s=>s.id==='post:'+id)?.target});}
+  for(const [id,p] of previewState.outposts)if(currentlyVisible(id)){const [x,y]=xy(id);prop('post:'+id,'watch',x+.5+(p.starter?.32:0),y+.5+(p.starter?.32:0),5.2/controlState.params.cellMeters,5.2/controlState.params.cellMeters,{alpha:postGhost&&id===hover?.45:1,target:fx.sweeps.find(s=>s.id==='post:'+id)?.target});}
   for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)&&!state.fixedWalls.has(id)){const [x,y]=xy(id),body=state.wallHealth.get(id);prop('wall:'+id,'wall',x+.5,y+.5,1,1,{dead:body?.hp===0,health:body?body.hp/body.max:1,connections:wallConnections(id,state.walls,SIZE,SIZE,roadMarkings(state.layout).get(id)?.axis),cellMeters:controlState.params.cellMeters});}
   const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,campWidth,campWidth,{dead:state.hp<=0});
   const campPlot=state.sites.find(p=>p.role==='camp');if(campPlot)prop('camp-plaza','plaza',campPlot.x+(campPlot.width??campPlot.size)/2,campPlot.y+(campPlot.height??campPlot.size)/2,campPlot.width??campPlot.size,campPlot.height??campPlot.size);
@@ -913,6 +915,7 @@ function paintMap() {
   // 连续实线区别道路/格网，衬边保证昼夜对比；线宽用屏幕像素，不随远景消失。
   // 建筑整体归属的轮廓最后绘制，避免被屋顶贴图盖住；开放地面仍逐格走边。
   drawControlBorderLine(ctx,view.boundaryPath,size,controlState.params,nightMix);
+  drawCivilizationBorderLine(ctx,view.civilPath,size,controlState.params,nightMix);
   // 拆除高亮只覆盖实际对象：物理建筑或独立设施一格。
   if(tool==='erase'&&hover!==null&&state.phase==='build'){
     const q=demolitionQuote(state,hover),cells=['production','housing','ruin'].includes(q.type)?buildingCells(state,hover):q.type?[hover]:[];
@@ -1103,7 +1106,7 @@ function paintMap() {
       // 地图先比较产出；悬停补齐费用与持续用工，按钮和资源栏继续预览实际成本。
       if(details)rows.push({text:`${buildQuote?buildQuote.labor:productionLabor(state,id)}`,icon:'people',suffix:'',color:'#f4d3a2',unmet:shortage?.workers});
       rows.push({text:`+${complete&&!active?0:quote.income}`,icon:'coin',suffix:'',color:'#bff5ce'});
-    }else rows.push({text:`+${quote.residents}`,icon:'residents',suffix:'',color:'#f4d3a2'});
+    }else rows.push({text:`+${complete?housingResidents(state,id):buildingCivilized(state,id)?quote.residents:0}`,icon:'residents',suffix:'',color:'#f4d3a2'});
     ctx.save();ctx.globalAlpha=!weaponSelected&&!complete&&!focused&&!canAfford(state,quote.cost) ? .6 : 1;
     ctx.font='600 10px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
     const iconSize=10,rowHeight=14;
@@ -1183,6 +1186,7 @@ function updateMapInfo(view,mapDetail,potentials=[],linked=null){
     else if(state.playerWalls.has(hover)){type='墙';w=h=1;}
     else if(content)type=content.status==='empty'?'空地':content.type==='housing'?(content.status==='ruin'?'住房废墟':'住房'):(content.status==='ruin'?'生产废墟':'生产建筑');
     else type=state.layout?.tiles[hover]==='rail'?'铁路用地':state.layout?.tiles[hover]==='road'?'道路':'自然地形';
+    if(p&&content?.status==='building'&&!['bank','hospital','camp'].includes(p.role))type+=' · '+(buildingStatus(state,hoveredPlot)==='civilized'?'已接通':'未接通文明');
     $('cellInfo').textContent=w&&h?`${w}×${h} 地块${type?' · '+type:''}`:type;
   }else $('cellInfo').textContent='';
   if(potentials.some(potential=>potential.sourceId===linked))$('cellInfo').textContent='潜在路线 · 今晚不出兵';
@@ -1289,6 +1293,8 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   for(const route of ordered)if(!focusedRoute(route))drawRoute(route);
   const border=new Path2D();for(const [x,y,nx,ny] of view.boundary){const a=point(x,y,naturalGroundAt(state.layout,x,y,view.controlState.params.cellMeters)+.02),b=point(nx,ny,naturalGroundAt(state.layout,nx,ny,view.controlState.params.cellMeters)+.02);if(a.hidden||b.hidden)continue;border.moveTo(a.x,a.y);border.lineTo(b.x,b.y);}
   drawControlBorderLine(ctx,border,1,view.controlState.params,nightMix);
+  const civilBorder=new Path2D();for(const [x,y,nx,ny] of view.civilBoundary){const a=point(x,y,naturalGroundAt(state.layout,x,y,view.controlState.params.cellMeters)+.025),b=point(nx,ny,naturalGroundAt(state.layout,nx,ny,view.controlState.params.cellMeters)+.025);if(!a.hidden&&!b.hidden){civilBorder.moveTo(a.x,a.y);civilBorder.lineTo(b.x,b.y);}}
+  drawCivilizationBorderLine(ctx,civilBorder,1,view.controlState.params,nightMix);
   // 米制墙在远景很细；连续墙顶衬边和真实墙段共向，不能把道路误认为完整防线。
   for(const [id,body] of state.wallHealth)if(body.hp>0&&currentlyVisible(id)){
     const [x,y]=xy(id),z=naturalGroundAt(state.layout,x+.5,y+.5,view.controlState.params.cellMeters)+2.5/view.controlState.params.cellMeters,mask=wallConnections(id,state.walls,SIZE,SIZE,roadMarkings(state.layout).get(id)?.axis),path=new Path2D(),center=point(x+.5,y+.5,z);if(center.hidden)continue;
@@ -1432,7 +1438,7 @@ function update() {
   const people=population(state);$('population').hidden=false;
   $('populationTotal').textContent=people.total;$('populationFree').textContent=people.free;
   $('populationFreeMetric').classList.toggle('no-workers',people.free===0);
-  const watchWorkers=state.outposts.size*state.params.outpostWorkers;
+  const watchWorkers=[...state.outposts.values()].filter(post=>!post.starter).length*state.params.outpostWorkers;
   $('populationDetailTotal').textContent=people.total;$('populationDetailFree').textContent=people.free;
   $('populationDetailProduction').textContent=people.working-watchWorkers-bankWorkers(state)-hospitalWorkers(state);$('populationDetailWatch').textContent=watchWorkers;
   // 总数和可用数始终显示，零占用的经营子项不占明细行。
@@ -1615,7 +1621,7 @@ function poiState(id){
   if(mapView?.poiStates?.has(id))return mapView.poiStates.get(id);
   const kind=productionSite(id,state)?.role;if(!['bank','hospital'].includes(kind))return null;
   const record=(kind==='bank'?state.banks:state.hospitals).get(id),controlled=productionControlled(state,id);
-  const result={kind,restored:!!record,specialism:record?.upgrade,stopped:!!record&&(!controlled||population(state).free<0)};
+  const result={kind,restored:!!record,specialism:record?.upgrade,stopped:!!record&&(!buildingCivilized(state,id)||population(state).free<0)};
   if(mapView){mapView.poiStates??=new Map();mapView.poiStates.set(id,result);}return result;
 }
 const poiMarkerCanvas=document.createElement('canvas'),poiMarkerContext=poiMarkerCanvas.getContext('2d');
@@ -1943,6 +1949,7 @@ function paramsEditor(params,scope='all') {
   fields('自由观察镜头',params,'',[['freeProjection','投影方式'],['freePerspectiveFovDegrees','透视FOV（度）',20,60]],'visualParams');
   fields('镜头操作',params,'',[['returnToTopOnAction','操作返回俯视'],['keyboardPanSpeedPx','WASD速度（像素/秒，0关闭）',0,1200]],'visualParams');
   fields('地图信息密度',params,'',[['mapMidZoomPercent','进入中景（%）',100,1000],['mapNearZoomPercent','进入近景（%）',100,1000]],'visualParams');
+  fields('文明表现',params,'',[['civilBorderLinePx','文明线宽（像素，0关闭）',0,6],['civilBorderOpacity','文明线强度%',0,100],['civilianFiguresPerBuilding','每栋生活人数（0关闭）',0,6]],'visualParams');
   fields('控制边缘',params,'',[['controlBorderInnerCells','内侧渐隐（格，0关闭）',0,2],['controlBorderOuterCells','外侧渐隐（格，0关闭）',0,2],['controlBorderInnerOpacity','内侧色带强度%',0,60],['controlBorderOuterOpacity','外侧色带强度%',0,60],['controlBorderLinePx','主线粗细（像素）',1,6]],'visualParams');
   fields('火力显示',params,'',[['fireNumbersMinCellPx','数字最小格宽（像素，0始终显示）',0,48]],'visualParams');
   fields('性能',params,'',[['showRenderStats','显示绘制统计',0,1]],'visualParams');
