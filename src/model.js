@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS, LARGE_CITY_OPTIMIZATION_KEYS } from './config.js?v=105';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS, LARGE_CITY_OPTIMIZATION_KEYS } from './config.js?v=107';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -43,12 +43,17 @@ export function coverage(id, range = 1, shape = 'diamond') {
   return cells;
 }
 
+// 主营地保留旧HP字段兼容既有重试，所有范围/战斗通过统一实体入口读取。
+export function campRecord(state,id=state.camp){return id===state.camp?{id,hp:state.hp,level:state.campLevel??0,day:0}:state.extraCamps?.has(id)?{...state.extraCamps.get(id),id}:null;}
+export function allCamps(state){return [campRecord(state),...[...(state.extraCamps?.keys()??[])].map(id=>campRecord(state,id))];}
+export const livingCamps=state=>allCamps(state).filter(c=>c.hp>0);
+function setCampHP(state,id,hp){if(id===state.camp)state.hp=hp;else if(state.extraCamps?.has(id))state.extraCamps.get(id).hp=hp;}
 // 火光的受击区就是特殊广场的完整占地；无地图的规则检查沿用中心 3×3。
-export function campCells(state) {
-  return productionSite(state.camp,state)?.role==='camp'?productionCells(state.camp,state):coverage(state.camp,1,'square');
+export function campCells(state,id=state.camp) {
+  return id===state.camp&&productionSite(id,state)?.role==='camp'?productionCells(id,state):coverage(id,1,'square');
 }
-function campPath(state,path) {
-  const cells=new Set(campCells(state)),at=path.findIndex(id=>cells.has(id));
+function campPath(state,path,target=state.camp) {
+  const cells=new Set(campCells(state,target)),at=path.findIndex(id=>cells.has(id));
   return at<0?path:path.slice(0,at+1);
 }
 
@@ -62,11 +67,11 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
   const blocked=new Set(layout?layout.tiles.flatMap((t,id)=>t==='block'?[id]:[]):[]),walls=new Set([...fixedWalls,...blocked,...playerWalls]);
   const terrainWalls=new Set([...fixedWalls,...blocked]);
   const camp = layout?key(layout.camp.x,layout.camp.y):key(...DEFAULTS.camp), field = routeField(camp, terrainWalls);
-  const state = { campLevel:0,campSpent:0,outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), banks:new Map(), hospitals:new Map(), bankEarned:0, debtInterestCap:0, nightInterest:0, bankSettledDay:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, nightBuildSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
+  const state = { extraCamps:new Map(),campLevel:0,campSpent:0,outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), banks:new Map(), hospitals:new Map(), bankEarned:0, debtInterestCap:0, nightInterest:0, bankSettledDay:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, nightBuildSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
     layout, blocked, terrainWalls, sites, siteByCell:layout?.version>=6?siteByCell:null, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
-    hp: params.campHP, enemies: [], enemyOutcomes:new Map(), events: [], spawned: 0, prevented:0, removed: 0, damage: 0, leaked: 0, merges: 0 };
+    hp: params.campHP, enemies: [], enemyOutcomes:new Map(), events: [], spawned: 0, prevented:0, removed: 0, damage: 0, leaked: 0, withdrawn:0, merges: 0 };
   // 本局成果独立于金币倍率和测试台日期；战前快照同时回滚这些计数。
   state.killed=0;state.survivedNights=0;state.result=null;
   state.plotContents=new Map(state.sites.map(p=>[key(p.x,p.y),{status:p.kind==='open'?'empty':'ruin',type:p.kind==='open'?null:(p.ruinType??'production')}]));
@@ -166,13 +171,13 @@ function settleCampaign(state){
     buildings:state.sites.filter(p=>p.role!=='camp'&&buildingCells(state,key(p.x,p.y)).some(id=>inGroundControl(active,id))).length};
   if(type==='deadline')state.phase='lost';
 }
-export const campCritical=state=>state.hp>0&&state.hp*100<state.params.campHP*state.params.campWarningPercent;
+export const campCritical=(state,id)=>allCamps(state).some(c=>(id===undefined||id===c.id)&&c.hp>0&&c.hp*100<state.params.campHP*state.params.campWarningPercent);
 function clearNight(state) {
   state.tick=0;state.enemies=[];state.enemyOutcomes=new Map();state.events=[];state.spawned=0;state.prevented=0;state.removed=0;state.withdrawn=0;
   state.damage=0;state.leaked=0;state.merges=0;state.nightEarned=0;state.nightEconomy=0;state.nightInterest=0;state.economySettled=false;state.productionReport=null;
 }
 export function beginBattle(state) {
-  if(state.result||state.phase!=='build'||state.hp<=0||validateSources(state.sources,state))return null;
+  if(state.result||state.phase!=='build'||!livingCamps(state).length||validateSources(state.sources,state))return null;
   clearNight(state);
   for(const source of state.enemySources?.values()??[])if(source.hp===0)preventSourceSpawns(state,source.id);
   const snapshot=structuredClone(state);
@@ -367,14 +372,14 @@ export function rawControlMask(state,radius=state.params.controlRadius) {
 // 根部塔须覆盖存活篝火；其余塔的落点由已联网塔覆盖，建筑归属不能搭桥。
 const networkCache=new WeakMap();
 function connectedOutposts(state){
-  const signature=[state.camp,state.hp>0,state.params.controlRadius,state.params.outpostRadius,[...state.outposts].map(([id,p])=>id+':'+!!p.starter).join(',')].join('|');
+  const signature=[livingCamps(state).map(c=>c.id).join(','),state.params.controlRadius,state.params.outpostRadius,[...state.outposts].map(([id,p])=>id+':'+!!p.starter).join(',')].join('|');
   const old=networkCache.get(state);if(old?.signature===signature)return old.connected;
-  const connected=new Set([...state.outposts.keys()].filter(id=>state.hp>0&&inStationRange(state.camp,id,watchRadius(state,id)))),queue=[...connected];
+  const connected=new Set([...state.outposts.keys()].filter(id=>livingCamps(state).some(c=>inStationRange(c.id,id,watchRadius(state,id))))),queue=[...connected];
   for(let i=0;i<queue.length;i++)for(const anchor of state.outposts.keys())if(!connected.has(anchor)&&inStationRange(anchor,queue[i],watchRadius(state,queue[i]))){connected.add(anchor);queue.push(anchor);}
   networkCache.set(state,{signature,connected});return connected;
 }
 // 文明覆盖只与控制求交，不授予额外施工权限。
-export function civilizationCoverage(state,id){return state.hp>0&&inStationRange(id,state.camp,Math.min(30,state.params.campCivilRadius+(state.campLevel??0)*state.params.campUpgradeRadiusStep));}
+export function civilizationCoverage(state,id){return livingCamps(state).some(c=>inStationRange(id,c.id,campCivilRadius(state,c.id)));}
 export function civilizationMask(state,controlled=controlMask(state)) {
   const mask=new Set([...controlled].filter(id=>civilizationCoverage(state,id)));
   // 建筑按同一中心整栋接入，表现边界绕楼走，不在楼里切出半栋文明。
@@ -386,22 +391,44 @@ export function buildingCivilized(state,id){
   return civilizationCoverage(state,key(p.x+Math.floor((p.width??p.size)/2),p.y+Math.floor((p.height??p.size)/2)));
 }
 // 篝火升级只扩文明；报价与只读候选共用，提前预览不会改变人口或收支。
-export const campCivilRadius=state=>Math.min(30,state.params.campCivilRadius+(state.campLevel??0)*state.params.campUpgradeRadiusStep);
-export function campUpgradeCandidate(state){return {...state,campLevel:(state.campLevel??0)+1};}
-export function campUpgradeQuote(state){
- const candidate=campUpgradeCandidate(state);
- return {cost:state.params.campUpgradeCost*((state.campLevel??0)+1),before:campCivilRadius(state),after:campCivilRadius(candidate),residents:population(candidate).total-population(state).total};
+export const campCivilRadius=(state,id=state.camp)=>Math.min(30,state.params.campCivilRadius+(campRecord(state,id)?.level??0)*state.params.campUpgradeRadiusStep);
+export function campUpgradeCandidate(state,id=state.camp){
+ if(id===state.camp)return {...state,campLevel:(state.campLevel??0)+1};
+ const extraCamps=new Map(state.extraCamps);extraCamps.set(id,{...extraCamps.get(id),level:(extraCamps.get(id)?.level??0)+1});return {...state,extraCamps};
 }
-export function campUpgradeError(state){
+export function campUpgradeQuote(state,id=state.camp){
+ const candidate=campUpgradeCandidate(state,id);
+ return {cost:state.params.campUpgradeCost*((campRecord(state,id)?.level??0)+1),before:campCivilRadius(state,id),after:campCivilRadius(candidate,id),residents:population(candidate).total-population(state).total};
+}
+export function campUpgradeError(state,id=state.camp){
  if(state.phase!=='build'||state.result)return '只能在白天升级篝火。';
  if(state.day<2)return '第2天起可升级篝火。';
- if(state.hp<=0)return '请先恢复篝火。';
- if((state.campLevel??0)>=state.params.campUpgradeMaxLevel||campCivilRadius(state)>=30)return '篝火已达最高等级。';
- return buildResourceStatus(state,campUpgradeQuote(state).cost).message;
+ if(!campRecord(state,id)||campRecord(state,id).hp<=0)return '请先恢复篝火。';
+ if((campRecord(state,id).level??0)>=state.params.campUpgradeMaxLevel||campCivilRadius(state,id)>=30)return '篝火已达最高等级。';
+ return buildResourceStatus(state,campUpgradeQuote(state,id).cost).message;
 }
-export function upgradeCamp(state){
- const error=campUpgradeError(state);if(error)return error;
- const q=campUpgradeQuote(state);recordBorrowing(state,q.cost);state.campSpent=(state.campSpent??0)+q.cost;state.campLevel=(state.campLevel??0)+1;revealControl(state);return '';
+export function upgradeCamp(state,id=state.camp){
+ const error=campUpgradeError(state,id);if(error)return error;
+ const q=campUpgradeQuote(state,id);recordBorrowing(state,q.cost);state.campSpent=(state.campSpent??0)+q.cost;
+ if(id===state.camp)state.campLevel=(state.campLevel??0)+1;else state.extraCamps.get(id).level++;
+ revealControl(state);return '';
+}
+export function campBuildError(state,id,{ignoreResources=false}={}){
+ if(state.phase!=='build'||state.result)return '只能在白天建立篝火。';
+ if(state.day<3)return '第3天起可建立新篝火。';
+ const [x,y]=xy(id);if(!Number.isInteger(id)||x<1||y<1||x>=SIZE-1||y>=SIZE-1)return '篝火需要完整3×3场地。';
+ const cells=coverage(id,1,'square');
+ if(cells.some(cell=>!isExplored(state,cell)||!inGroundControl(state,cell)))return '篝火3×3场地须完整位于基础控制区。';
+ if(cells.some(cell=>!terrainTraversable(state,cell)))return '请先清空3×3场地，不能建在建筑或自然障碍上。';
+ if(cells.some(cell=>state.playerWalls.has(cell)||state.towers.has(cell)||state.outposts.has(cell)||allCamps(state).some(c=>campCells(state,c.id).includes(cell))||[...(state.enemySources?.values()??[])].some(s=>sourceCells(s).includes(cell))))return '场地与设施、火光或敌源重叠。';
+ return ignoreResources?'':buildResourceStatus(state,state.params.campBuildCost).message;
+}
+export function campBuildCandidate(state,id){const extraCamps=new Map(state.extraCamps);extraCamps.set(id,{hp:state.params.campHP,level:0,day:state.day});return {...state,extraCamps};}
+export function campBuildQuote(state,id){return {cost:state.params.campBuildCost,residents:campBuildError(state,id,{ignoreResources:true})?0:population(campBuildCandidate(state,id)).total-population(state).total};}
+export function buildCamp(state,id){
+ const error=campBuildError(state,id);if(error)return error;
+ recordBorrowing(state,state.params.campBuildCost);state.campSpent=(state.campSpent??0)+state.params.campBuildCost;
+ state.extraCamps.set(id,{hp:state.params.campHP,level:0,day:state.day});rebuildFields(state);revealControl(state);return '';
 }
 // 三种建筑表现由结构与接入共同决定；失去文明只暂停使用，不退回废墟。
 export function buildingStatus(state,id){
@@ -454,21 +481,21 @@ export function rebuildTerrain(state) {
   state.walls=new Set([...state.terrainWalls,...[...state.playerWalls].filter(id=>state.wallHealth.get(id)?.hp>0)]);
   rebuildFields(state);
   // 每次从当天原始题目计算必要绕行，避免临时建造再退款留下免费绕行。
-  for(const attack of state.attacks)attack.path=repairPath(state,attack.originalPath??attack.path,attack.departure);
+  for(const attack of state.attacks)attack.path=repairPath(state,attack.originalPath??attack.path,attack.departure,attack.target);
   revealControl(state);
 }
 export function rebuildFields(state) {
-  state.field=routeField(state.camp,state.terrainWalls);
+  state.fields=new Map(allCamps(state).map(c=>[c.id,routeField(c.id,state.terrainWalls)]));state.field=state.fields.get(state.camp);
 }
 // 绕过不可攻击建筑，并在最近可达的前方路线格重新接上；墙不参与搜索。
-export function repairPath(state,original,departure=[]) {
+export function repairPath(state,original,departure=[],target=state.camp) {
   // 仅允许出生敌人沿自身据点的起始段离开；之后仍严格读取物理障碍。
   let prefix=0;while(prefix<original.length&&departure.includes(original[prefix]))prefix++;
-  if(prefix)return [...original.slice(0,prefix),...repairPath(state,original.slice(prefix))];
+  if(prefix)return [...original.slice(0,prefix),...repairPath(state,original.slice(prefix),[],target)];
   let path=[...original];
   for(let attempts=0;attempts<SIZE*SIZE;attempts++){
     const blockedAt=path.findIndex(id=>state.terrainWalls.has(id));
-    if(blockedAt<0)return campPath(state,path);
+    if(blockedAt<0)return campPath(state,path,target);
     if(blockedAt===0)return [];
     const start=path[blockedAt-1],goals=new Map(path.slice(blockedAt+1).map((id,i)=>[id,blockedAt+1+i]));
     const visited=new Map(path.slice(0,blockedAt-1).map(id=>[id,null]));visited.set(start,null);
@@ -482,35 +509,38 @@ export function repairPath(state,original,departure=[]) {
       }
     }
     // 狭窄出口被建筑堵住时允许退回路口；仍只按通行距离走向原目标。
-    if(goal===undefined){const fallback=pathFrom(path[0],state.field);return fallback.at(-1)===state.camp?campPath(state,fallback):[];}
+    if(goal===undefined){const fallback=pathFrom(path[0],state.fields?.get(target)??state.field);return fallback.at(-1)===target?campPath(state,fallback,target):[];}
     const detour=[];for(let id=goal;id!==null;id=visited.get(id))detour.push(id);
     path=[...path.slice(0,blockedAt-1),...detour.reverse(),...path.slice(goals.get(goal)+1)];
   }
   return [];
 }
-function sourceAttack(state,source,index){
+function sourceAttack(state,source,index,night=state.day){
   const entity=state.enemySources?.get(source.sourceId),departure=entity?sourceDeparture(entity).slice(0,-1):[];
-  const exit=key(entity?.x??source.x,entity?.y??source.y),path=campPath(state,[...departure,...pathFrom(exit,state.field)]),[x,y]=xy(path[0]??exit);
-  return {...structuredClone(source),x,y,index,target:state.camp,departure,originalPath:[...path],path};
+  const exit=key(entity?.x??source.x,entity?.y??source.y);
+  const candidates=livingCamps(state).filter(c=>c.day<night).map(c=>({id:c.id,field:c.id===state.camp?state.field:state.fields?.get(c.id)??routeField(c.id,state.terrainWalls)})).filter(c=>c.field.distance.has(exit));
+  candidates.sort((a,b)=>a.field.distance.get(exit)-b.field.distance.get(exit)||a.id-b.id);
+  const selected=candidates[0]??{id:state.camp,field:state.field},target=selected.id,path=campPath(state,[...departure,...pathFrom(exit,selected.field)],target),[x,y]=xy(path[0]??exit);
+  return {...structuredClone(source),x,y,index,target,departure,originalPath:[...path],path};
 }
 export function forecastAttacks(state,night=state.day) {
   if(night===state.day)return state.attacks;
-  return sourcePlans(state,night).map((source,index)=>sourceAttack(state,source,index));
+  return sourcePlans(state,night).map((source,index)=>sourceAttack(state,source,index,night));
 }
 // 已知存活据点的假设进攻方向：只读当前地形，不读取未来出兵安排或改写锁定路线。
 export function potentialSourceRoute(state,sourceId){
   const source=knownSources(state).find(s=>s.id===sourceId&&s.hp>0);
   if(!source)return null;
   const route=sourceAttack(state,{sourceId:source.id,x:source.x,y:source.y},source.index);
-  return campCells(state).includes(route.path.at(-1))?{sourceId:source.id,index:source.index,path:route.path,potential:true}:null;
+  return campCells(state,route.target).includes(route.path.at(-1))?{sourceId:source.id,index:source.index,path:route.path,potential:true}:null;
 }
 // 只读校验出兵表：出生当拍不移动，进入火光任意一格即到达；不计墙与炮火。
 export function routeTimingReport(state) {
-  const deadline=state.params.nightTicks,camp=new Set(campCells(state)),nights=[];
+  const deadline=state.params.nightTicks,nights=[];
   let farthest=null,latest=null,total=0,late=0,unreachable=0;
   for(let night=1;night<=(state.waves?.length??1);night++){
     const rows=forecastAttacks(state,night).map((attack,index)=>{
-      const path=attack.path,reaches=path.length>0&&camp.has(path.at(-1));
+      const path=attack.path,reaches=path.length>0&&campCells(state,attack.target).includes(path.at(-1));
       const steps=reaches?path.length-1:null,lastSpawn=attack.first+(attack.count-1)*attack.interval;
       const lastArrival=reaches?lastSpawn+steps:null;
       let lateCount=0;
@@ -533,7 +563,7 @@ export function lockAttacks(state) {
 export const enemyKey=(enemy)=>`${enemy.id}:${enemy.target}`;
 // 火光按余额购买整数 HP，余款保留；墙仍一次修满，瞭望塔无需维修。
 export function repairQuote(state,id) {
-  const camp=id===state.camp,wall=state.wallHealth.get(id),target=camp?{hp:state.hp,max:state.params.campHP}:wall;
+  const camp=campRecord(state,id),wall=state.wallHealth.get(id),target=camp?{hp:camp.hp,max:state.params.campHP}:wall;
   const missing=target?Math.max(0,target.max-target.hp):0,type=camp?'camp':wall?'wall':'';
   const restore=camp?Math.min(missing,Math.floor((availableFunds(state)+1e-9)/state.params.campRepairCost)):missing;
   const cost=wall?Math.ceil(state.params.wallCost*missing/target.max*state.params.defenseRepairPercent/100):restore*state.params.campRepairCost;
@@ -552,7 +582,7 @@ export function repairFacility(state,id) {
   const error=repairError(state,id);if(error)return error;
   const quote=repairQuote(state,id); // 先固定报价，再扣款，避免余额变化导致恢复量缩水。
   recordBorrowing(state,quote.cost);state.repairSpent+=quote.cost;
-  if(id===state.camp)state.hp+=quote.restore;
+  if(campRecord(state,id)){setCampHP(state,id,campRecord(state,id).hp+quote.restore);revealControl(state);}
   else {
     const target=state.wallHealth.get(id);target.hp=target.max;
     if(state.wallHealth.has(id))state.walls.add(id);
@@ -569,7 +599,7 @@ export function plotBuildError(state,id) {
   if(productionSite(id,state)?.role==='hospital')return '医院为保留地标，受控后可修复，不能拆除或换建。';
   if([...(state.enemySources?.values()??[])].some(s=>s.site===productionId(id,state)))return '感染据点保留，需在周边建筑架炮肃清，不能改建或拆除。';
   if(!isExplored(state,id))return '该地块尚未探索。';
-  if(cells.includes(state.camp))return '火光所在地块保留，不能拆除或换建。';
+  if(cells.includes(state.camp)||[...(state.extraCamps?.keys()??[])].some(id=>campCells(state,id).some(cell=>cells.includes(cell))))return '火光所在地块保留，不能拆除或换建。';
   if(cells.some(cell=>reservedSources(state).some(s=>key(s.x,s.y)===cell)))return '不能覆盖敌人来源。';
   return '';
 }
@@ -582,7 +612,7 @@ export function outpostError(state,id) {
   if(![...connected].some(anchor=>inStationRange(id,anchor,watchRadius(state,anchor))))return '瞭望塔落点须被篝火或已连接篝火的瞭望塔基础地面控制范围覆盖。';
   if(productionSite(id,state)?.role==='hospital')return '医院为保留目标，不能建设瞭望塔。';
   if(!terrainTraversable(state,id))return '瞭望塔只能建在可通行的道路、空地或自然地面。';
-  if(state.towers.has(id)||state.playerWalls.has(id)||state.outposts.has(id)||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '该格已有设施或保留目标。';
+  if(state.towers.has(id)||state.playerWalls.has(id)||state.outposts.has(id)||allCamps(state).some(c=>c.id===id||c.id!==state.camp&&campCells(state,c.id).includes(id))||reservedSources(state).some(s=>key(s.x,s.y)===id))return '该格已有设施或保留目标。';
   const [x,y]=xy(id),distance=state.params.outpostMinDistance;
   if([...state.outposts.keys()].filter(anchor=>!state.outposts.get(anchor).starter).some(anchor=>{const [ax,ay]=xy(anchor);return Math.hypot(x-ax,y-ay)<distance;}))return `瞭望塔间距至少 ${distance} 格。`;
   return buildResourceStatus(state,state.params.outpostCost,state.params.outpostWorkers).message;
@@ -627,7 +657,7 @@ export function placementError(state, id, type = 'A', {ignoreFunds=false}={}) {
   if (!Number.isInteger(id) || id < 0 || id >= SIZE * SIZE) return '请选择地图内的格子。';
   if(!isExplored(state,id))return '该位置尚未探索。';
   if (!inControl(state,id)) return '超出控制范围，不能架设炮台。';
-  if(state.fixedWalls.has(id)||state.outposts.has(id)||state.playerWalls.has(id)||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '该格被设施或保留目标占用，不能重叠建设炮塔。';
+  if(state.fixedWalls.has(id)||state.outposts.has(id)||state.playerWalls.has(id)||allCamps(state).some(c=>c.id===id||c.id!==state.camp&&campCells(state,c.id).includes(id))||reservedSources(state).some(s=>key(s.x,s.y)===id))return '该格被设施或保留目标占用，不能重叠建设炮塔。';
   if(state.phase==='battle'&&state.enemies.some(e=>e.id===id))return '不能在敌人占据的格子上补炮。';
   if (state.towers.has(id)) return state.phase==='battle'?'该格已有武器，防守中不能拆除。':'该格已有武器，可用拆除工具撤销。';
   if (!state.params.weapons[type]) return '未知武器。';
@@ -648,7 +678,7 @@ export function wallPreview(state, id, remove = false) {
   else if (!remove && !inGroundControl(state,id)) error = '超出基础地面控制范围，不能建墙。';
   else if (!remove && state.blocked.has(id)) error = '建筑或废墟占地，需先清理为空地。';
   else if (!remove && state.fixedWalls.has(id)) error = '水域或自然障碍不能建墙。';
-  else if (!remove && id===state.camp) error = '不能覆盖篝火。';
+  else if (!remove && allCamps(state).some(c=>c.id===id||c.id!==state.camp&&campCells(state,c.id).includes(id))) error = '不能覆盖篝火。';
   else if (!remove && (state.towers.has(id)||state.outposts.has(id))) error = '这里已有炮塔或瞭望塔，不能叠建墙。';
   else if (!remove && (state.walls.has(id)||state.playerWalls.has(id))) error = '这里已有墙或墙的废墟，请选择修复或拆除。';
   else if (!remove && (id === state.camp || reservedSources(state).some(s=>key(s.x,s.y)===id))) error = '不能覆盖篝火或敌人源头。';
@@ -711,6 +741,7 @@ export function validateVisualParams(params){
 export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   const visualError=validateVisualParams(params);if(visualError)return visualError;
+  if(!integer(params.campBuildCost,1,1000))return '新篝火费用须为1–1000金币整数。';
   if(!integer(params.campUpgradeCost,1,1000)||!integer(params.campUpgradeRadiusStep,1,15)||!integer(params.campUpgradeMaxLevel,1,10))return '篝火升级基础费1–1000、半径增量1–15、最多等级1–10，均为整数。';
   if(!integer(params.campCivilRadius,1,30))return '篝火文明半径须为1–30格整数。';
   if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
@@ -757,7 +788,7 @@ export function applyExperimentParams(state,draft,scope){
   const old=state.params;state.params=params;
   if(scope==='visual')return '';
   // 调整上限不免费修复，也不复活已破坏墙；价格沿用现有实验估价规则。
-  state.hp=Math.min(state.hp,params.campHP);
+  state.hp=Math.min(state.hp,params.campHP);for(const camp of state.extraCamps?.values()??[])camp.hp=Math.min(camp.hp,params.campHP);
   for(const body of state.wallHealth.values()){body.hp=Math.min(body.hp,params.wallHP);body.max=params.wallHP;}
   if(old.sourceCellHPMin!==params.sourceCellHPMin||old.sourceCellHPMax!==params.sourceCellHPMax)syncSourceHealth(state);
   rebuildTerrain(state);recordBorrowing(state,0);clearRepaidDebt(state);return '';
@@ -785,10 +816,10 @@ export function validateSources(sources, state) {
 
 // 建筑炮位不受击，敌人只攻击挡住下一格的墙。
 export function enemyAction(state,enemy) {
-  if(campCells(state).includes(enemy.id))return {to:enemy.id};
-  let path=enemy.path||pathFrom(enemy.id,state.field);
+  if(campCells(state,enemy.target??state.camp).includes(enemy.id))return {to:enemy.id};
+  let path=enemy.path||pathFrom(enemy.id,state.fields?.get(enemy.target)??state.field);
   const remaining=path.slice(Math.max(0,path.indexOf(enemy.id)));
-  if(remaining.some(id=>state.terrainWalls.has(id))){path=repairPath(state,remaining,enemy.departure);enemy.path=path;}
+  if(remaining.some(id=>state.terrainWalls.has(id))){path=repairPath(state,remaining,enemy.departure,enemy.target??state.camp);enemy.path=path;}
   const at=path.indexOf(enemy.id);
   const next=path[at+1]??enemy.id;
   if(state.wallHealth.get(next)?.hp>0)return {to:enemy.id,attackId:next,attackType:'wall'};
@@ -825,7 +856,7 @@ export function stepBattle(state,actions=null,deferIdleDawn=false) {
     }
   }
   for(const groupId of merged){const group=groups.get(groupId);state.events.push({type:'merge',id:group.id,target:group.target,value:group.hp,members:group.members,parts:mergeParts.get(groupId)});}
-  const fire=fireField(state),sourceFire=sourceAttackPlan(state,[...groups.values()]),melee=new Map(),campArea=new Set(campCells(state));state.enemies=[];
+  const fire=fireField(state),sourceFire=sourceAttackPlan(state,[...groups.values()]),melee=new Map();state.enemies=[];
   for(const source of state.enemySources?.values()??[])source.lastHit=0;
   for(const enemy of groups.values()){
     const damage=Math.min(enemy.hp,fire.get(enemy.id)||0);enemy.hp-=damage;state.damage+=damage;
@@ -836,11 +867,12 @@ export function stepBattle(state,actions=null,deferIdleDawn=false) {
       state.earned+=reward;clearRepaidDebt(state);state.nightEarned+=reward;state.removed+=enemy.members;state.killed+=enemy.members;
       for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'killed');
       state.events.push({type:'kill',id:enemy.id,target:enemy.target,value:reward,members:enemy.members});
-    }else if(campArea.has(enemy.id)){
+    }else if(campCells(state,enemy.target).includes(enemy.id)){
       // 进入火光广场任意格即以剩余 HP 造成一次伤害，攻击后退场、不再走向中央。
-      state.hp=Math.max(0,state.hp-enemy.hp);state.leaked+=enemy.hp;
+      const body=campRecord(state,enemy.target),hit=Math.min(body?.hp??0,enemy.hp);setCampHP(state,enemy.target,Math.max(0,(body?.hp??0)-enemy.hp));state.leaked+=hit;
       for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'leaked');
-      state.events.push({type:'leak',id:enemy.id,value:enemy.hp});
+      state.events.push({type:'leak',id:enemy.id,target:enemy.target,value:hit});
+      if(body?.hp>0&&campRecord(state,enemy.target).hp===0)state.events.push({type:'campLost',id:enemy.target,target:enemy.target,value:0});
     }else{
       if(enemy.attackId!==undefined){
         const old=melee.get(enemy.attackId)||{type:enemy.attackType,value:0};old.value+=enemy.members*state.params.enemyPower;melee.set(enemy.attackId,old);
@@ -868,7 +900,12 @@ export function stepBattle(state,actions=null,deferIdleDawn=false) {
       state.events.push({type:'sourceLost',id:key(source.bx,source.by),sourceId,value:0,prevented});
     }
   }
-  if(state.hp<=0){state.phase='lost';state.result={type:'campLost',day:state.day};return;}
+  for(const event of state.events.filter(e=>e.type==='campLost')){
+    for(const attack of state.attacks.filter(a=>a.target===event.target))for(let batch=0;batch<attack.count;batch++){const origin=`${attack.index}:${batch}`;if(attack.first+batch*attack.interval>state.tick&&!state.enemyOutcomes.has(origin)){state.enemyOutcomes.set(origin,'blocked');state.prevented++;}}
+  }
+  state.enemies=state.enemies.filter(enemy=>{if(campRecord(state,enemy.target)?.hp>0)return true;for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'withdrawn');state.withdrawn+=enemy.members;return false;});
+  if(state.events.some(e=>e.type==='campLost'))revealControl(state);
+  if(!livingCamps(state).length){state.phase='lost';state.result={type:'campLost',day:state.day};return;}
   if(state.tick<state.params.nightTicks&&nightCleanupState(state)==='idle'){
     // 没有未出生敌人、存活敌人或可攻击源头时，余下拍数才完全没有战斗结果。
     // 保留本拍事件的真实时刻；只略过空闲等待，经营与回复仍到黎明结算一次。
@@ -1153,7 +1190,7 @@ export function battleRoutes(state) {
     return pending?[{future:true,index:attack.index,sources:[attack.index],target:attack.target,path:attack.path}]:[];
   });
   for(const enemy of state.enemies){
-    const path=enemy.path||pathFrom(enemy.id,state.field);
+    const path=enemy.path||pathFrom(enemy.id,state.fields?.get(enemy.target)??state.field);
     // 合流路线保留所有来源，联动任一源头都能定位共同的剩余进攻。
     routes.push({future:false,index:enemy.sources[0]??0,sources:[...enemy.sources],target:enemy.target,path:path.slice(Math.max(0,path.indexOf(enemy.id)))});
   }
@@ -1204,7 +1241,7 @@ export function visionField(state,phase=state.phase){
       if(inStationRange(id,center,radius)||(extent>0&&Math.hypot(dx,dy)<=extent+2))seen.add(id);
     }
   };
-  if(state.hp>0)station(state.camp,0,p.campS01);
+  for(const c of livingCamps(state))station(c.id,0,p.campS01);
   for(const id of connectedOutposts(state))station(id,watchRadius(state,id),state.outposts.get(id).starter?p.campS01:p.outpostS01);
   for(const [id,type] of state.towers)
     for(const cell of coverage(id,p.weapons[type].range,p.weapons[type].shape))seen.add(cell);

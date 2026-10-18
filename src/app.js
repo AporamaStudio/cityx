@@ -21,8 +21,8 @@ import {cameraScale,limitZoom,limitPan,limitObservationPan} from './map-camera.j
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend,drawCivilizationBorderLine} from './control-border.js?v=3';
 import {poiBadgeSVG,drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=17';
 import {createGameAudio} from './audio.js?v=11';
-import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=105';
-import {campCivilRadius,campUpgradeCandidate,campUpgradeQuote,campUpgradeError,upgradeCamp,civilizationMask,watchRadius,buildingStatus,buildingCivilized,housingResidents,hospitalActive,poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=130';
+import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=107';
+import {allCamps,livingCamps,campRecord,campBuildError,campBuildCandidate,campBuildQuote,buildCamp,campCivilRadius,campUpgradeCandidate,campUpgradeQuote,campUpgradeError,upgradeCamp,civilizationMask,watchRadius,buildingStatus,buildingCivilized,housingResidents,hospitalActive,poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=133';
 import {generateCityMap} from './city-map.js?v=15';
 import {readMapSettings} from './map-settings.js?v=6';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -30,12 +30,21 @@ const mapSettings=readMapSettings(location.search);
 // 尺寸由本局URL和默认地图共同决定，禁止静默覆盖预览参数。
 const cityLayout=generateCityMap(mapSettings);
 const $ = id => document.getElementById(id);
-let campUpgradeHover=false;
+let campUpgradeHover=false,selectedCamp=null;
+// 右侧当前火光与地图修复悬停共用目标，避免HP与范围显示成两座不同篝火。
+function refreshCampPanel(){
+  const campOptions=allCamps(state);if($('campSelect').options.length!==campOptions.length||$('campSelect').value!==String(panelCamp())){$('campSelect').replaceChildren(...campOptions.map((c,i)=>{const o=document.createElement('option');o.value=c.id;o.textContent=`篝火 ${i+1}`;return o;}));$('campSelect').value=String(panelCamp());}
+  const campUpgrade=campUpgradeQuote(state,panelCamp());$('price-campUpgrade').textContent=campUpgrade.cost;$('campCivilInfo').textContent=`文明半径 ${campCivilRadius(state,panelCamp())} 格 · Lv.${(campRecord(state,panelCamp())?.level??0)+1}`;
+  $('campUpgrade').hidden=state.day<2||state.phase!=='build';$('campUpgrade').disabled=!!campUpgradeError(state,panelCamp())||paramsDirty();
+  $('campHP').textContent = `HP ${Math.max(0,campRecord(state,panelCamp()).hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,campRecord(state,panelCamp()).hp)/state.params.campHP*100}%`;
+  const g=$('campIcon').getContext('2d');g.clearRect(0,0,64,64);drawCampfire(g,4,5,54,campRecord(state,panelCamp()).hp>0);
+}
+const panelCamp=()=>tool==='repair'&&campRecord(state,hover)?hover:campRecord(state,selectedCamp)?selectedCamp:state.camp;
 // Canvas 报价直接复用钱包与工具 SVG，资源和炮图标不另建一套图形。
-for(const [id,kind,label] of [['wall','wall','建墙'],['build','near','近防炮'],['long','far','远防炮'],['production','production','生产'],['housing','housing','住房'],['outpost','watch','瞭望塔'],['bank','bank','恢复银行'],['hospital','hospital','修复医院'],['bankUpgrade','bank','升级银行'],['campUpgrade','camp','升级篝火']])document.querySelector('#'+id+' .tool-name').innerHTML=FACILITY_SVGS[kind]+' '+label;
+for(const [id,kind,label] of [['wall','wall','建墙'],['build','near','近防炮'],['long','far','远防炮'],['production','production','生产'],['housing','housing','住房'],['outpost','watch','瞭望塔'],['bank','bank','恢复银行'],['hospital','hospital','修复医院'],['bankUpgrade','bank','升级银行'],['campUpgrade','camp','升级篝火'],['campBuild','camp','新篝火']])document.querySelector('#'+id+' .tool-name').innerHTML=FACILITY_SVGS[kind]+' '+label;
 // 图标在启动时各缓存日/夜两张，不在移动镜头或每帧生成图片。
 const facilityImages={};
-$('campUpgrade').querySelector('.price-coin').innerHTML='<svg viewBox="0 0 24 24" width="15" height="15"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v12M9 8h6m-6 8h6" stroke="currentColor" stroke-width="2"/></svg>';
+$('campBuild').querySelector('.price-coin').innerHTML=$('campUpgrade').querySelector('.price-coin').innerHTML='<svg viewBox="0 0 24 24" width="15" height="15"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v12M9 8h6m-6 8h6" stroke="currentColor" stroke-width="2"/></svg>';
 for(const [name,svg] of Object.entries(FACILITY_SVGS))facilityImages[name]=FACILITY_COLORS[name].map(color=>{
   const image=new Image();image.onload=()=>draw();image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg.replace(/style="[^"]*"/,`style="color:${color}"`).replace('width="32" height="32"','width="96" height="96"'));return image;
 });
@@ -506,6 +515,7 @@ function drawSourceLocator(source,size){
   ctx.strokeStyle='#f08062';ctx.lineWidth=2.5/size;ctx.shadowColor='#9f211b';ctx.shadowBlur=7;ctx.stroke();ctx.restore();
 }
 function mapDisplay(){
+  if(mapView&&tool==='campBuild'&&mapView.campPreviewHover!==hover)mapView=null;
   if(!mapView){
     const params=previewParams(),controlState={...state,params},raw=rawControlMask(controlState),controlled=controlMask(controlState,params.controlRadius,raw);
     // 世界坐标路径随控制变化缓存；平移/缩放只重画，不能把描边当成新增权限。
@@ -514,9 +524,10 @@ function mapDisplay(){
     for(const id of controlled){const [x,y]=xy(id);controlPath.rect(x,y,1,1);}
     const civil=civilizationMask(controlState,controlled),civilBoundary=controlBoundary(civil),civilPath=new Path2D();
     for(const [a,b,c,d] of civilBoundary){civilPath.moveTo(a,b);civilPath.lineTo(c,d);}
-    const upgradeBoundary=campUpgradeHover&&!campUpgradeError(state)?controlBoundary(civilizationMask(campUpgradeCandidate(controlState),controlled)):[],upgradePath=new Path2D();
+    const campPreview=campUpgradeHover&&!campUpgradeError(state,panelCamp())?campUpgradeCandidate(controlState,panelCamp()):tool==='campBuild'&&hover!==null&&!campBuildError(state,hover,{ignoreResources:true})?campBuildCandidate(controlState,hover):null;
+    const upgradeBoundary=campPreview?controlBoundary(civilizationMask(campPreview,controlled)):[],upgradePath=new Path2D();
     for(const [a,b,c,d] of upgradeBoundary){upgradePath.moveTo(a,b);upgradePath.lineTo(c,d);}
-    mapView={controlState,raw,controlled,boundary,boundaryPath,controlPath,civil,civilBoundary,civilPath,upgradeBoundary,upgradePath,visibility:(params.largeCityFog?createVisibility:createReferenceVisibility)(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells,params),dirty:paramsDirty(),
+    mapView={campPreviewHover:hover,controlState,raw,controlled,boundary,boundaryPath,controlPath,civil,civilBoundary,civilPath,upgradeBoundary,upgradePath,visibility:(params.largeCityFog?createVisibility:createReferenceVisibility)(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells,params),dirty:paramsDirty(),
       towers:towerOverlayCache.get(state,controlled,new Set(motion?.actors.map(e=>e.to))),
       controlBorder:controlBorderTexture(SIZE,controlled,boundaryPath,controlPath,params),
       sourceSites:new Set([...state.enemySources.values()].map(s=>s.site)),
@@ -559,7 +570,7 @@ function constructionPlan(view){
 }
 // 资格与支付分开：缺钱仍定位待升级银行，停业/区外仅保留弱标记，不误染红。
 function upgradePlan(view){
-  if(campUpgradeHover&&!campUpgradeError(state)){const candidate=campUpgradeCandidate(state);return state.sites.filter(p=>{const id=key(p.x,p.y);return plotContent(state,id).status==='building'&&!buildingCivilized(state,id)&&buildingCivilized(candidate,id);}).map(p=>({id:key(p.x,p.y),x:p.x,y:p.y,w:p.width??p.size,h:p.height??p.size,cellMeters:view.controlState.params.cellMeters,eligible:true,focused:false,pulse:0}));}
+  if(campUpgradeHover&&!campUpgradeError(state,panelCamp())){const candidate=campUpgradeCandidate(state,panelCamp());return state.sites.filter(p=>{const id=key(p.x,p.y);return plotContent(state,id).status==='building'&&!buildingCivilized(state,id)&&buildingCivilized(candidate,id);}).map(p=>({id:key(p.x,p.y),x:p.x,y:p.y,w:p.width??p.size,h:p.height??p.size,cellMeters:view.controlState.params.cellMeters,eligible:true,focused:false,pulse:0}));}
   if(state.phase!=='build'||state.result||view.dirty)return [];
   const choosing=tool==='bankUpgrade'||bankUpgradeTarget!==null,focused=bankUpgradeTarget??(tool==='bankUpgrade'&&hover!==null?productionId(hover,state):null);
   if(!choosing&&!upgradePulse)return [];
@@ -658,7 +669,8 @@ function paintMap() {
   const ghost=weaponHover&&!previewError;
   let totalDelta=0,freeDelta=0,goldDelta=null;
   if(!draftDirty&&hover!==null&&(state.phase==='build'||ghost)){
-    if(tool==='bank'&&!bankError(state,hover)){freeDelta=-state.params.bankWorkers;goldDelta=-state.params.bankRestoreCost;}
+    if(tool==='campBuild'&&!campBuildError(state,hover)){const q=campBuildQuote(state,hover);goldDelta=-q.cost;totalDelta=freeDelta=q.residents;}
+    else if(tool==='bank'&&!bankError(state,hover)){freeDelta=-state.params.bankWorkers;goldDelta=-state.params.bankRestoreCost;}
     else if(tool==='hospital'&&!hospitalError(state,hover)){freeDelta=-state.params.hospitalWorkers;goldDelta=-state.params.hospitalRestoreCost;}
     else if(postGhost){freeDelta=-state.params.outpostWorkers;goldDelta=-state.params.outpostCost;}
     else if(tool==='production'&&!productionError(state,hover)){const q=economyBuildQuote(state,hover,'production');freeDelta=-q.labor;goldDelta=-q.cost;}
@@ -666,7 +678,7 @@ function paintMap() {
     else if(ghost){const q=embeddingQuote(state,hover);totalDelta=-q.residents;freeDelta=q.released-q.residents;goldDelta=-towerBuildCost(state,weaponType());}
     else if(tool==='wall'&&candidate&&!candidate.error)goldDelta=-state.params.wallCost;
   }
-  if(campUpgradeHover&&!campUpgradeError(state)){const q=campUpgradeQuote(state);goldDelta=-q.cost;totalDelta=freeDelta=q.residents;}
+  if(campUpgradeHover&&!campUpgradeError(state,panelCamp())){const q=campUpgradeQuote(state,panelCamp());goldDelta=-q.cost;totalDelta=freeDelta=q.residents;}
   if(bankUpgradeTarget!==null){
     goldDelta=bankUpgradeHover&&!bankUpgradeError(state,bankUpgradeTarget,bankUpgradeHover)?-state.params.bankUpgradeCost:null;
     totalDelta=freeDelta=0;
@@ -678,6 +690,8 @@ function paintMap() {
   const sourceFootprint=view.sourceFootprint;
   // 只预览本次建设的确定变化；数值由资源栏、对应按钮与地图展示，不在左下重复。
 
+  if($('campSelect').value!==String(panelCamp()))refreshCampPanel();
+  const shownCamp=campRecord(state,panelCamp());$('campHP').textContent=`HP ${shownCamp.hp} / ${state.params.campHP}`;$('campBar').style.width=`${shownCamp.hp/state.params.campHP*100}%`;
   const refundPreview=$('refundPreview'),erasePreview=$('erasePreview'),repairPreview=$('repairPreview'),campHPPreview=$('campHPPreview'),campBarPreview=$('campBarPreview');
   refundPreview.hidden=true;erasePreview.hidden=true;repairPreview.hidden=true;$('moneyGain').hidden=false;
   refundPreview.classList.remove('spend-preview');campHPPreview.hidden=true;campBarPreview.hidden=true;
@@ -699,9 +713,10 @@ function paintMap() {
       if(!error&&quote.cost>0){
         goldDelta=-quote.cost;
         if(quote.type==='camp'){
+          const c=campRecord(state,hover);$('campHP').textContent=`HP ${c.hp} / ${state.params.campHP}`;$('campBar').style.width=`${c.hp/state.params.campHP*100}%`;
           campHPPreview.hidden=false;campHPPreview.textContent=`+${quote.restore}`;
-          campHPPreview.setAttribute('aria-label',`预计恢复 ${quote.restore} HP，修复后 ${state.hp+quote.restore} / ${state.params.campHP}`);
-          campBarPreview.hidden=false;campBarPreview.style.left=`${state.hp/state.params.campHP*100}%`;campBarPreview.style.width=`${quote.restore/state.params.campHP*100}%`;
+          campHPPreview.setAttribute('aria-label',`预计恢复 ${quote.restore} HP，修复后 ${campRecord(state,hover).hp+quote.restore} / ${state.params.campHP}`);
+          campBarPreview.hidden=false;campBarPreview.style.left=`${campRecord(state,hover).hp/state.params.campHP*100}%`;campBarPreview.style.width=`${quote.restore/state.params.campHP*100}%`;
         }
       }
     }
@@ -742,7 +757,7 @@ function paintMap() {
   defenseHits=defenseHits.filter(hit=>effectTime-hit.at<.65&&currentlyVisible(hit.cell));
   const fx={view:effectView,upgrades,upgradeStyle:controlState.params,hazeColor:backdrop,defenseHits:reducedMotion.matches||state.phase!=='battle'?[]:defenseHits.map(hit=>({...hit,ground:naturalGroundAt(state.layout,hit.x,hit.y,controlState.params.cellMeters),alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),night:nightMix,enemyFiguresPerGroup:controlState.params.enemyFiguresPerGroup,cameraKey:JSON.stringify(effectView),time:effectTime,cell:size,cellMeters:controlState.params.cellMeters,impacts:reducedMotion.matches||state.phase!=='battle'?[]:combatImpacts.filter(hit=>effectTime-hit.at<.46&&currentlyVisible(hit.cell)).map(hit=>({...hit,alpha:mapFogEnabled()?view.visibility.enemyAlpha(hit.x,hit.y):1})).filter(hit=>hit.alpha>0),pixelsAt:(x,y,z)=>viewPixelScale(x,y,z,effectView),reducedMotion:reducedMotion.matches,transitions:reducedMotion.matches?[]:cityTransitions,shots:reducedMotion.matches||state.phase!=='battle'?[]:combatShots.filter(shot=>effectTime-shot.at<=.5&&state.towers.has(shot.id)&&currentlyVisible(shot.id)).map(shot=>({...shot,alpha:mapFogEnabled()?view.visibility.enemyAlpha(shot.x,shot.y):1})).filter(shot=>shot.alpha>0),sweeps:[],fires:[...wrecks]};
   for(const [id,post] of state.outposts)if(currentlyVisible(id)){const [x,y]=xy(id),target=searchAim(view.searchSectors.get(id),effectTime,id,controlled,view.searchVision);fx.sweeps.push({id:'post:'+id,asset:'watch',x:x+.5+(post.starter?.32:0),y:y+.5+(post.starter?.32:0),w:5.2/controlState.params.cellMeters,h:5.2/controlState.params.cellMeters,target});}
-  const [fireX,fireY]=xy(state.camp),campWidth=3/controlState.params.cellMeters;if(state.hp>0)fx.fires.push({id:'camp',asset:'camp',x:fireX+.5,y:fireY+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});
+  const campWidth=3/controlState.params.cellMeters;for(const camp of livingCamps(state)){const [x,y]=xy(camp.id);fx.fires.push({id:'camp:'+camp.id,asset:'camp',x:x+.5,y:y+.5,w:campWidth,h:campWidth,fireScale:campWidth/1.3});}
   const plantKey=(hover!==null&&tool==='wall'?'wall:'+hover:'')+(postGhost?'post:'+hover:'');
   if(view.plantKey!==plantKey){
     const plantOccupied=new Set([...state.walls,...previewState.outposts.keys(),...(hover!==null&&tool==='wall'?[hover]:[])]);
@@ -757,7 +772,8 @@ function paintMap() {
   for(const [id,type] of [...state.towers,...(ghost?[[hover,weaponType()]]:[])])if(currentlyVisible(id)){const [x,y]=xy(id),plot=productionId(id,state);prop('tower:'+id,type==='B'?'far':'near',x+.5,y+.5,(type==='B'?3:4)/controlState.params.cellMeters,(type==='B'?6:5)/controlState.params.cellMeters,{alpha:ghost&&id===hover?.45:1,roof:city3D?.roofAt(plot,x+.5,y+.5)??0});}
   for(const [id,p] of previewState.outposts)if(currentlyVisible(id)){const [x,y]=xy(id);prop('post:'+id,'watch',x+.5+(p.starter?.32:0),y+.5+(p.starter?.32:0),5.2/controlState.params.cellMeters,5.2/controlState.params.cellMeters,{alpha:postGhost&&id===hover?.45:1,target:fx.sweeps.find(s=>s.id==='post:'+id)?.target});}
   for(const id of new Set([...state.walls,...state.playerWalls]))if(visibleCell(id)&&!state.blocked.has(id)&&!state.fixedWalls.has(id)){const [x,y]=xy(id),body=state.wallHealth.get(id);prop('wall:'+id,'wall',x+.5,y+.5,1,1,{dead:body?.hp===0,health:body?body.hp/body.max:1,connections:wallConnections(id,state.walls,SIZE,SIZE,roadMarkings(state.layout).get(id)?.axis),cellMeters:controlState.params.cellMeters});}
-  const [campX,campY]=xy(state.camp);prop('camp','camp',campX+.5,campY+.5,campWidth,campWidth,{dead:state.hp<=0});
+  for(const camp of allCamps(state)){const [x,y]=xy(camp.id);prop('camp:'+camp.id,'camp',x+.5,y+.5,campWidth,campWidth,{dead:camp.hp<=0});if(camp.id!==state.camp)prop('camp-plaza:'+camp.id,'plaza',x+.5,y+.5,3,3);}
+  if(tool==='campBuild'&&hover!==null&&!campBuildError(state,hover,{ignoreResources:true})){const [x,y]=xy(hover);prop('camp-ghost','camp',x+.5,y+.5,campWidth,campWidth,{alpha:.45});prop('camp-plaza-ghost','plaza',x+.5,y+.5,3,3,{alpha:.4});}
   const campPlot=state.sites.find(p=>p.role==='camp');if(campPlot)prop('camp-plaza','plaza',campPlot.x+(campPlot.width??campPlot.size)/2,campPlot.y+(campPlot.height??campPlot.size)/2,campPlot.width??campPlot.size,campPlot.height??campPlot.size);
   for(const source of displayedEnemySources()){const w=source.width??1,h=source.height??1;prop('source:'+sourceIdentity(source),source.hp===0?'sourceRuined':'source',(source.bx??source.x)+w/2,(source.by??source.y)+h/2,w*.72,h*.72,{dead:source.hp===0,roof:city3D?.baseAt(source.site)??0});}
   facilityItems.push(...wrecks);
@@ -775,7 +791,7 @@ function paintMap() {
   }
   city3D.renderFacilities(facilityItems,nightMix,fx);
   ctx.restore();
-  if(viewMode!=='top'){paintObservation(view,cityPlots,facilityItems,enemyFrames,fx,plannedRoutes,forecastDay,fogTime,goldDelta!==null);return true;}
+  if(viewMode!=='top'){paintObservation(view,cityPlots,facilityItems,enemyFrames,fx,plannedRoutes,forecastDay,fogTime,tool==='campBuild'&&hover!==null?!campBuildError(state,hover,{ignoreResources:true}):goldDelta!==null);return true;}
   paintCityScene(view,fogTime);
   // 俯视只叠加战术信息；城市、地面与设施始终来自同一套3D场景。
   ctx.save();ctx.translate(panX,panY);ctx.scale(size,size);
@@ -922,7 +938,7 @@ function paintMap() {
   // 建筑整体归属的轮廓最后绘制，避免被屋顶贴图盖住；开放地面仍逐格走边。
   drawControlBorderLine(ctx,view.boundaryPath,size,controlState.params,nightMix);
   drawCivilizationBorderLine(ctx,view.civilPath,size,controlState.params,nightMix);
-  if(campUpgradeHover)drawCivilizationBorderLine(ctx,view.upgradePath,size,{...controlState.params,civilBorderOpacity:100},nightMix);
+  if(campUpgradeHover||tool==='campBuild')drawCivilizationBorderLine(ctx,view.upgradePath,size,{...controlState.params,civilBorderOpacity:100},nightMix);
   // 拆除高亮只覆盖实际对象：物理建筑或独立设施一格。
   if(tool==='erase'&&hover!==null&&state.phase==='build'){
     const q=demolitionQuote(state,hover),cells=['production','housing','ruin'].includes(q.type)?buildingCells(state,hover):q.type?[hover]:[];
@@ -953,14 +969,12 @@ function paintMap() {
     drawFacilityMarker('watch',x,y,size,mapDetail,hover===id||tool==='outpost');
     ctx.restore();
   }
-  const [cx,cy] = xy(state.camp);
-  // 火光是共同守护目标，用局部光晕定位；不暗化整个战场。
-  ctx.save();
-  if(!state.result&&campCritical(state))ctx.globalAlpha=reducedMotion.matches?1:.6+.4*(.5+.5*Math.cos(performance.now()*Math.PI*2/1400));
-  const glow=ctx.createRadialGradient(cx+.5,cy+.5,.1,cx+.5,cy+.5,1.8);
-  glow.addColorStop(0,state.hp<=0?'#ffc17c00':!state.result&&campCritical(state)?'#f5847c99':'#ffc17c44');glow.addColorStop(1,'#ffc17c00');ctx.fillStyle=glow;ctx.fillRect(cx-1.3,cy-1.3,3.6,3.6);
-  drawFacilityMarker('camp',cx,cy,size,mapDetail,!state.result&&campCritical(state));
-  ctx.restore();
+  for(const camp of allCamps(state)){
+    const [cx,cy]=xy(camp.id);if(!visibleCell(camp.id))continue;
+    ctx.save();if(!state.result&&campCritical(state,camp.id))ctx.globalAlpha=reducedMotion.matches?1:.6+.4*(.5+.5*Math.cos(performance.now()*Math.PI*2/1400));
+    const glow=ctx.createRadialGradient(cx+.5,cy+.5,.1,cx+.5,cy+.5,1.8);glow.addColorStop(0,camp.hp<=0?'#ffc17c00':campCritical(state,camp.id)?'#f5847c99':'#ffc17c44');glow.addColorStop(1,'#ffc17c00');ctx.fillStyle=glow;ctx.fillRect(cx-1.3,cy-1.3,3.6,3.6);
+    drawCampfire(ctx,cx+.22,cy+.22,.56,camp.hp>0);ctx.restore();
+  }
   ctx.save();ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
   drawPOILayer(view,(x,y)=>({x:panX+x*size,y:panY+y*size}),()=>size,focusActive);ctx.restore();
   ctx.save();clipSight();
@@ -1300,7 +1314,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   for(const route of ordered)if(!focusedRoute(route))drawRoute(route);
   const border=new Path2D();for(const [x,y,nx,ny] of view.boundary){const a=point(x,y,naturalGroundAt(state.layout,x,y,view.controlState.params.cellMeters)+.02),b=point(nx,ny,naturalGroundAt(state.layout,nx,ny,view.controlState.params.cellMeters)+.02);if(a.hidden||b.hidden)continue;border.moveTo(a.x,a.y);border.lineTo(b.x,b.y);}
   drawControlBorderLine(ctx,border,1,view.controlState.params,nightMix);
-  const civilBorder=new Path2D();for(const [x,y,nx,ny] of [...view.civilBoundary,...(campUpgradeHover?view.upgradeBoundary:[])]){const a=point(x,y,naturalGroundAt(state.layout,x,y,view.controlState.params.cellMeters)+.025),b=point(nx,ny,naturalGroundAt(state.layout,nx,ny,view.controlState.params.cellMeters)+.025);if(!a.hidden&&!b.hidden){civilBorder.moveTo(a.x,a.y);civilBorder.lineTo(b.x,b.y);}}
+  const civilBorder=new Path2D();for(const [x,y,nx,ny] of [...view.civilBoundary,...(campUpgradeHover||tool==='campBuild'?view.upgradeBoundary:[])]){const a=point(x,y,naturalGroundAt(state.layout,x,y,view.controlState.params.cellMeters)+.025),b=point(nx,ny,naturalGroundAt(state.layout,nx,ny,view.controlState.params.cellMeters)+.025);if(!a.hidden&&!b.hidden){civilBorder.moveTo(a.x,a.y);civilBorder.lineTo(b.x,b.y);}}
   drawCivilizationBorderLine(ctx,civilBorder,1,view.controlState.params,nightMix);
   // 米制墙在远景很细；连续墙顶衬边和真实墙段共向，不能把道路误认为完整防线。
   for(const [id,body] of state.wallHealth)if(body.hp>0&&currentlyVisible(id)){
@@ -1322,7 +1336,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   };
   for(const item of items)if(['near','far','watch','camp'].includes(item.asset)){
     const p=point(item.x,item.y,city3D.facilityTopAt(item.id)+.03);if(p.hidden)continue;ctx.save();ctx.fillStyle=nightMix>.5?'#182a35f2':'#e8e9ddf2';ctx.strokeStyle='#819999';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(p.x-7,p.y-7,14,14,3);ctx.fill();ctx.stroke();
-    if(item.asset==='camp')drawCampfire(ctx,p.x-6,p.y-6,12,state.hp>0);else drawFacility(item.asset==='watch'?'watch':item.asset,p.x-6,p.y-6,12);
+    if(item.asset==='camp')drawCampfire(ctx,p.x-6,p.y-6,12,!item.dead);else drawFacility(item.asset==='watch'?'watch':item.asset,p.x-6,p.y-6,12);
     const shot=fx.shots.find(shot=>'tower:'+shot.id===item.id),pulse=zoom*100<view.controlState.params.mapMidZoomPercent&&shot?shotEnvelope(effectTime-shot.at,shot.type).flash:0;
     if(pulse>0){ctx.strokeStyle=`rgba(255,230,178,${pulse})`;ctx.lineWidth=2;ctx.stroke();}ctx.restore();
   }
@@ -1351,7 +1365,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   // 关闭回正时把实际落点/整栋操作范围投影为轮廓；报价继续复用原资源栏。
   if(!view.controlState.params.returnToTopOnAction&&tool&&hover!==null&&(state.phase==='build'||['build','long'].includes(tool))){
     const site=productionSite(hover,state),whole=site&&(['production','housing','bank','hospital','bankUpgrade'].includes(tool)||tool==='erase'&&['ruin','production','housing','bank','hospital','bankUpgrade'].includes(demolitionQuote(state,hover).type));
-    const [hx,hy]=xy(hover),x=whole?site.x:hx,y=whole?site.y:hy,w=whole?(site.width??site.size):1,h=whole?(site.height??site.size):1;
+    const [hx,hy]=xy(hover),camp=tool==='campBuild',x=whole?site.x:camp?hx-1:hx,y=whole?site.y:camp?hy-1:hy,w=whole?(site.width??site.size):camp?3:1,h=whole?(site.height??site.size):camp?3:1;
     const z=['build','long'].includes(tool)?(city3D.roofAt(productionId(hover,state),hx+.5,hy+.5)??0)+.03:.03;
     const corners=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(([x,y])=>point(x,y,z));
     if(corners.every(p=>!p.hidden)&&!view.constructionPreview&&tool!=='bankUpgrade'){ctx.save();ctx.beginPath();ctx.moveTo(corners[0].x,corners[0].y);corners.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));ctx.closePath();ctx.fillStyle=operationValid?'#92ffd42b':'#ff77662b';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=operationValid?'#b9f0d1':'#ff9a8c';ctx.stroke();ctx.restore();}
@@ -1403,26 +1417,26 @@ function update() {
   fire = fireField({...state,params:previewParams()});
   // 夜晚聚焦补炮；资金不足仍显示灰色炮台，区别于阶段不允许的工具。
   const daytime=state.phase==='build';
-  const repairTargets=[state.camp,...state.wallHealth.keys()].filter(id=>repairQuote(state,id).missing>0);
+  const repairTargets=[...allCamps(state).map(c=>c.id),...state.wallHealth.keys()].filter(id=>repairQuote(state,id).missing>0);
   const repairAvailable=repairTargets.some(id=>!repairError(state,id));
   // 无可执行修复仍保留工具选择，玩家可以查看损伤与资源需求。
   if($('firstNightNotice').textContent==='请先建造一座炮塔'&&(!daytime||firstNightReady(state)))$('firstNightNotice').hidden=true;
-  for(const id of ['wall','outpost','production','housing','bank','hospital','bankUpgrade','repair','erase'])$(id).hidden=!daytime;
+  for(const id of ['wall','outpost','production','housing','bank','hospital','bankUpgrade','repair','erase','campBuild'])$(id).hidden=!daytime;
   $('economyTools').hidden=!daytime||state.day<2;$('commonTools').hidden=!daytime;
-  $('housing').hidden=!daytime||state.day<2;$('production').hidden=!daytime||state.day<2;$('outpost').hidden=!daytime||state.day<3;
+  $('housing').hidden=!daytime||state.day<2;$('production').hidden=!daytime||state.day<2;$('outpost').hidden=!daytime||state.day<3;$('campBuild').hidden=!daytime||state.day<3;
   const bankTargets=pendingBanks(state),upgradeTargets=pendingBanks(state,true),hospitalTargets=pendingHospitals(state);
   $('bank').hidden=!daytime||state.day<2||!bankTargets.length;
   $('bankUpgrade').hidden=!daytime||state.day<2||!upgradeTargets.length;
   $('hospital').hidden=!daytime||state.day<2||!hospitalTargets.length;
   $('poiTools').hidden=$('bank').hidden&&$('bankUpgrade').hidden&&$('hospital').hidden;
   if(['bank','hospital','bankUpgrade'].includes(tool)&&$(tool).hidden)tool=null;
-  if((['production','housing'].includes(tool)&&state.day<2)||(tool==='outpost'&&state.day<3))tool='wall';
+  if((['production','housing'].includes(tool)&&state.day<2)||(['outpost','campBuild'].includes(tool)&&state.day<3))tool='wall';
   if(state.phase==='battle'&&tool!==null&&!['build','long'].includes(tool))tool='build';
-  for(const id of ['wall','build','long','outpost','production','housing','bank','hospital','bankUpgrade','repair','erase'])$(id).classList.toggle('selected',tool===id);
+  for(const id of ['wall','build','long','outpost','production','housing','bank','hospital','bankUpgrade','repair','erase','campBuild'])$(id).classList.toggle('selected',tool===id);
   $('toolHeading').textContent=state.result?'城市总览':daytime?'建设工具':'夜间补炮';
   const w=selectedWeapon();
   // 左下最多三行：当前工具、操作结果、悬停地块；完整规则由右侧手册承担。
-  const toolNotes={hospital:'医院 · 修复后完成收复目标',bank:'银行 · 恢复地图上已有的银行',bankUpgrade:'银行 · 选择一项升级',wall:'建墙 · 仅基础控制内可建',outpost:'瞭望塔 · 扩张控制与视野',repair:'修复 · 悬停受损火光或墙',housing:'住房 · 修缮或在空地新建',production:'生产 · 修缮或在空地新建',erase:'拆除 · 悬停预览返还'};
+  const toolNotes={hospital:'医院 · 修复后完成收复目标',bank:'银行 · 恢复地图上已有的银行',bankUpgrade:'银行 · 选择一项升级',wall:'建墙 · 仅基础控制内可建',campBuild:'新篝火 · 完整受控的3×3场地',outpost:'瞭望塔 · 扩张控制与视野',repair:'修复 · 悬停受损火光或墙',housing:'住房 · 修缮或在空地新建',production:'生产 · 修缮或在空地新建',erase:'拆除 · 悬停预览返还'};
   $('toolInfo').textContent=['build','long'].includes(tool)?`${weaponType()==='A'?'近防炮':'远防炮'} · 范围 ${w.range} · 火力 ${w.power}/拍`:toolNotes[tool]||'';
 
   $('morningTitle').textContent=state.result?(state.result.type==='victory'?'城市已收复':state.result.type==='deadline'?'收复期限已到':'本局已结束'):`${state.day===1?'守住第一晚':state.day===2?'恢复生产，守住防线':'向北收复，守住火光'}`;
@@ -1434,7 +1448,7 @@ function update() {
   $('mapConfigLink').href=`map-preview.html?${new URLSearchParams(mapSettings)}`;
   // 金币总额仍由模型结算；夜间按钮拆成白天基价 + 实际加急差额。
   const towerPrice=type=>{const base=state.params.weapons[type].cost,cost=towerBuildCost(state,type);return state.phase==='battle'?`${base}+${cost-base}`:base;};
-  const prices={wall:state.params.wallCost,build:towerPrice('A'),long:towerPrice('B'),outpost:state.params.outpostCost,bank:state.params.bankRestoreCost,hospital:state.params.hospitalRestoreCost,bankUpgrade:state.params.bankUpgradeCost};
+  const prices={campBuild:state.params.campBuildCost,wall:state.params.wallCost,build:towerPrice('A'),long:towerPrice('B'),outpost:state.params.outpostCost,bank:state.params.bankRestoreCost,hospital:state.params.hospitalRestoreCost,bankUpgrade:state.params.bankUpgradeCost};
   for(const [id,price] of Object.entries(prices))$('price-'+id).textContent=String(price);
   $('outpostWorkers').textContent=state.params.outpostWorkers;
   $('outpost').setAttribute('aria-label',`瞭望塔，花费 ${state.params.outpostCost} 金币，持续占用 ${state.params.outpostWorkers} 名工人`);
@@ -1454,16 +1468,14 @@ function update() {
   $('populationDetailBank').textContent=bankWorkers(state);$('populationDetailBank').closest('dl>div').hidden=!bankWorkers(state);
   $('populationDetailHospital').textContent=hospitalWorkers(state);$('populationDetailHospital').closest('dl>div').hidden=!hospitalWorkers(state);
   updateBankDetails();positionResourceDetails();
-  const campUpgrade=campUpgradeQuote(state);$('price-campUpgrade').textContent=campUpgrade.cost;$('campCivilInfo').textContent=`文明半径 ${campCivilRadius(state)} 格 · Lv.${(state.campLevel??0)+1}`;
-  $('campUpgrade').hidden=state.day<2||state.phase!=='build';$('campUpgrade').disabled=!!campUpgradeError(state)||paramsDirty();
-  $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
+  refreshCampPanel();
   const critical=!state.result&&campCritical(state);
   $('campPanel').classList.toggle('camp-critical',critical);viewport.classList.toggle('camp-critical',critical);
   $('campWarning').hidden=!critical;$('showDefeat').hidden=state.phase!=='lost';$('showVictory').hidden=state.result?.type!=='victory';
   if(state.result?.type!=='victory'&&$('victory').open)$('victory').close();
   if(state.phase!=='lost'&&$('defeat').open)$('defeat').close();
   const active = state.phase === 'battle'&&!nightOutro, build = state.phase === 'build';
-  if(!build){cancelDayEnd();dayEndReturn=null;}
+  if(!build){campUpgradeHover=false;cancelDayEnd();dayEndReturn=null;}
   if(build&&!dayEndHold&&!dayEndReturn)showDayEndCharge(0);
   $('start').classList.toggle('day-end',build||!!dawnAt);$('dayEndVisual').hidden=!build&&!dawnAt;$('dayEndHint').hidden=!build;
   document.body.dataset.phase=state.phase;
@@ -1478,22 +1490,21 @@ function update() {
   $('timeIcon').setAttribute('aria-label',dawn?'白天':'夜晚');
   const goals=campaignGoals(state);
   $('finalGoal').innerHTML=goals.enabled?`<span>目标：${state.waves.length} 晚内</span><span class="goal-item${goals.hospital?' goal-complete':''}">修复医院：<span class="goal-status">${goals.hospital?'已完成':goals.hospitalRestored?'失去控制':goals.hospitalControlled?'待修复':'未控制'}</span></span><span class="goal-item${goals.sources?' goal-complete':''}">摧毁全部敌源：<span class="goal-status">${goals.cleared}/${goals.total}</span></span>`:'最终目标 · 完成防守实验';
-  const iconContext=$('campIcon').getContext('2d');iconContext.clearRect(0,0,64,64);drawCampfire(iconContext,4,5,54,state.hp>0);
   $('phase').textContent=`第 ${state.day} 天`;
   $('start').disabled = !build && !active;
   $('retry').disabled=!preparation; $('step').disabled = !active || !paused || !!motion?.singleStep;
   $('startLabel').textContent = nightOutro||dawnAt?'迎来黎明':active ? (paused ? '继续夜晚' : '暂停夜晚') : state.result?.type==='victory'?'收复成功':state.result?.type==='deadline'?'收复未完成':state.result?.type==='experiment'?'实验完成':build?'结束白天':state.phase==='won'?'守住了':'防守结束';
   updateNightProgress();
-  for (const id of ['build','long','wall','outpost','production','housing','bank','hospital','bankUpgrade','repair','erase','apply','addSource','applyParams','cancelParams','defaults']) $(id).disabled = !build;
+  for (const id of ['build','long','wall','outpost','production','housing','bank','hospital','bankUpgrade','repair','erase','apply','addSource','applyParams','cancelParams','defaults','campBuild']) $(id).disabled = !build;
   // 通用建造交互：不足价即禁用，退款或应用参数后立即恢复。
   const economy={production:economyBuildAvailability(state,'production'),housing:economyBuildAvailability(state,'housing')};
   toolResourceQuotes={};
-  for(const [id,cost,labor=0] of [['hospital',state.params.hospitalRestoreCost,state.params.hospitalWorkers],['bank',state.params.bankRestoreCost,state.params.bankWorkers],['bankUpgrade',state.params.bankUpgradeCost],['wall',state.params.wallCost],['build',towerBuildCost(state,'A')],['long',towerBuildCost(state,'B')],['outpost',state.params.outpostCost,state.params.outpostWorkers],['production',economy.production.target?.quote.cost??0,economy.production.target?.quote.labor??0],['housing',economy.housing.target?.quote.cost??0]]){
+  for(const [id,cost,labor=0] of [['campBuild',state.params.campBuildCost],['hospital',state.params.hospitalRestoreCost,state.params.hospitalWorkers],['bank',state.params.bankRestoreCost,state.params.bankWorkers],['bankUpgrade',state.params.bankUpgradeCost],['wall',state.params.wallCost],['build',towerBuildCost(state,'A')],['long',towerBuildCost(state,'B')],['outpost',state.params.outpostCost,state.params.outpostWorkers],['production',economy.production.target?.quote.cost??0,economy.production.target?.quote.labor??0],['housing',economy.housing.target?.quote.cost??0]]){
     const resources=toolResourceQuotes[id]=economy[id]?.target?.resources??buildResourceStatus(state,cost,labor),short=resources.gold||resources.workers;
-    const unlocked=['production','housing','bank','hospital','bankUpgrade'].includes(id)?state.day>=2:id==='outpost'?state.day>=3:true;
+    const unlocked=['production','housing','bank','hospital','bankUpgrade'].includes(id)?state.day>=2:['outpost','campBuild'].includes(id)?state.day>=3:true;
     const allowed=unlocked&&(build||(active&&['build','long'].includes(id)));
     $(id).disabled=!allowed||(economy[id]?!economy[id].enabled:short);
-    blockedActionReasons.set(id,!allowed?(state.result?'本局已结束':!unlocked?`第 ${id==='outpost'?3:2} 天开放`:'防守中不能建设'):economy[id]?.reason??resources.message);
+    blockedActionReasons.set(id,!allowed?(state.result?'本局已结束':!unlocked?`第 ${['outpost','campBuild'].includes(id)?3:2} 天开放`:'防守中不能建设'):economy[id]?.reason??resources.message);
     $(id).title='';
   }
   const bankAvailable=state.sites.some(p=>p.role==='bank'&&!bankError(state,key(p.x,p.y)));
@@ -1503,6 +1514,7 @@ function update() {
   blockedActionReasons.set('hospital',!build?'只能在白天修复医院':!hospitalAvailable&&hospitalTargets.length?hospitalError(state,hospitalTargets.find(id=>!hospitalError(state,id,{ignoreResources:true}))??hospitalTargets[0]):'');
   const ground=build?[...rawControlMask(state)]:[];
   if(!$('wall').disabled&&!ground.some(id=>!wallPreview(state,id).error)){$('wall').disabled=true;blockedActionReasons.set('wall','控制区内没有可建墙的位置');}
+  if(!$('campBuild').disabled&&!ground.some(id=>!campBuildError(state,id))){$('campBuild').disabled=true;blockedActionReasons.set('campBuild','控制区内没有完整可用的3×3场地');}
   if(!$('outpost').disabled&&!ground.some(id=>!outpostError(state,id))){$('outpost').disabled=true;blockedActionReasons.set('outpost','控制区内没有可建瞭望塔的位置');}
   if(!['build','long'].every(id=>$(id).disabled)){
     const overlay=towerOverlayCache.get(state,controlMask(state),new Set(motion?.actors.map(actor=>actor.to)));
@@ -1519,8 +1531,8 @@ function update() {
   $('erase').disabled=!eraseAvailable;blockedActionReasons.set('erase',!build?'防守中不能拆除':!eraseAvailable?'控制区内没有可拆除的目标':'');
   // 可执行性只决定灰显；当前阶段已解锁的工具仍可选择，地图点击才真正执行。
   toolAvailability={};
-  for(const id of ['wall','build','long','outpost','production','housing','bank','hospital','bankUpgrade','repair','erase']){
-    const unlocked=state.day>=(id==='outpost'?3:['production','housing','bank','hospital','bankUpgrade','repair'].includes(id)?2:1);
+  for(const id of ['wall','build','long','outpost','production','housing','bank','hospital','bankUpgrade','repair','erase','campBuild']){
+    const unlocked=state.day>=(['outpost','campBuild'].includes(id)?3:['production','housing','bank','hospital','bankUpgrade','repair'].includes(id)?2:1);
     const selectable=!state.result&&unlocked&&(build||active&&['build','long'].includes(id)),unavailable=selectable&&$(id).disabled;
     toolAvailability[id]={disabled:!selectable,unavailable,reason:blockedActionReasons.get(id)||''};
     $(id).disabled=!selectable;$(id).classList.toggle('tool-unavailable',unavailable);$(id).setAttribute('aria-pressed',String(tool===id));
@@ -1574,7 +1586,7 @@ function demolitionTargetError(id){
 }
 // 预览读取真实执行条件，缓存当前格；静态状态不触发拒绝音或提醒动画。
 function updateTargetPreview(view){
-  if(campUpgradeHover){const error=campUpgradeError(state),q=campUpgradeQuote(state);setTargetPreview(error||`文明半径 ${q.before} → ${q.after} 格`,!error);return;}
+  if(campUpgradeHover){const error=campUpgradeError(state,panelCamp()),q=campUpgradeQuote(state,panelCamp());setTargetPreview(error||`文明半径 ${q.before} → ${q.after} 格`,!error);return;}
   const status=toolAvailability[tool];
   if(!tool||!status||status.disabled||state.result||$('bankUpgradeDialog').open){setTargetPreview();return;}
   const key=[tool,hover].join(':');
@@ -1582,7 +1594,7 @@ function updateTargetPreview(view){
   if(hover===null){setTargetPreview(toolSelectionPreview&&status.unavailable?status.reason:'');return;}
   toolSelectionPreview=false;
   if(view.dirty){setTargetPreview('请先应用或取消参数预览。');return;}
-  const validators={production:productionError,housing:housingError,outpost:outpostError,bank:bankError,hospital:hospitalError,bankUpgrade:bankUpgradeError,repair:repairError,erase:(_state,id)=>demolitionTargetError(id),wall:(_state,id)=>wallPreview(state,id).error,build:(_state,id)=>weaponPlacementError(id),long:(_state,id)=>weaponPlacementError(id)};
+  const validators={campBuild:campBuildError,production:productionError,housing:housingError,outpost:outpostError,bank:bankError,hospital:hospitalError,bankUpgrade:bankUpgradeError,repair:repairError,erase:(_state,id)=>demolitionTargetError(id),wall:(_state,id)=>wallPreview(state,id).error,build:(_state,id)=>weaponPlacementError(id),long:(_state,id)=>weaponPlacementError(id)};
   const error=targetReason(validators[tool]?.(state,hover)||'',hover);
   if(!error&&['production','housing','bank','hospital'].includes(tool)&&!buildingCivilized(state,hover)){setTargetPreview('可修复 · 尚未接通文明',true);return;}
   if(!error){setTargetPreview(tool==='erase'?'可拆除':tool==='repair'?'可修复':tool==='bankUpgrade'?'可升级':['bank','hospital'].includes(tool)?'可恢复':'可建设',true);return;}
@@ -1935,7 +1947,7 @@ function paramsEditor(params,scope='all') {
     container.append(row);
   }
   fields('全局',params,'',[['budget','资金',0,10000],['stepMs','移动节拍（毫秒）',50,5000],['wallCost','墙价',1,1000],['demolitionRefundPercent','旧投入拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙造价%',1,100],['controlRadius','起步瞭望塔控制半径',1,30],['campCivilRadius','篝火文明半径',1,30],['campHP','篝火耐久',1,10000],['campRepairCost','火光修复单价/HP',1,1000],['nightTicks','每晚拍数',1,500],['nightCleanupSpeed','夜末清源速度倍率',1,4]]);
-  fields('篝火升级',params,'',[['campUpgradeCost','基础费用（逐级递增）',1,1000],['campUpgradeRadiusStep','每级文明半径增量',1,15],['campUpgradeMaxLevel','最多升级次数',1,10]]);
+  fields('篝火升级',params,'',[['campBuildCost','新篝火费用',1,1000],['campUpgradeCost','基础费用（逐级递增）',1,1000],['campUpgradeRadiusStep','每级文明半径增量',1,15],['campUpgradeMaxLevel','最多升级次数',1,10]]);
   fields('日夜操作',params,'',[['dayEndHoldMs','结束白天长按时长（毫秒）',300,3000]]);
   fields('视野',params,'',[['campS01','火光 S01 距离（格）',0,30],['outpostS01','瞭望塔 S01 距离（格）',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealPadding','敌源局部 S1 外扩（格）',0,10]]);
   fields('住房与人口',params,'',[['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房新建每格费用',1,1000]]);
@@ -2053,8 +2065,8 @@ $('defeatRetry').onclick=()=>reset(true);
 $('defeatRestart').onclick=()=>reset(false);
 $('defeatInspect').onclick=()=>{$('defeat').close();$('showDefeat').focus();};
 $('showDefeat').onclick=showDefeat;
-for(const id of ['wall','build','long','outpost','production','housing','bank','hospital','bankUpgrade','repair','erase'])$(id).onclick=()=>{
-  tool=id;toolSelectionPreview=true;notify('');sound.play('switchOn');for(const button of ['wall','build','long','outpost','production','housing','bank','hospital','bankUpgrade','repair','erase'])$(button).classList.toggle('selected',button===id);update();
+for(const id of ['wall','build','long','outpost','production','housing','bank','hospital','bankUpgrade','repair','erase','campBuild'])$(id).onclick=()=>{
+  tool=id;toolSelectionPreview=true;notify('');sound.play('switchOn');for(const button of ['wall','build','long','outpost','production','housing','bank','hospital','bankUpgrade','repair','erase','campBuild'])$(button).classList.toggle('selected',button===id);update();
 };
 $('testDay').replaceChildren(...state.waves.map((_,i)=>{const o=document.createElement('option');o.value=i+1;o.textContent=`第 ${i+1} 天`;return o;}));
 $('applyTest').onclick=()=>{
@@ -2223,18 +2235,19 @@ canvas.addEventListener('pointerup',e=>{
   if(state.phase==='build'&&!paramsDirty()&&(tool==='bankUpgrade'||tool===null&&state.banks.has(productionId(id,state))&&!state.banks.get(productionId(id,state)).upgrade)){
     openBankUpgrade(id);return;
   }
-  if(tool===null){selectedSource=null;pinnedSource=null;syncSourceHighlight();return;}
+  if(tool===null){if(campRecord(state,id))selectedCamp=id;selectedSource=null;pinnedSource=null;syncSourceHighlight();update();return;}
   if(state.phase!=='build'&&!(state.phase==='battle'&&['build','long'].includes(tool))){showTopNotice('防守中只能在建筑炮位补炮，不能造墙、修复或拆除。');return;}
   if(paramsDirty()){showTopNotice('请先应用或取消参数预览。');return;}
-  const beforePeople=population(state).total,beforeFunds=funds(state),beforeHP=state.hp,erasedType=tool==='erase'?demolitionQuote(state,id).type:null;let actionError='';
-  if(tool==='hospital'){actionError=restoreHospital(state,id);notify(actionError?'':'医院已修复，守住本晚后结算收复目标。');}
+  const beforePeople=population(state).total,beforeFunds=funds(state),beforeHP=campRecord(state,id)?.hp??0,erasedType=tool==='erase'?demolitionQuote(state,id).type:null;let actionError='';
+  if(tool==='campBuild'){actionError=buildCamp(state,id);if(!actionError)selectedCamp=id;notify(actionError?'':'新篝火已点燃，下一晚起进入进攻目标池。');}
+  else if(tool==='hospital'){actionError=restoreHospital(state,id);notify(actionError?'':'医院已修复，守住本晚后结算收复目标。');}
   else if(tool==='bank'){actionError=restoreBank(state,id);notify(actionError?'':bankActive(state,productionId(id,state))?'银行已接通，金融额度增加。':'银行已修复，尚未接通文明。');}
   else if(tool==='housing'){
     const error=actionError=buildHousing(state,id);notify(error?'':buildingCivilized(state,id)?`住房已接通，新增 ${population(state).total-beforePeople} 人。`:'住房已修复，尚未接通文明。');
   } else if(tool==='production'){
     const error=actionError=buildProduction(state,id);notify(error?'':productionActive(state,productionId(id,state))?`生产已接通，守夜后收入 +${productionQuote(state,id).income}。`:'生产已修复，尚未接通文明。');
   } else if(['outpost','repair'].includes(tool)){
-    const error=actionError=tool==='repair'?repairFacility(state,id):buildOutpost(state,id);notify(error?'':(tool==='repair'?(id===state.camp?`火光恢复 ${state.hp-beforeHP} HP。`:'墙已修满。'):'瞭望塔已建立，控制区扩张。'));
+    const error=actionError=tool==='repair'?repairFacility(state,id):buildOutpost(state,id);notify(error?'':(tool==='repair'?(campRecord(state,id)?`火光恢复 ${campRecord(state,id).hp-beforeHP} HP。`:'墙已修满。'):'瞭望塔已建立，控制区扩张。'));
   } else if(tool==='wall'){
     const error=actionError=changeWall(state,id);notify(error?'':'墙已建造。');
   } else if(tool==='erase'){
@@ -2249,7 +2262,7 @@ canvas.addEventListener('pointerup',e=>{
     $('firstNightNotice').hidden=true;
     const delta=funds(state)-beforeFunds,site=['production','housing','bank','hospital','bankUpgrade'].includes(tool)||(tool==='erase'&&['production','housing','outpost','ruin'].includes(erasedType))?productionSite(id,state):null;
     sound.play(tool==='erase'?'demolish':tool==='repair'?'repair':'build');
-    const names={hospital:'医院已修复',bank:'银行已恢复',wall:'墙已建造',build:'近防炮就位',long:'远防炮就位',outpost:'控制区扩张',housing:`入住 +${population(state).total-beforePeople} 人`,production:'生产已完成',repair:id===state.camp?`HP +${state.hp-beforeHP}`:'墙已修满',erase:'已拆除'};
+    const names={campBuild:'新篝火已点燃',hospital:'医院已修复',bank:'银行已恢复',wall:'墙已建造',build:'近防炮就位',long:'远防炮就位',outpost:'控制区扩张',housing:`入住 +${population(state).total-beforePeople} 人`,production:'生产已完成',repair:campRecord(state,id)?`HP +${campRecord(state,id).hp-beforeHP}`:'墙已修满',erase:'已拆除'};
     placementFx={id:site?key(site.x,site.y):id,size:site?.width||site?.size||1,height:site?.height||site?.size||1,start:performance.now(),color:delta<0?'#ffe1a0':'#aef2ce',text:`${names[tool]}${delta?` ${signedMoney(delta)} 金币`:''}`};
     if(site&&(['housing','production','bank','hospital'].includes(tool)||tool==='erase'&&['housing','production','ruin'].includes(erasedType)))addCityTransition(site,tool==='erase'?'clear':'restore');
     pulse($('budget'),delta<0?'#ffe1a0':'#bff5ce');
@@ -2342,10 +2355,10 @@ function advance() {
   if(state.events.some(event=>event.type==='leak')){sound.play('hurt');flashCampHit();}
   for (const event of state.events) {
     const [x,y] = xy(event.id);
-    const defenseText={nightSkip:'来袭已结束，迎来黎明',withdraw:`${event.value} 批敌人天亮撤退`,sourceHit:`敌源 ${state.enemySources.get(event.sourceId)?.index+1} 受到 ${event.value} 点伤害`,sourceLost:`敌源 ${state.enemySources.get(event.sourceId)?.index+1} 已肃清${event.prevented?`，阻止 ${event.prevented} 个未出场敌群`:'，后续停止出兵'}`,wallHit:`墙 (${x},${y}) 受到 ${event.value} 点伤害`,wallLost:`墙 (${x},${y}) 被攻破，敌人将沿原路线推进`};
+    const defenseText={campLost:'一处篝火熄灭，修复可恢复该区文明',nightSkip:'来袭已结束，迎来黎明',withdraw:`${event.value} 批敌人天亮撤退`,sourceHit:`敌源 ${state.enemySources.get(event.sourceId)?.index+1} 受到 ${event.value} 点伤害`,sourceLost:`敌源 ${state.enemySources.get(event.sourceId)?.index+1} 已肃清${event.prevented?`，阻止 ${event.prevented} 个未出场敌群`:'，后续停止出兵'}`,wallHit:`墙 (${x},${y}) 受到 ${event.value} 点伤害`,wallLost:`墙 (${x},${y}) 被攻破，敌人将沿原路线推进`};
     const text = defenseText[event.type]|| (event.type === 'merge' ? `(${x},${y}) ${event.members} 批合流 → ${event.value}` : event.type === 'leak' ? `篝火受到 ${event.value} 点伤害` : event.type === 'kill' ? `(${x},${y}) 消灭 ${event.members} 批敌人，+${event.value} 资金` : `(${x},${y}) 火力削减 ${event.value}`);
     if(event.type==='kill'){showIncome(event.value);showCoins(event.id,event.value);}
-    if(event.type==='leak')pulse($('campHP'),'#ff978b');
+    if(event.type==='leak'){selectedCamp=event.target??state.camp;pulse($('campHP'),'#ff978b');}
     if(currentlyVisible(event.id))messages.unshift(`第 ${event.tick??state.tick} 拍 · ${text}`);
   }
   messages = messages.slice(0,8); $('log').replaceChildren(...messages.map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
@@ -2560,6 +2573,8 @@ for(const event of ['pointerenter','focus'])$('campUpgrade').addEventListener(ev
 for(const event of ['pointerleave','blur'])$('campUpgrade').addEventListener(event,()=>{campUpgradeHover=false;mapView=null;setTargetPreview();draw();});
 $('campUpgrade').onclick=()=>{
  if(paramsDirty()){showTopNotice('请先应用或取消参数预览。');return;}
- const error=upgradeCamp(state);if(error){showTopNotice(error);return;}
+ const error=upgradeCamp(state,panelCamp());if(error){showTopNotice(error);return;}
  campUpgradeHover=false;sound.play('upgrade');notify('篝火升级，文明范围扩大。');update();
 };
+
+$('campSelect').onchange=()=>{selectedCamp=Number($('campSelect').value);campUpgradeHover=false;update();};
