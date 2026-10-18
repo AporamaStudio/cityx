@@ -191,7 +191,7 @@ test('第三晚重试保留之前损伤收入与修复，撤销本晚收入和�
   const retry=restoreNight(snapshot);assert.equal(retry.day,3);assert.equal(retry.hp,22);assert.equal(retry.earned,6);
   assert.equal(retry.repairSpent,3);assert.equal(retry.nightEarned,0);assert.equal(retry.towers.size,0);assert.equal(retry.outposts.get(key(11,24)).day,3);
   retry.outposts.get(key(11,24)).day=10;assert.equal(snapshot.outposts.get(key(11,24)).day,3);
-  const fresh=restartCampaign(s);assert.equal(fresh.day,1);assert.equal(fresh.hp,30);assert.equal(funds(fresh),100);assert.equal(fresh.outposts.size,0);
+  const fresh=restartCampaign(s);assert.equal(fresh.day,1);assert.equal(fresh.hp,30);assert.equal(funds(fresh),100);assert.equal(fresh.outposts.size,1);
 });
 test('预留未来源头但允许封路，第三天仍可修复，失败不能进入次日',()=>{
   const s=createCampaign({...DEFAULTS,controlRadius:30});const future=key(15,1);
@@ -305,7 +305,7 @@ test('默认十五晚可完整推进，最后一晚只结算一次',async()=>{
 test('昨夜经营报告固定控制不足的停产数量，次日拆建不改写历史',async()=>{
   const {buildProduction,settleEconomy,removeProduction}=await import('../src/model.js');
   const s=createCampaign({...DEFAULTS,productionCostPerCell:8,renovationCostPercent:100,productionIncomePerCell:1});s.day=2;buildProduction(s,key(11,24));buildProduction(s,key(19,26));
-  const snapshot=beginBattle(s);s.params.controlRadius=4;s.camp=key(19,25);s.phase='won';s.nightEarned=3;
+  const snapshot=beginBattle(s);s.params.controlRadius=4;s.camp=key(19,25);s.outposts=new Map([[s.camp,{day:1,starter:true}]]);s.phase='won';s.nightEarned=3;
   settleEconomy(s);
   assert.equal(s.nightEconomy,4);assert.deepEqual(s.productionReport,{productive:1,stopped:1,missed:4});
   settleEconomy(s);assert.equal(s.economyEarned,4);

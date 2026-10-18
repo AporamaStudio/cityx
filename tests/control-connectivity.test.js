@@ -34,7 +34,7 @@ test('两塔各触同一建筑一格，整栋归属不能跨越基础覆盖之�
  chain(s,[24,30,36,42],22);
  const posts=new Map(s.outposts);posts.delete(key(30,22));posts.delete(key(36,22));const candidate={...s,outposts:posts};
  const raw=rawControlMask(candidate),final=controlMask(candidate);
- assert.ok(raw.has(key(30,23)));assert.ok(raw.has(key(36,23)));assert.ok(!raw.has(key(33,23)));assert.ok(final.has(key(33,23)));
+ assert.ok(raw.has(key(30,23)));assert.ok(!raw.has(key(36,23)));assert.ok(!raw.has(key(33,23)));assert.ok(final.has(key(33,23)));
  assert.match(removeOutpost(s,key(36,22)),/失去与篝火的连接/);
 });
 

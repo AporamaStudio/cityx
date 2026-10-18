@@ -86,7 +86,7 @@ test('重试保留清理、换建与绕行，整局重来恢复原废墟；拆�
   const path=structuredClone(s.attacks[0].path),snapshot=beginBattle(s);run(s);
   const retry=restoreNight(snapshot);assert.ok(retry.outposts.has(id));assert.deepEqual(retry.attacks[0].path,path);
   assert.equal(removeOutpost(retry,id),'');assert.deepEqual(retry.attacks[0].path,path);assert.ok(!retry.blocked.has(id));
-  const fresh=restartCampaign(s);assert.equal(plotContent(fresh,id).status,'ruin');assert.equal(fresh.outposts.size,0);
+  const fresh=restartCampaign(s);assert.equal(plotContent(fresh,id).status,'ruin');assert.equal(fresh.outposts.size,1);
 });
 
 test('面积经营报价支持矩形与更大地块，小地块快回款，大地块密度有上限',()=>{

@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS, LARGE_CITY_OPTIMIZATION_KEYS } from './config.js?v=100';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS, LARGE_CITY_OPTIMIZATION_KEYS } from './config.js?v=101';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -70,6 +70,8 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
   // 本局成果独立于金币倍率和测试台日期；战前快照同时回滚这些计数。
   state.killed=0;state.survivedNights=0;state.result=null;
   state.plotContents=new Map(state.sites.map(p=>[key(p.x,p.y),{status:p.kind==='open'?'empty':'ruin',type:p.kind==='open'?null:(p.ruinType??'production')}]));
+  // 营地配套塔承担初始控制，免费且不额外占人；篝火自身只输出文明覆盖。
+  if(!state.outposts.has(camp))state.outposts.set(camp,{day:1,starter:true});
   initializeExploration(state);rebuildTerrain(state);lockAttacks(state);return state;
 }
 
@@ -229,7 +231,7 @@ export function fireField(state) {
   }
   return fire;
 }
-export const funds = state => state.params.budget + (state.debugGold??0) + state.earned + state.economyEarned + (state.bankEarned??0) - [...(state.hospitals?.values()??[])].reduce((sum,h)=>sum+h.cost,0) - [...(state.banks?.values()??[])].reduce((sum,b)=>sum+b.cost,0) - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - state.outposts.size*state.params.outpostCost - (state.nightBuildSpent??0) - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
+export const funds = state => state.params.budget + (state.debugGold??0) + state.earned + state.economyEarned + (state.bankEarned??0) - [...(state.hospitals?.values()??[])].reduce((sum,h)=>sum+h.cost,0) - [...(state.banks?.values()??[])].reduce((sum,b)=>sum+b.cost,0) - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - [...state.outposts.values()].filter(p=>!p.starter).length*state.params.outpostCost - (state.nightBuildSpent??0) - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
 // 银行不另设账户：本金就是全局余额，停业仅撤销当前额度，不清偿既有债务。
 export const bankAt=(state,id)=>productionSite(id,state)?.role==='bank'?productionId(id,state):null;
 // 银行恢复原有整栋探索条件；医院由固定位置揭示发现，二者均不额外扩散迷雾。
@@ -344,38 +346,48 @@ function settleBank(state){
   clearRepaidDebt(state);state.nightInterest=bankFinance(state).interest;
   state.bankEarned=(state.bankEarned??0)+state.nightInterest;state.bankSettledDay=state.day;clearRepaidDebt(state);
 }
-// 控制范围取火光与瞭望塔覆盖的并集；地块内瞭望塔不受击、不失守。
+// 瞭望塔提供控制，篝火提供文明；范围各自计算，不参与物理寻路。
 export function inStationRange(id, center, radius) {
   const [x,y]=xy(id),[cx,cy]=xy(center),dx=Math.abs(x-cx),dy=Math.abs(y-cy),cut=Math.min(2,radius);
   return Number.isInteger(id)&&id>=0&&id<SIZE*SIZE&&Math.max(dx,dy)<=radius&&dx+dy<=2*radius-cut;
 }
 // 基础地面控制只取据点的逐格范围，不读取建筑归属，避免建筑链式传播。
+export const watchRadius=(state,id,radius=state.params.controlRadius)=>state.outposts.get(id)?.starter?radius:state.params.outpostRadius;
 export function inGroundControl(state,id,radius=state.params.controlRadius) {
-  return (state.hp>0&&inStationRange(id,state.camp,radius)) || [...state.outposts.keys()].some(center=>inStationRange(id,center,state.params.outpostRadius));
+  return [...connectedOutposts(state)].some(center=>inStationRange(id,center,watchRadius(state,center,radius)));
 }
 export function rawControlMask(state,radius=state.params.controlRadius) {
   const mask=new Set();
-  for(let id=0;id<SIZE*SIZE;id++)if(inGroundControl(state,id,radius))mask.add(id);
+  for(const center of connectedOutposts(state)){
+    const [x,y]=xy(center),r=watchRadius(state,center,radius);
+    for(let cy=Math.max(0,y-r);cy<=Math.min(SIZE-1,y+r);cy++)for(let cx=Math.max(0,x-r);cx<=Math.min(SIZE-1,x+r);cx++)if(inStationRange(key(cx,cy),center,r))mask.add(key(cx,cy));
+  }
   return mask;
 }
-// 从篝火逐塔扩展：只有落点被已连接据点覆盖的塔才可继续传递，不允许自连或孤立闭环。
+// 根部塔须覆盖存活篝火；其余塔的落点由已联网塔覆盖，建筑归属不能搭桥。
+const networkCache=new WeakMap();
 function connectedOutposts(state){
-  const connected=new Set(),queue=state.hp>0?[{id:state.camp,radius:state.params.controlRadius}]:[];
-  for(let i=0;i<queue.length;i++){
-    const {id,radius}=queue[i];
-    for(const anchor of state.outposts.keys())if(!connected.has(anchor)&&inStationRange(anchor,id,radius)){
-      connected.add(anchor);queue.push({id:anchor,radius:state.params.outpostRadius});
-    }
-  }
-  return connected;
+  const signature=[state.camp,state.hp>0,state.params.controlRadius,state.params.outpostRadius,[...state.outposts].map(([id,p])=>id+':'+!!p.starter).join(',')].join('|');
+  const old=networkCache.get(state);if(old?.signature===signature)return old.connected;
+  const connected=new Set([...state.outposts.keys()].filter(id=>state.hp>0&&inStationRange(state.camp,id,watchRadius(state,id)))),queue=[...connected];
+  for(let i=0;i<queue.length;i++)for(const anchor of state.outposts.keys())if(!connected.has(anchor)&&inStationRange(anchor,queue[i],watchRadius(state,queue[i]))){connected.add(anchor);queue.push(anchor);}
+  networkCache.set(state,{signature,connected});return connected;
+}
+// 文明覆盖只与控制求交，不授予额外施工权限。
+export function civilizationCoverage(state,id){return state.hp>0&&inStationRange(id,state.camp,state.params.campCivilRadius);}
+export function civilizationMask(state,controlled=controlMask(state)) {return new Set([...controlled].filter(id=>civilizationCoverage(state,id)));}
+export function buildingCivilized(state,id){
+  const p=productionSite(id,state);if(!p||!productionControlled(state,id))return false;
+  return civilizationCoverage(state,key(p.x+Math.floor((p.width??p.size)/2),p.y+Math.floor((p.height??p.size)/2)));
 }
 // 高亮失联塔独占的基础范围；建筑归属、视野和地面通行性不参与连接。
 function disconnectedControlCells(state){
   const connected=connectedOutposts(state);
   if(connected.size===state.outposts.size)return new Set();
   const active={...state,outposts:new Map([...state.outposts].filter(([id])=>connected.has(id)))};
-  const mask=rawControlMask(active);
-  return new Set([...rawControlMask(state)].filter(id=>!mask.has(id)));
+  const mask=rawControlMask(active),lost=new Set();
+  for(const id of state.outposts.keys())if(!connected.has(id))for(const cell of coverage(id,watchRadius(state,id),'square'))if(inStationRange(cell,id,watchRadius(state,id))&&!mask.has(cell))lost.add(cell);
+  return lost;
 }
 export function inControl(state,id,radius=state.params.controlRadius) {
   if(inGroundControl(state,id,radius))return true;
@@ -533,12 +545,12 @@ export function outpostError(state,id) {
   if(!Number.isInteger(id)||!inside(...xy(id)))return '请选择地图内的格子。';
   if(!isExplored(state,id))return '该位置尚未探索。';
   const connected=connectedOutposts(state);
-  if(!(state.hp>0&&inStationRange(id,state.camp,state.params.controlRadius))&&![...connected].some(anchor=>inStationRange(id,anchor,state.params.outpostRadius)))return '瞭望塔落点须被篝火或已连接篝火的瞭望塔基础地面控制范围覆盖。';
+  if(![...connected].some(anchor=>inStationRange(id,anchor,watchRadius(state,anchor))))return '瞭望塔落点须被篝火或已连接篝火的瞭望塔基础地面控制范围覆盖。';
   if(productionSite(id,state)?.role==='hospital')return '医院为保留目标，不能建设瞭望塔。';
   if(!terrainTraversable(state,id))return '瞭望塔只能建在可通行的道路、空地或自然地面。';
   if(state.towers.has(id)||state.playerWalls.has(id)||state.outposts.has(id)||id===state.camp||reservedSources(state).some(s=>key(s.x,s.y)===id))return '该格已有设施或保留目标。';
   const [x,y]=xy(id),distance=state.params.outpostMinDistance;
-  if([...state.outposts.keys()].some(anchor=>{const [ax,ay]=xy(anchor);return Math.hypot(x-ax,y-ay)<distance;}))return `瞭望塔间距至少 ${distance} 格。`;
+  if([...state.outposts.keys()].filter(anchor=>!state.outposts.get(anchor).starter).some(anchor=>{const [ax,ay]=xy(anchor);return Math.hypot(x-ax,y-ay)<distance;}))return `瞭望塔间距至少 ${distance} 格。`;
   return buildResourceStatus(state,state.params.outpostCost,state.params.outpostWorkers).message;
 }
 export function buildOutpost(state,id) {
@@ -551,9 +563,10 @@ export function outpostRemovalPreview(state,id){
   const disconnected=new Set();
   if(state.phase!=='build')return {error:'只能在建设阶段拆除瞭望塔。',disconnected};
   const anchor=outpostAt(state,id);if(anchor===undefined)return {error:'这里没有瞭望塔。',disconnected};
+  if(state.outposts.get(anchor).starter)return {error:'营地配套瞭望塔保留，不能拆除。',disconnected};
   const posts=new Map(state.outposts);posts.delete(anchor);const candidate={...state,outposts:posts};
   const isolated=disconnectedControlCells(candidate);
-  if(isolated.size)return {error:'拆除会使红色区域的瞭望塔失去与篝火的连接；塔的落点须被已连接据点覆盖，请先补建连接或拆除外围塔。',disconnected:isolated};
+  if(connectedOutposts(candidate).size<candidate.outposts.size)return {error:'拆除会使红色区域的瞭望塔失去与篝火的连接；塔的落点须被已连接据点覆盖，请先补建连接或拆除外围塔。',disconnected:isolated};
   if([...state.playerWalls].some(cell=>inGroundControl(state,cell)&&!inGroundControl(candidate,cell))||[...state.towers.keys()].some(cell=>inControl(state,cell)&&!inControl(candidate,cell))||[...state.production.keys(),...state.housing.keys()].some(cell=>productionControlled(state,cell)&&!productionControlled(candidate,cell)))return {error:'其他设施依赖此瞭望塔的控制范围，请先拆除外围设施。',disconnected};
   return {error:'',disconnected};
 }
@@ -601,6 +614,7 @@ export function wallPreview(state, id, remove = false) {
   else if (!remove && !inGroundControl(state,id)) error = '超出基础地面控制范围，不能建墙。';
   else if (!remove && state.blocked.has(id)) error = '建筑或废墟占地，需先清理为空地。';
   else if (!remove && state.fixedWalls.has(id)) error = '水域或自然障碍不能建墙。';
+  else if (!remove && id===state.camp) error = '不能覆盖篝火。';
   else if (!remove && (state.towers.has(id)||state.outposts.has(id))) error = '这里已有炮塔或瞭望塔，不能叠建墙。';
   else if (!remove && (state.walls.has(id)||state.playerWalls.has(id))) error = '这里已有墙或墙的废墟，请选择修复或拆除。';
   else if (!remove && (id === state.camp || reservedSources(state).some(s=>key(s.x,s.y)===id))) error = '不能覆盖篝火或敌人源头。';
@@ -662,6 +676,7 @@ export function validateVisualParams(params){
 export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   const visualError=validateVisualParams(params);if(visualError)return visualError;
+  if(!integer(params.campCivilRadius,1,30))return '篝火文明半径须为1–30格整数。';
   if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
   if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';
   if(!integer(params.campS01,0,30)||!integer(params.outpostS01,0,30)||!integer(params.sourceRevealPadding,0,10))return 'S01 视野距离须为 0–30 格整数，敌源边缘揭示格数须为 0–10 整数。';
@@ -691,8 +706,8 @@ export function validateParams(params, state, checkLayout = true) {
   if(!integer(params.nightCleanupSpeed,1,4))return '夜末清源速度倍率须为1–4整数，1关闭自动加速。';
   if(state.waves){const lastSpawn=Math.max(1,...state.waves.flat().map(s=>s.first+(s.count-1)*s.interval));if(params.nightTicks<lastSpawn)return `预设最后一批在第 ${lastSpawn} 拍出场，每晚拍数不能更短；请先调整出兵节拍。`;}
   const candidate={...state,params};
-  if(checkLayout&&([...state.playerWalls].some(id=>!inGroundControl(candidate,id))||[...state.towers.keys()].some(id=>!inControl(candidate,id))||[...state.outposts.keys()].some(id=>!inGroundControl(candidate,id))||[...state.production.keys(),...state.housing.keys()].some(id=>!productionControlled(candidate,id))))return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
   if(checkLayout&&disconnectedControlCells(candidate).size)return '新参数会使控制范围失去与篝火的连接，请调整范围或先拆除外围瞭望塔。';
+  if(checkLayout&&([...state.playerWalls].some(id=>!inGroundControl(candidate,id))||[...state.towers.keys()].some(id=>!inControl(candidate,id))||[...state.outposts.keys()].some(id=>!inGroundControl(candidate,id))||[...state.production.keys(),...state.housing.keys()].some(id=>!productionControlled(candidate,id))))return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
   if (checkLayout && funds({...state,params}) < -bankFinance({...state,params}).capacity-1e-9) return '按新价格计算，现有布局超出预算（含经营与瞭望塔）。请提高资金，或取消预览后拆除设施。';
   return '';
 }
@@ -971,7 +986,7 @@ function applyEmbedding(state,id,preserveBuilding=false){
 export function population(state){
   const total=state.params.initialPopulation+(state.debugPopulation??0)+[...state.housing.keys()].reduce((n,id)=>n+housingQuote(state,id).residents,0);
   // 用工随设施持续占用，拆除即时释放；不另存分配记录，避免重试或改建漏结算。
-  const working=[...state.production.keys()].reduce((n,id)=>n+productionLabor(state,id),0)+state.outposts.size*state.params.outpostWorkers+bankWorkers(state)+hospitalWorkers(state);
+  const working=[...state.production.keys()].reduce((n,id)=>n+productionLabor(state,id),0)+[...state.outposts.values()].filter(p=>!p.starter).length*state.params.outpostWorkers+bankWorkers(state)+hospitalWorkers(state);
   return {total,working,free:total-working};
 }
 export function housingError(state,id,{ignoreResources=false}={}){
@@ -1114,7 +1129,7 @@ export function demolitionQuote(state,id) {
   const production=state.production.get(productionId(id,state)),tower=state.towers.get(id),post=state.outposts.get(outpostAt(state,id));
   let cost=0,day=1,type='';
   if(tower){type='tower';cost=state.params.weapons[tower].cost;day=state.towerDays.get(id)??1;}
-  else if(post){type='outpost';cost=state.params.outpostCost;day=post.day??1;}
+  else if(post){type='outpost';cost=post.starter?0:state.params.outpostCost;day=post.day??1;}
   else if(state.playerWalls.has(id)){type='wall';cost=state.params.wallCost;day=state.wallDays.get(id)??1;}
   else if(contentCells(state,id).includes(id)&&production){type='production';cost=production.cost??productionQuote(state,id).cost;day=production.day??1;}
   else if(contentCells(state,id).includes(id)&&state.housing.has(productionId(id,state))){type='housing';cost=state.housing.get(productionId(id,state)).cost??housingQuote(state,id).cost;day=state.housing.get(productionId(id,state)).day;}
@@ -1153,8 +1168,8 @@ export function visionField(state,phase=state.phase){
       if(inStationRange(id,center,radius)||(extent>0&&Math.hypot(dx,dy)<=extent+2))seen.add(id);
     }
   };
-  if(state.hp>0)station(state.camp,p.controlRadius,p.campS01);
-  for(const id of state.outposts.keys())station(id,p.outpostRadius,p.outpostS01);
+  if(state.hp>0)station(state.camp,0,p.campS01);
+  for(const id of connectedOutposts(state))station(id,watchRadius(state,id),state.outposts.get(id).starter?p.campS01:p.outpostS01);
   for(const [id,type] of state.towers)
     for(const cell of coverage(id,p.weapons[type].range,p.weapons[type].shape))seen.add(cell);
   // 揭示从整个源头占地向四周外扩，含角落；道路出兵口不是揭雾中心。

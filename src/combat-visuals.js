@@ -1,5 +1,5 @@
-import {SIZE} from './config.js?v=100';
-import {coverage,sourceAttackPlan,sourceCells,xy,key,inside,inStationRange,enemyKey} from './model.js?v=124';
+import {SIZE} from './config.js?v=101';
+import {coverage,sourceAttackPlan,sourceCells,xy,key,inside,inStationRange,enemyKey} from './model.js?v=125';
 
 // 只准备显示方向；范围累计伤害和清源优先级仍由原结算负责。
 export function attackVisualPlan(state,enemies,visible){

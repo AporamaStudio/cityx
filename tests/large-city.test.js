@@ -45,6 +45,6 @@ test('大城地标完整保留真实园区尺寸、身份和铁路连接，禁�
   }
   const s=createCampaign({...DEFAULTS,budget:1000},undefined,generateCityMap(largeSettings));s.day=3;
   for(const p of s.sites.filter(p=>p.landmark)){
-    const id=key(p.x,p.y);s.camp=key(p.x-1,p.y);s.explored.add(id);assert.match(clearPlot(s,id),/地标保留/);assert.match(productionError(s,id),/地标保留/);assert.ok(outpostError(s,id));assert.ok(placementError(s,id));
+    const id=key(p.x,p.y);s.camp=key(p.x-1,p.y);s.outposts=new Map([[s.camp,{day:1,starter:true}]]);s.explored.add(id);assert.match(clearPlot(s,id),/地标保留/);assert.match(productionError(s,id),/地标保留/);assert.ok(outpostError(s,id));assert.ok(placementError(s,id));
   }
 });

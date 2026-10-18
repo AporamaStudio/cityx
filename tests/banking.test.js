@@ -68,7 +68,7 @@ test('新增银行不改变旧债计息上限，使用新额度借款才提高�
   assert.equal(changeWall(s,key(15,23)),'');assert.equal(s.debtInterestCap,120);assert.ok(bankFinance(s).interest< -6);
   s.earned+=200;assert.equal(bankFinance(s).debtCap,0);s.params.controlRadius=1;assert.equal(bankFinance(s).interest,0);
   // 测试偏移恢复到正数后，下一轮债务只使用当前真实额度。
-  s.params.controlRadius=9;assert.equal(applyTestScenario(s,3,0,6),'');s.camp=key(13,25);s.params.controlRadius=3;assert.equal(changeWall(s,key(14,27)),'');assert.equal(s.debtInterestCap,60);
+  s.params.controlRadius=9;assert.equal(applyTestScenario(s,3,0,6),'');s.camp=key(13,25);s.outposts=new Map([[s.camp,{day:1,starter:true}]]);s.params.controlRadius=3;assert.equal(changeWall(s,key(14,27)),'');assert.equal(s.debtInterestCap,60);
 });
 test('经营先入账后整数计息；重复读取和重复结算不发钱',()=>{
   const s=setup(1,10);assert.equal(buildProduction(s,plot),'');const g=funds(s);settle(s);assert.equal(s.nightInterest,Math.floor((g+s.nightEconomy)*.05));

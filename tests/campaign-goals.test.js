@@ -19,12 +19,12 @@ test('揭示医院不算受控；碰一格整栋归属，修复后才完成目�
   const s=setup(false);s.day=2;s.params.controlRadius=1;
   assert.equal(campaignGoals(s).hospital,false);
   s.outposts.set(key(16,22),{day:1});assert.equal(campaignGoals(s).hospital,false); // 孤立据点不能伪造收复。
-  s.outposts.clear();s.params.controlRadius=2;
+  s.outposts=new Map([[s.camp,{day:1,starter:true}]]);s.params.controlRadius=2;
   assert.equal(campaignGoals(s).hospital,false);
   s.params.controlRadius=3;assert.equal(productionControlled(s,key(18,21)),true);assert.equal(campaignGoals(s).hospitalControlled,true);assert.equal(campaignGoals(s).hospital,false);
   assert.equal(restoreHospital(s,key(18,21)),'');assert.equal(campaignGoals(s).hospital,true);
   s.params.controlRadius=2;s.outposts.set(key(15,23),{day:1});s.params.outpostRadius=1;
-  assert.equal(campaignGoals(s).hospital,true);s.outposts.clear();assert.equal(campaignGoals(s).hospital,false);
+  assert.equal(campaignGoals(s).hospital,true);s.outposts=new Map([[s.camp,{day:1,starter:true}]]);assert.equal(campaignGoals(s).hospital,false);
 });
 test('白天达成不结算；夜末胜利可提前，不能进入次日或重复结算，重试回滚源头与成果',()=>{
   const s=setup(),source=s.enemySources.get('source-1');source.hp=0;

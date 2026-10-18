@@ -63,7 +63,7 @@ test('敌源从完整占地边缘揭示，可调外扩且昼夜一致；前哨�
    assert.ok(!seen.has(key(40+padding+1,10)));assert.ok(!seen.has(key(40,10-padding-1)));
   }
  }
- s.outposts.set(key(30,40),{});const before=visionField(s);s.params.outpostS01=10;assert.ok(visionField(s).size>before.size);
+ for(const id of [key(18,25),key(24,25),key(30,25),key(30,31),key(30,37),key(30,40)])s.outposts.set(id,{});const before=visionField(s);s.params.outpostS01=10;assert.ok(visionField(s).size>before.size);
  assert.match(validateParams({...s.params,nightSightMultiplier:-1},s,false),/视野倍率/);
  for(const sourceRevealPadding of [-1,1.5,11])assert.match(validateParams({...s.params,sourceRevealPadding},s,false),/敌源边缘揭示格数/);
 });

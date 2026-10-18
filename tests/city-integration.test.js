@@ -101,7 +101,7 @@ test('医院固定左上 10×12，不重叠且路网保持连通，不能清理�
     const distances=walkableDistances(map);map.tiles.forEach((t,i)=>assert.equal(distances[i]>=0,['road','open'].includes(t)));
     const s=createCampaign({...DEFAULTS,controlRadius:30},undefined,map);s.day=3;s.explored=new Set(Array.from({length:3600},(_,i)=>i));
     // 把控制锚点临时设在医院旁，验证不是因距离而碰巧禁建。
-    s.camp=key(0,8);const id=key(1,1);
+    s.camp=key(0,8);s.outposts=new Map([[s.camp,{day:1,starter:true}]]);const id=key(1,1);
     assert.match(clearPlot(s,id),/医院/);assert.match(buildProduction(s,id),/医院/);assert.match(buildOutpost(s,id),/医院/);
   }
 });
