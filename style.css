@@ -454,3 +454,5 @@ body[data-time="night"]{--resource-unmet-ink:#ff9a8a}
 
 /* 优化名称与ⓘ并排，按钮不放进label，防止查看说明时误切换参数。 */
 .optimization-field{display:grid;grid-template-rows:minmax(30px,auto) auto;align-content:start;gap:3px;min-width:0}.optimization-field-head{display:flex;align-items:center;justify-content:space-between;gap:3px}.optimization-field-head label{line-height:1.4}.optimization-info{margin:0}.optimization-field select{width:100%;min-width:0}.optimization-tooltip{width:250px;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.6}.optimization-tooltip p{margin:0}.optimization-tooltip p+p{margin-top:6px}
+/* 篝火升级沿用工具的图标与单行费用，右侧火光卡也保持报价对齐。 */
+#campUpgrade{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;margin-top:8px}#campUpgrade[hidden]{display:none}#campUpgrade .tool-name{display:inline-flex;align-items:center;gap:12px}#campUpgrade .tool-price{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}

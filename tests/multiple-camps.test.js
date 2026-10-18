@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {key,createCampaign,buildCamp,campBuildError,campRecord,allCamps,livingCamps,rawControlMask,civilizationMask,buildingStatus,buildHousing,population,funds,lockAttacks,forecastAttacks,beginBattle,restoreNight,stepBattle,enterMorning,repairFacility,upgradeCamp,campUpgradeQuote,repairQuote,routeTimingReport,revealControl} from '../src/model.js';
+import {key,createCampaign,buildCamp,campBuildError,campRecord,allCamps,livingCamps,rawControlMask,civilizationMask,buildingStatus,buildHousing,population,funds,lockAttacks,forecastAttacks,beginBattle,restoreNight,stepBattle,enterMorning,repairFacility,upgradeCamp,campUpgradeQuote,repairQuote,routeTimingReport,revealControl,buildProduction,restoreBank,bankFinance,expectedIncome,settleEconomy,campBuildCandidate,campUpgradeCandidate,applyExperimentParams} from '../src/model.js';
 function setup(hp=6,count=1){
  const wave=[{x:35,y:25,hp,count,first:1,interval:20}];
  const blocks=[{x:8,y:24,width:2,height:2,kind:'building',ruinType:'housing'}];
@@ -31,4 +31,18 @@ test('主火光熄灭不结束全局，重叠接替保留控制与居民，全�
 test('拒绝区外、障碍、重叠及资金不足，失败不花钱也不增加火光',()=>{
  const s=setup(),before=structuredClone(s);for(const id of [key(0,0),s.camp,key(8,24),key(50,50)])assert.ok(buildCamp(s,id));assert.deepEqual(s,before);
  s.debugGold-=funds(s);assert.match(campBuildError(s,key(22,25)),/资金不足/);assert.equal(allCamps(s).length,1);
+});
+
+test('重叠文明不叠加人口、生产或银行额度，夜末仅结算一次',()=>{
+ const blocks=[{x:17,y:21,width:2,height:2,kind:'building',role:'bank'},{x:17,y:24,width:2,height:2,kind:'building',ruinType:'housing'},{x:18,y:27,width:2,height:2,kind:'building',ruinType:'production'}];
+ const s=createCampaign({...DEFAULTS,budget:2000},Array.from({length:6},()=>[{x:35,y:25,hp:1,count:1,first:1,interval:20}]),{width:SIZE,height:SIZE,camp:{x:15,y:25},blocks,tiles:Array(SIZE*SIZE).fill('road')});s.day=3;
+ assert.equal(buildHousing(s,key(17,24)),'');assert.equal(buildProduction(s,key(18,27)),'');assert.equal(restoreBank(s,key(17,21)),'');
+ const income=expectedIncome(s),people=population(s).total;assert.ok(income>0);assert.equal(buildCamp(s,key(22,25)),'');assert.equal(expectedIncome(s),income);assert.equal(population(s).total,people);assert.equal(bankFinance(s).capacity,100);
+ const cash=funds(s);beginBattle(s);while(s.phase==='battle')stepBattle(s);assert.equal(funds(s),cash+income+5);const settled=funds(s);settleEconomy(s);assert.equal(funds(s),settled);
+});
+test('多篝火预览不改写实体，玩法调参裁切HP但不免费恢复或丢等级',()=>{
+ const s=setup(),id=key(22,25),before=structuredClone(s);civilizationMask(campBuildCandidate(s,id));assert.deepEqual(s,before);
+ buildCamp(s,id);upgradeCamp(s,id);const built=structuredClone(s);civilizationMask(campUpgradeCandidate(s,id));assert.deepEqual(s,built);
+ s.extraCamps.get(id).hp=12;assert.equal(applyExperimentParams(s,{...s.params,campHP:20},'gameplay'),'');assert.equal(s.hp,20);assert.equal(campRecord(s,id).hp,12);assert.equal(campRecord(s,id).level,1);
+ assert.equal(applyExperimentParams(s,{...s.params,campHP:40},'gameplay'),'');assert.equal(s.hp,20);assert.equal(campRecord(s,id).hp,12);
 });
