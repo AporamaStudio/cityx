@@ -46,8 +46,14 @@ export function createCityPointGrid(){
       };
       material.customProgramCacheKey=()=>cacheKey+':cityx-point-grid';material.needsUpdate=true;
     },
-    update(lights){
-      for(const light of lights){light.userData.cityPointGrid=true;light.visible=false;}
+    update(lights,enabled=true){
+      for(const light of lights){
+        if(enabled){if(!light.userData.cityPointGrid||light.visible)light.userData.cityPointVisible=light.visible;light.visible=false;}
+        else if(light.userData.cityPointGrid)light.visible=light.userData.cityPointVisible??true;
+        light.userData.cityPointGrid=enabled;
+      }
+      // 关闭时由Three原始PointLight着色；清空桶数量，防止两条路径重复照明。
+      if(!enabled){key='';peak=count=0;uniforms.cityPointShape.value.z=0;return;}
       const active=lights.filter(light=>light.intensity>0),signature=active.map(l=>`${l.uuid}:${l.position.x}:${l.position.y}:${l.position.z}:${l.distance}`).join('|');count=active.length;
       if(signature!==key){
         const grid=pointLightGrid(active);uniforms.cityPointIndices.value.dispose();uniforms.cityPointIndices.value=texture(grid.data,grid.width,grid.height);uniforms.cityPointBounds.value.set(grid.x,grid.y,grid.nx,grid.ny);uniforms.cityPointShape.value.set(grid.width,grid.height,grid.packets,uniforms.cityPointData.value.image.height);peak=grid.peak;key=signature;

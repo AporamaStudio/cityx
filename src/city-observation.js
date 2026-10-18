@@ -15,6 +15,7 @@ export function createCityObservation(scene,renderer,pointGrid=null){
   const ray=new THREE.Raycaster(),pointer=new THREE.Vector2(),pickMeshes=[],hits=[];
   const emptyFog=document.createElement('canvas');emptyFog.width=emptyFog.height=1;
   const fogTexture=new THREE.CanvasTexture(emptyFog);fogTexture.flipY=false;fogTexture.generateMipmaps=false;fogTexture.minFilter=THREE.LinearFilter;
+  let fogTextureWidth=1,fogTextureHeight=1;
   const fog={enabled:{value:0},texture:{value:fogTexture},bounds:{value:new THREE.Vector4(-8,-8,76,76)},fadeBounds:{value:new THREE.Vector4(-8,-8,76,76)}};
   const floor=new THREE.Mesh(new THREE.PlaneGeometry(76,76),new THREE.MeshStandardMaterial({color:'#697b70',roughness:1}));floor.rotation.x=-Math.PI/2;floor.position.set(30,-.014,30);floor.receiveShadow=true;floor.visible=false;scene.add(floor);freezeCityTransforms(floor);
   // 拾取和绘制共用相机配置；旋转/缩放后快速点击也使用当前矩阵。
@@ -57,6 +58,10 @@ export function createCityObservation(scene,renderer,pointGrid=null){
         lastGeometryVersion=geometryVersion;
       }
       bind(effects);
+      // Three使用不可变GPU纹理存储；窗口/对照模式改变尺寸时必须重新分配。
+      // Canvas对象本身会被原地缩放，不能拿image.width与自己比较判断尺寸变化。
+      const image=mist??emptyFog;
+      if(image.width!==fogTextureWidth||image.height!==fogTextureHeight){fogTexture.dispose();fogTextureWidth=image.width;fogTextureHeight=image.height;}
       // 关闭雾时不清空/上传整张世界贴图；保留同一着色程序，以uniform切换。
       if(mist){fogTexture.image=mist;fogTexture.needsUpdate=true;}
       else if(fogTexture.image!==emptyFog){fogTexture.image=emptyFog;fogTexture.needsUpdate=true;}

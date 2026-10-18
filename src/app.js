@@ -6,12 +6,14 @@ import {enemyBadgeLayouts,drawEnemyPressure,drawEnemyBadges,drawDefenseFeedback}
 import {visibleHitImpacts,shotEnvelope} from './shot-visuals.js?v=1';
 import {emptyLandPlants} from './city-vegetation.js?v=2';
 import {projectView,groundAt,panView,keyboardPanStep,observationView,viewBounds,orbitView,viewPixelScale} from './city-view.js?v=6';
-import {createCity3D} from './city-3d.js?v=92';
+import {createCity3D} from './city-3d.js?v=93';
 import {operatingStreetLamps,ruinStreetProps,operatingStreetProps,streetVehicles} from './city-streets.js?v=5';
 import {wallConnections} from './city-facilities.js?v=1';
 import {attackVisualPlan,resolvedShots,defenseVisualEvents,searchTargets,searchAim,shotSoundView,outpostFrontier,enemyDisplayFrames} from './combat-visuals.js?v=6';
 import {createVisibility} from './visibility.js?v=10';
-import {drawFog,fogColor,fogTransitionActive,fogRasterBounds,resetFogResources} from './fog.js?v=24';
+import {createVisibility as createReferenceVisibility,resetReferenceVisibility} from './visibility-reference.js?v=1';
+import {drawFog as drawReferenceFog,fogTransitionActive as referenceFogTransitionActive,resetReferenceFog} from './fog-reference.js?v=1';
+import {drawFog,fogColor,fogTransitionActive,fogRasterBounds,resetFogResources} from './fog.js?v=25';
 import {createTowerOverlayCache} from './tower-overlay.js?v=26';
 import {roadMarkings} from './city-roads.js?v=1';
 import {createCityLoading} from './city-loading.js?v=1';
@@ -19,8 +21,8 @@ import {cameraScale,limitZoom,limitPan,limitObservationPan} from './map-camera.j
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend} from './control-border.js?v=1';
 import {poiBadgeSVG,drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=15';
 import {createGameAudio} from './audio.js?v=11';
-import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=99';
-import {poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=123';
+import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=100';
+import {poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=124';
 import {generateCityMap} from './city-map.js?v=15';
 import {readMapSettings} from './map-settings.js?v=6';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -508,7 +510,7 @@ function mapDisplay(){
     const boundary=controlBoundary(controlled),boundaryPath=new Path2D(),controlPath=new Path2D();
     for(const [a,b,c,d] of boundary){boundaryPath.moveTo(a,b);boundaryPath.lineTo(c,d);}
     for(const id of controlled){const [x,y]=xy(id);controlPath.rect(x,y,1,1);}
-    mapView={controlState,raw,controlled,boundary,boundaryPath,controlPath,visibility:createVisibility(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells,params),dirty:paramsDirty(),
+    mapView={controlState,raw,controlled,boundary,boundaryPath,controlPath,visibility:(params.largeCityFog?createVisibility:createReferenceVisibility)(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells,params),dirty:paramsDirty(),
       towers:towerOverlayCache.get(state,controlled,new Set(motion?.actors.map(e=>e.to))),
       controlBorder:controlBorderTexture(SIZE,controlled,boundaryPath,controlPath,params),
       sourceSites:new Set([...state.enemySources.values()].map(s=>s.site)),
@@ -740,7 +742,7 @@ function paintMap() {
   }
   const plants=view.plants;
   const plantPreview=constructionPreview?.id??null;
-  city3D.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,plants,plantPreview,constructionPreview,naturalOccupied:[...state.playerWalls,...state.outposts.keys()],roadCells,unknownPlots,fx});
+  city3D.render(cityPlots,{width,height,panX,panY,cell:size,cellMeters:controlState.params.cellMeters,lightBudget:controlState.params.streetLightBudget,ruinBatch:controlState.params.largeCityRuinBatch,pointGridEnabled:controlState.params.largeCityPointGrid,worldShadow:controlState.params.largeCityWorldShadow,lightViewport:viewBounds(cameraView()),night:nightMix,layout:state.layout,lamps:streetLamps,dressing:streetDressing,plants,plantPreview,constructionPreview,naturalOccupied:[...state.playerWalls,...state.outposts.keys()],roadCells,unknownPlots,fx});
   const eligibleCells=viewMode==='top'&&weaponPlacementReady?view.towers.eligible(weaponType()):new Set();
   const facilityItems=[];
   const prop=(id,asset,x,y,w=.86,h=.86,extra={})=>facilityItems.push({id,asset,x,y,w,h,roof:naturalGroundAt(state.layout,x,y,controlState.params.cellMeters),...extra});
@@ -1195,18 +1197,23 @@ function updateCameraLabels(size,params){
   $('mapScale').setAttribute('aria-label',`地图比例尺 ${scaleText}`);
 }
 // 世界雾纹是信息层，城市不再通过Canvas背景图或2D楼体回退绘制。
+let fogOptimizationMode=null;
 function paintCityScene(view,fogTime){
-  const fogPx=4,camera=cameraView(),m=observationMist.getContext('2d');
+  const fogPx=4,camera=cameraView(),m=observationMist.getContext('2d'),optimized=view.controlState.params.largeCityFog;
+  // 两种雾场各自维护遮罩与过渡；切换时释放旧资源，不能混用不同坐标窗口的数组。
+  if(fogOptimizationMode!==optimized){resetFogResources();resetReferenceFog();if(optimized)resetReferenceVisibility();fogOptimizationMode=optimized;}
   const {border:mistBorder,span:mistSpan}=view.visibility;
-  const mistEnabled=mapFogEnabled(),area=fogRasterBounds(view.visibility,viewBounds(camera)),mistWidth=area.right-area.left,mistHeight=area.bottom-area.top;
+  const fullArea={left:-mistBorder,top:-mistBorder,right:SIZE+mistBorder,bottom:SIZE+mistBorder};
+  const mistEnabled=mapFogEnabled(),area=optimized?fogRasterBounds(view.visibility,viewBounds(camera)):fullArea,mistWidth=area.right-area.left,mistHeight=area.bottom-area.top;
   if(mistEnabled){
     if(observationMist.width!==mistWidth*fogPx)observationMist.width=mistWidth*fogPx;if(observationMist.height!==mistHeight*fogPx)observationMist.height=mistHeight*fogPx;
     m.setTransform(1,0,0,1,0,0);m.clearRect(0,0,observationMist.width,observationMist.height);m.setTransform(fogPx,0,0,fogPx,-area.left*fogPx,-area.top*fogPx);
-    drawFog(m,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom,area);
-  }else if(observationMist.width>1||observationMist.height>1){resetFogResources();view.visibility.clearRasterCache?.();observationMist.width=observationMist.height=1;}
-  city3D.observationFrame({mist:mistEnabled?observationMist:null,mistBounds:[area.left,area.top,mistWidth,mistHeight],mistFadeBounds:[-mistBorder,-mistBorder,mistSpan,mistSpan],view:camera,background:fogColor(nightMix),onBaseFrame:image=>{
-    ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.clearRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);
-  }});
+    (optimized?drawFog:drawReferenceFog)(m,view.visibility,state.explored,nightMix,fogTime,cloudTime,duskMix,zoom,area);
+  }else if(observationMist.width>1||observationMist.height>1){resetFogResources();resetReferenceFog();view.visibility.clearRasterCache?.();observationMist.width=observationMist.height=1;}
+  const composite=image=>{ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.clearRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);};
+  const direct=view.controlState.params.largeCityDirectCanvas;
+  const image=city3D.observationFrame({mist:mistEnabled?observationMist:null,mistBounds:[area.left,area.top,mistWidth,mistHeight],mistFadeBounds:[-mistBorder,-mistBorder,mistSpan,mistSpan],view:camera,background:fogColor(nightMix),onBaseFrame:direct?composite:null});
+  if(!direct&&image)composite(image);
 }
 function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,fogTime,operationValid=false){
   const size=base*zoom,camera=cameraView();paintCityScene(view,fogTime);
@@ -1865,15 +1872,16 @@ $('settings').addEventListener('toggle',()=>{if(!$('settings').open)editorSource
 // 小型参数面板：仅编辑当前实验，默认值仍保留在 config.js。
 function paramsEditor(params,scope='all') {
   invalidateParamReads();
+  const optimizationOpen=$('largeCityOptimizations')?.open??false;
   if(scope!=='visual')$('params').replaceChildren();if(scope!=='gameplay')$('visualParams').replaceChildren();
   // 两区沿用同一控件生成方式，应用/取消/默认只重画自己的草稿。
-  function fields(title, values, prefix, specs, target='params') {
+  function fields(title, values, prefix, specs, target='params',group=null) {
     if(scope!=='all'&&(target==='visualParams')!==(scope==='visual'))return;
-    const container=$(target),h=document.createElement('h3');h.textContent=title;container.append(h);
+    const container=group?$(group):$(target),h=document.createElement('h3');h.textContent=title;if(!group)container.append(h);
     const row=document.createElement('div');row.className='fields';
     for(const [name,label,min,max] of specs){
       const wrap=document.createElement('label');wrap.textContent=label;
-      const choices=name==='shape'?[['square','方形'],['diamond','菱形']]:['obliqueProjection','freeProjection'].includes(name)?[['orthographic','正交'],['perspective','透视']]:['returnToTopOnAction','showRenderStats'].includes(name)?[['true','开启'],['false','关闭']]:null;
+      const choices=name==='shape'?[['square','方形'],['diamond','菱形']]:['obliqueProjection','freeProjection'].includes(name)?[['orthographic','正交'],['perspective','透视']]:typeof DEFAULTS[name]==='boolean'?[['true','开启'],['false','关闭']]:null;
       const input=document.createElement(choices?'select':'input');
       if(choices)for(const [value,text] of choices){const option=document.createElement('option');option.value=value;option.textContent=text;input.append(option);}
       else{input.type='number';input.min=min;input.max=max;input.step=['productionIncomePerCell','productionSmallCostFloor','productionMaxDensity','bankDepositPercent','bankLoanPercent','bankUpgradeRatePoints','bankLoanMinPercent','bankRateMaxPercent','enemyFogFadeCells','controlBorderInnerCells','controlBorderOuterCells','controlBorderLinePx','upgradeFlowHeightMeters'].includes(name)||name.endsWith('Multiplier')?0.1:1;}
@@ -1896,6 +1904,10 @@ function paramsEditor(params,scope='all') {
   fields('夜间加急',params,'',[['nightTowerCostMultiplier','炮塔金币倍率',1,10]]);
   fields('瞭望塔',params,'',[['outpostCost','造价',1,1000],['outpostWorkers','每座用工',0,100],['outpostRadius','半径',1,30],['outpostMinDistance','最小间距',1,30]]);
   for(const type of ['A','B'])fields(`武器 ${type}`,params.weapons[type],type+'.',[['shape','范围形状'],['range','半径',1,8],['power','每拍火力',1,99],['cost','价格',1,1000]]);
+  if(scope!=='gameplay'){
+    const section=document.createElement('details'),summary=document.createElement('summary');section.id='largeCityOptimizations';section.open=optimizationOpen;summary.textContent='大城优化';section.append(summary);$('visualParams').append(section);
+  }
+  fields('大城优化',params,'',[['largeCityFog','云雾优化'],['largeCityRuinBatch','废墟合批与实例'],['largeCityPointGrid','火光分桶'],['largeCityWorldShadow','全城阴影缓存'],['largeCityDirectCanvas','画面直接合成']],'visualParams','largeCityOptimizations');
   fields('城市照明',params,'',[['streetLightBudget','真实路灯预算（盏，0关闭）',0,64]],'visualParams');
   fields('POI标牌',params,'',[['poiMarkerMinSizePx','最小标牌（像素）',32,80],['poiMarkerSizePx','最大标牌（像素）',32,80],['poiMarkerBorderPx','状态边框（像素）',2,6],['poiMarkerRouteOpacity','聚焦路线时不透明度%',0,100],['poiMarkerNightOpacity','夜间不透明度%',0,100]],'visualParams');
   fields('升级预览',params,'',[['upgradeFlowHeightMeters','光流高度（米，0关闭光幕）',0,12],['upgradeFlowMinPx','投影最小上流距离（像素）',0,40],['upgradeFlowCycleMs','上流周期（毫秒）',500,6000],['upgradeFlowOpacity','光流强度%',0,100]],'visualParams');
@@ -1918,7 +1930,7 @@ function readParams(scope='all') {
   const selector=scope==='visual'?'#visualParams [data-param]':scope==='gameplay'?'#params [data-param]':'[data-param]';
   for(const input of document.querySelectorAll(selector)){
     const parts=input.dataset.param.split('.'), name=parts.at(-1);
-    const value=['returnToTopOnAction','showRenderStats'].includes(name)?input.value==='true':['shape','obliqueProjection','freeProjection'].includes(name)?input.value:input.value.trim()===''?NaN:Number(input.value);
+    const value=typeof DEFAULTS[name]==='boolean'?input.value==='true':['shape','obliqueProjection','freeProjection'].includes(name)?input.value:input.value.trim()===''?NaN:Number(input.value);
     if(parts.length===1)result[name]=value;else result.weapons[parts[0]][name]=value;
   }
   paramReads.set(scope,{base:state.params,value:result});return result;
@@ -2462,7 +2474,7 @@ function frame(now){
   if(!dayEndHold&&!dayEndReturn&&!dawnAt)setSceneProgress(document.body.dataset.time==='day'?0:1);
   if(!reducedMotion.matches&&!document.hidden)cloudTime+=elapsed/1000*cloudSpeed;
   if(($('showFog').checked&&cloudSpeed>0||knownSources(state).some(s=>s.hp>0&&s.active))&&!reducedMotion.matches&&!document.hidden&&now-lastFogFrame>50){lastFogFrame=now;draw();}
-  if(mapFogEnabled()&&fogTransitionActive()&&!reducedMotion.matches&&!document.hidden)draw();
+  if(mapFogEnabled()&&(previewParams().largeCityFog?fogTransitionActive():referenceFogTransitionActive())&&!reducedMotion.matches&&!document.hidden)draw();
   // 即使夜晚暂停或白天待修，低血量篝火仍提示；减少动态偏好改用常亮红色。
   if(!state.result&&campCritical(state)&&!reducedMotion.matches&&!document.hidden&&now-lastFogFrame>80){lastFogFrame=now;draw();}
   // 一次短红光结束后停止额外重画，保留静态定位框。

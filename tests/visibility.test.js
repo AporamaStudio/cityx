@@ -116,3 +116,12 @@ test('256格距离场仅保留城内与雾带，外围窗口仍保持4像素采�
   const next=createVisibility(size,controlled,sight,3,3,1.5,params);assert.notDeepEqual(next.fogAt(128,290),before);
   assert.ok(Number.isInteger(createVisibility(60,new Set([30*60+30]),new Set([30*60+30]),5.6,7.1).n));
 });
+
+test('main完整雾场对照与紧凑路径保持城内视野和敌人权限，缓存彼此独立',async()=>{
+  const {createVisibility:reference,resetReferenceVisibility}=await import('../src/visibility-reference.js');
+  const controlled=new Set([30*60+30]),sight=new Set();for(let y=25;y<36;y++)for(let x=25;x<36;x++)sight.add(y*60+x);
+  const old=reference(60,controlled,sight,3,3,1.5,DEFAULTS),optimized=createVisibility(60,controlled,sight,3,3,1.5,DEFAULTS);
+  assert.equal(old.n,(60+48*2)*4);assert.equal(optimized.n,(60+8*2)*4);
+  for(let y=.125;y<60;y+=.5)for(let x=.125;x<60;x+=.5){assert.deepEqual(old.fogAt(x,y),optimized.fogAt(x,y));assert.equal(old.enemyAlpha(x,y),optimized.enemyAlpha(x,y));assert.equal(old.levelAt(x,y),optimized.levelAt(x,y));}
+  assert.equal(reference(60,controlled,sight,3,3,1.5,DEFAULTS),old);resetReferenceVisibility();assert.notEqual(reference(60,controlled,sight,3,3,1.5,DEFAULTS),old);
+});

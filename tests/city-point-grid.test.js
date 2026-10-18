@@ -23,3 +23,11 @@ test('灯数据保留原位置、颜色乘光强、距离和衰减，闪烁只�
   assert.match(shader.fragmentShader,/getDistanceAttenuation\(length\(vector\),positionRange.w,colorDecay.a\)/);assert.match(shader.vertexShader,/instanceMatrix\*cityPointLocal/);
   grid.update([]);assert.equal(shader.uniforms.cityPointShape.value.z,0);grid.reset();assert.equal(grid.stats().clusterLights,0);
 });
+
+test('火光分桶切回原PointLight时清空桶并恢复灯，重新开启不重复照明',()=>{
+  const grid=createCityPointGrid(),light=new THREE.PointLight('#ffbb77',3,2.3,2),material=new THREE.MeshStandardMaterial();
+  grid.bind(material);const shader={uniforms:{},vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader};material.onBeforeCompile(shader);
+  grid.update([light],true);assert.equal(light.visible,false);assert.equal(shader.uniforms.cityPointShape.value.z,1);
+  grid.update([light],false);assert.equal(light.visible,true);assert.equal(light.userData.cityPointGrid,false);assert.equal(shader.uniforms.cityPointShape.value.z,0);assert.equal(grid.stats().clusterLights,0);
+  grid.update([light],true);assert.equal(light.visible,false);assert.equal(light.userData.cityPointGrid,true);assert.equal(grid.stats().clusterLights,1);
+});

@@ -2,7 +2,15 @@
 import {readMapSettings,battleMapSize} from './map-settings.js?v=6';
 // 浏览器每次进入新局固定尺寸；Node历史规则检查保留60格，256格检查显式提供URL。
 export const SIZE = typeof location==='undefined'?60:battleMapSize(readMapSettings(location.search));
+export const LARGE_CITY_OPTIMIZATION_KEYS=['largeCityFog','largeCityRuinBatch','largeCityPointGrid','largeCityWorldShadow','largeCityDirectCanvas'];
+// 大城仅供探索；60格主原型默认使用对照路径，128/256实验默认开启。
+const largeCity=SIZE>=128;
 export const DEFAULTS = {
+  largeCityFog: largeCity,
+  largeCityRuinBatch: largeCity,
+  largeCityPointGrid: largeCity,
+  largeCityWorldShadow: largeCity,
+  largeCityDirectCanvas: largeCity,
   // 每格的现实边长，用于比例尺与3D实体尺度；战斗和建设仍按格计算。
   cellMeters: 20,
   // 近景最大格宽（CSS像素），改变镜头尺度，不提高画布像素比或模型面数。
@@ -86,7 +94,7 @@ export const DEFAULTS = {
 
 
 // 视觉实验独立应用的白名单；不能借此修改战斗、经济或控制参数。
-export const VISUAL_PARAM_KEYS = ['cellMeters', 'mapMaxCellPx', 'obliqueElevationDegrees', 'obliqueProjection', 'obliquePerspectiveFovDegrees', 'freeProjection', 'freePerspectiveFovDegrees', 'keyboardPanSpeedPx', 'returnToTopOnAction', 'streetLightBudget', 'enemyFiguresPerGroup', 'showRenderStats', 'fireNumbersMinCellPx', 'mapMidZoomPercent', 'mapNearZoomPercent', 'controlBorderInnerCells', 'controlBorderOuterCells', 'controlBorderInnerOpacity', 'controlBorderOuterOpacity', 'controlBorderLinePx', 'upgradeFlowHeightMeters', 'upgradeFlowMinPx', 'upgradeFlowCycleMs', 'upgradeFlowOpacity', 'poiMarkerMinSizePx', 'poiMarkerSizePx', 'poiMarkerBorderPx', 'poiMarkerRouteOpacity', 'poiMarkerNightOpacity', 'cloudSpeedMultiplier', 'fogS12', 'fogS23', 'exteriorFogTransitionPercent', 'exteriorFogClearPercent', 'exteriorFogFarOpacity', 'enemyFogFadeCells', 'campWarningPercent', 'nightIdleTransitionMs', 'incomeReportMs', 'resourceHoverMs', 'resourceHoverTolerancePx'];
+export const VISUAL_PARAM_KEYS = [...LARGE_CITY_OPTIMIZATION_KEYS,'cellMeters', 'mapMaxCellPx', 'obliqueElevationDegrees', 'obliqueProjection', 'obliquePerspectiveFovDegrees', 'freeProjection', 'freePerspectiveFovDegrees', 'keyboardPanSpeedPx', 'returnToTopOnAction', 'streetLightBudget', 'enemyFiguresPerGroup', 'showRenderStats', 'fireNumbersMinCellPx', 'mapMidZoomPercent', 'mapNearZoomPercent', 'controlBorderInnerCells', 'controlBorderOuterCells', 'controlBorderInnerOpacity', 'controlBorderOuterOpacity', 'controlBorderLinePx', 'upgradeFlowHeightMeters', 'upgradeFlowMinPx', 'upgradeFlowCycleMs', 'upgradeFlowOpacity', 'poiMarkerMinSizePx', 'poiMarkerSizePx', 'poiMarkerBorderPx', 'poiMarkerRouteOpacity', 'poiMarkerNightOpacity', 'cloudSpeedMultiplier', 'fogS12', 'fogS23', 'exteriorFogTransitionPercent', 'exteriorFogClearPercent', 'exteriorFogFarOpacity', 'enemyFogFadeCells', 'campWarningPercent', 'nightIdleTransitionMs', 'incomeReportMs', 'resourceHoverMs', 'resourceHoverTolerancePx'];
 
 // 十五晚实验：前五晚保留原节奏，后十晚逐步增加强度；参数仍须真人试玩。
 const OPENING_WAVES = [

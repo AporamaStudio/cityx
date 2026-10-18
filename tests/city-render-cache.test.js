@@ -65,6 +65,13 @@ test('观察层缓存静态材质并登记新网格，空敌人不绘制也不�
     observation.render({...options,geometryVersion:2,mist:null});assert.equal(texture.version,version+1);assert.equal(texture.image.width,1);assert.equal(shader.uniforms.cityObserveActive.value,0);
     observation.render({...options,geometryVersion:2,mist:null});assert.equal(texture.version,version+1);
     observation.render({...options,geometryVersion:2});assert.equal(texture.version,version+2);
+    // 同一个Canvas原地变尺寸，仍须释放不可变GPU存储；同尺寸帧不能重复释放。
+    let releases=0;texture.addEventListener('dispose',()=>releases++);
+    const mist={width:384,height:320};observation.render({...options,mist});const firstRelease=releases;
+    observation.render({...options,mist});assert.equal(releases,firstRelease);
+    mist.width=2664;mist.height=2664;observation.render({...options,mist});assert.equal(releases,firstRelease+1);assert.equal(texture.image,mist);
+    mist.width=384;mist.height=320;observation.render({...options,mist});assert.equal(releases,firstRelease+2);
+    observation.render({...options,mist:null});assert.equal(releases,firstRelease+3);
   }finally{globalThis.document=previous;}
 });
 

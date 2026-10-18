@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 globalThis.location={search:'?width=128&height=128'};
-const {SIZE,DEFAULTS}=await import('../src/config.js');
+const {SIZE,DEFAULTS,LARGE_CITY_OPTIMIZATION_KEYS}=await import('../src/config.js');
 const {MAP_DEFAULTS,battleMapSize}=await import('../src/map-settings.js');
 const {generateCityMap,walkableDistances}=await import('../src/city-map.js');
 const {createCampaign,key,xy,productionSite,productionQuote,buildProduction,placementError,buildTower,beginBattle,restoreNight}=await import('../src/model.js');
 
 test('128格对照保留全部地标、真实园区尺寸与连通道路，主游戏格号和重试一致',()=>{
+  for(const key of LARGE_CITY_OPTIMIZATION_KEYS)assert.equal(DEFAULTS[key],true);
   assert.equal(SIZE,128);assert.equal(battleMapSize({width:128,height:128}),128);assert.deepEqual(xy(key(127,127)),[127,127]);
   for(const seed of ['cityx-01',1,2,3]){
     const map=generateCityMap({...MAP_DEFAULTS,width:128,height:128,seed}),d=walkableDistances(map);assert.equal(map.blocks.filter(p=>p.landmark).length,12);

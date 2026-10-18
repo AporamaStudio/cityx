@@ -2,13 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 // 独立测试进程在模块加载前选择大图，避免用旧60格编号验证256格状态。
 globalThis.location={search:'?width=256&height=256'};
-const {SIZE,DEFAULTS}=await import('../src/config.js');
+const {SIZE,DEFAULTS,LARGE_CITY_OPTIMIZATION_KEYS}=await import('../src/config.js');
 const {MAP_DEFAULTS,battleMapSize}=await import('../src/map-settings.js');
 const largeSettings={...MAP_DEFAULTS,width:256,height:256};
 const {generateCityMap,walkableDistances}=await import('../src/city-map.js');
 const {createCampaign,key,xy,productionSite,productionControlled,productionQuote,buildProduction,buildTower,placementError,beginBattle,restoreNight,stepBattle}=await import('../src/model.js');
 
 test('256格主图生成、坐标、道路与起步建设、夜防重试使用同一尺寸',()=>{
+  for(const key of LARGE_CITY_OPTIMIZATION_KEYS)assert.equal(DEFAULTS[key],true);
   assert.equal(SIZE,256);assert.equal(battleMapSize(MAP_DEFAULTS),60);assert.equal(battleMapSize(largeSettings),256);
   assert.equal(battleMapSize({width:60,height:60}),60);
   assert.throws(()=>battleMapSize({width:50,height:100}));
