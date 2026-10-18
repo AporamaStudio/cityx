@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULTS,SIZE} from '../src/config.js';
-import {createCampaign,buildHousing,buildProduction,restoreBank,bankFinance,revealControl,buildingStatus,housingResidents,expectedIncome,beginBattle,restoreNight,settleEconomy,key,rawControlMask,controlMask,civilizationMask,civilizationCoverage,buildingCivilized,visionField,funds,population,validateParams} from '../src/model.js';
+import {createCampaign,campUpgradeError,campUpgradeQuote,campUpgradeCandidate,upgradeCamp,buildHousing,buildProduction,restoreBank,bankFinance,revealControl,buildingStatus,housingResidents,expectedIncome,beginBattle,restoreNight,settleEconomy,key,rawControlMask,controlMask,civilizationMask,civilizationCoverage,buildingCivilized,visionField,funds,population,validateParams} from '../src/model.js';
 
 test('起步瞭望塔提供控制；只保留篝火文明覆盖不能获得施工权限',()=>{
  const s=createCampaign(),before=funds(s);assert.ok(s.outposts.get(s.camp).starter);assert.equal(before,DEFAULTS.budget);assert.equal(population(s).free,DEFAULTS.initialPopulation);
@@ -43,4 +43,12 @@ test('文明边界不切开整栋建筑，生活与边界参数仅改变表现',
  s.params.campCivilRadius=4;const mask=civilizationMask(s);for(const id of [key(17,24),key(18,24),key(17,25),key(18,25)])assert.ok(mask.has(id));
  const before=rawControlMask(s);for(const civilianFiguresPerBuilding of [0,2,6]){assert.equal(validateParams({...s.params,civilianFiguresPerBuilding},s,false),'');assert.deepEqual(rawControlMask(s),before);}
  assert.match(validateParams({...s.params,civilianFiguresPerBuilding:7},s,false),/生活人数/);
+});
+
+test('篝火升级预览只读、点击才扣款，接入住房且不扩大控制或重选进攻',()=>{
+ const s=district();buildHousing(s,key(17,24));const before=structuredClone(s),q=campUpgradeQuote(s),ground=rawControlMask(s),attacks=structuredClone(s.attacks),cash=funds(s);
+ assert.equal(q.cost,40);assert.equal(q.before,1);assert.equal(q.after,5);assert.equal(q.residents,2);civilizationMask(campUpgradeCandidate(s));assert.deepEqual(s,before);
+ assert.equal(upgradeCamp(s),'');assert.equal(funds(s),cash-40);assert.equal(population(s).total,8);assert.deepEqual(rawControlMask(s),ground);assert.deepEqual(s.attacks,attacks);assert.equal(campUpgradeQuote(s).cost,80);
+ const retry=restoreNight(beginBattle(s));assert.equal(retry.campLevel,1);assert.equal(funds(retry),funds(s));
+ s.phase='build';s.debugGold=-10000;const blocked=structuredClone(s);assert.match(upgradeCamp(s),/资金不足/);assert.deepEqual(s,blocked);
 });

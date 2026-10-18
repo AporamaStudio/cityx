@@ -19,10 +19,10 @@ import {roadMarkings} from './city-roads.js?v=1';
 import {createCityLoading} from './city-loading.js?v=1';
 import {cameraScale,limitZoom,limitPan,limitObservationPan} from './map-camera.js?v=4';
 import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawControlBorderLegend,drawCivilizationBorderLine} from './control-border.js?v=3';
-import {poiBadgeSVG,drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=15';
+import {poiBadgeSVG,drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=17';
 import {createGameAudio} from './audio.js?v=11';
-import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=103';
-import {civilizationMask,watchRadius,buildingStatus,buildingCivilized,housingResidents,hospitalActive,poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=128';
+import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=105';
+import {campCivilRadius,campUpgradeCandidate,campUpgradeQuote,campUpgradeError,upgradeCamp,civilizationMask,watchRadius,buildingStatus,buildingCivilized,housingResidents,hospitalActive,poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=130';
 import {generateCityMap} from './city-map.js?v=15';
 import {readMapSettings} from './map-settings.js?v=6';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -30,10 +30,12 @@ const mapSettings=readMapSettings(location.search);
 // 尺寸由本局URL和默认地图共同决定，禁止静默覆盖预览参数。
 const cityLayout=generateCityMap(mapSettings);
 const $ = id => document.getElementById(id);
+let campUpgradeHover=false;
 // Canvas 报价直接复用钱包与工具 SVG，资源和炮图标不另建一套图形。
-for(const [id,kind,label] of [['wall','wall','建墙'],['build','near','近防炮'],['long','far','远防炮'],['production','production','生产'],['housing','housing','住房'],['outpost','watch','瞭望塔'],['bank','bank','恢复银行'],['hospital','hospital','修复医院'],['bankUpgrade','bank','升级银行']])document.querySelector('#'+id+' .tool-name').innerHTML=FACILITY_SVGS[kind]+' '+label;
+for(const [id,kind,label] of [['wall','wall','建墙'],['build','near','近防炮'],['long','far','远防炮'],['production','production','生产'],['housing','housing','住房'],['outpost','watch','瞭望塔'],['bank','bank','恢复银行'],['hospital','hospital','修复医院'],['bankUpgrade','bank','升级银行'],['campUpgrade','camp','升级篝火']])document.querySelector('#'+id+' .tool-name').innerHTML=FACILITY_SVGS[kind]+' '+label;
 // 图标在启动时各缓存日/夜两张，不在移动镜头或每帧生成图片。
 const facilityImages={};
+$('campUpgrade').querySelector('.price-coin').innerHTML='<svg viewBox="0 0 24 24" width="15" height="15"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v12M9 8h6m-6 8h6" stroke="currentColor" stroke-width="2"/></svg>';
 for(const [name,svg] of Object.entries(FACILITY_SVGS))facilityImages[name]=FACILITY_COLORS[name].map(color=>{
   const image=new Image();image.onload=()=>draw();image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg.replace(/style="[^"]*"/,`style="color:${color}"`).replace('width="32" height="32"','width="96" height="96"'));return image;
 });
@@ -512,7 +514,9 @@ function mapDisplay(){
     for(const id of controlled){const [x,y]=xy(id);controlPath.rect(x,y,1,1);}
     const civil=civilizationMask(controlState,controlled),civilBoundary=controlBoundary(civil),civilPath=new Path2D();
     for(const [a,b,c,d] of civilBoundary){civilPath.moveTo(a,b);civilPath.lineTo(c,d);}
-    mapView={controlState,raw,controlled,boundary,boundaryPath,controlPath,civil,civilBoundary,civilPath,visibility:(params.largeCityFog?createVisibility:createReferenceVisibility)(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells,params),dirty:paramsDirty(),
+    const upgradeBoundary=campUpgradeHover&&!campUpgradeError(state)?controlBoundary(civilizationMask(campUpgradeCandidate(controlState),controlled)):[],upgradePath=new Path2D();
+    for(const [a,b,c,d] of upgradeBoundary){upgradePath.moveTo(a,b);upgradePath.lineTo(c,d);}
+    mapView={controlState,raw,controlled,boundary,boundaryPath,controlPath,civil,civilBoundary,civilPath,upgradeBoundary,upgradePath,visibility:(params.largeCityFog?createVisibility:createReferenceVisibility)(SIZE,controlled,visionField(controlState),params.fogS12,params.fogS23,params.enemyFogFadeCells,params),dirty:paramsDirty(),
       towers:towerOverlayCache.get(state,controlled,new Set(motion?.actors.map(e=>e.to))),
       controlBorder:controlBorderTexture(SIZE,controlled,boundaryPath,controlPath,params),
       sourceSites:new Set([...state.enemySources.values()].map(s=>s.site)),
@@ -555,6 +559,7 @@ function constructionPlan(view){
 }
 // 资格与支付分开：缺钱仍定位待升级银行，停业/区外仅保留弱标记，不误染红。
 function upgradePlan(view){
+  if(campUpgradeHover&&!campUpgradeError(state)){const candidate=campUpgradeCandidate(state);return state.sites.filter(p=>{const id=key(p.x,p.y);return plotContent(state,id).status==='building'&&!buildingCivilized(state,id)&&buildingCivilized(candidate,id);}).map(p=>({id:key(p.x,p.y),x:p.x,y:p.y,w:p.width??p.size,h:p.height??p.size,cellMeters:view.controlState.params.cellMeters,eligible:true,focused:false,pulse:0}));}
   if(state.phase!=='build'||state.result||view.dirty)return [];
   const choosing=tool==='bankUpgrade'||bankUpgradeTarget!==null,focused=bankUpgradeTarget??(tool==='bankUpgrade'&&hover!==null?productionId(hover,state):null);
   if(!choosing&&!upgradePulse)return [];
@@ -661,6 +666,7 @@ function paintMap() {
     else if(ghost){const q=embeddingQuote(state,hover);totalDelta=-q.residents;freeDelta=q.released-q.residents;goldDelta=-towerBuildCost(state,weaponType());}
     else if(tool==='wall'&&candidate&&!candidate.error)goldDelta=-state.params.wallCost;
   }
+  if(campUpgradeHover&&!campUpgradeError(state)){const q=campUpgradeQuote(state);goldDelta=-q.cost;totalDelta=freeDelta=q.residents;}
   if(bankUpgradeTarget!==null){
     goldDelta=bankUpgradeHover&&!bankUpgradeError(state,bankUpgradeTarget,bankUpgradeHover)?-state.params.bankUpgradeCost:null;
     totalDelta=freeDelta=0;
@@ -916,6 +922,7 @@ function paintMap() {
   // 建筑整体归属的轮廓最后绘制，避免被屋顶贴图盖住；开放地面仍逐格走边。
   drawControlBorderLine(ctx,view.boundaryPath,size,controlState.params,nightMix);
   drawCivilizationBorderLine(ctx,view.civilPath,size,controlState.params,nightMix);
+  if(campUpgradeHover)drawCivilizationBorderLine(ctx,view.upgradePath,size,{...controlState.params,civilBorderOpacity:100},nightMix);
   // 拆除高亮只覆盖实际对象：物理建筑或独立设施一格。
   if(tool==='erase'&&hover!==null&&state.phase==='build'){
     const q=demolitionQuote(state,hover),cells=['production','housing','ruin'].includes(q.type)?buildingCells(state,hover):q.type?[hover]:[];
@@ -1293,7 +1300,7 @@ function paintObservation(view,plots,items,enemies,fx,plannedRoutes,forecastDay,
   for(const route of ordered)if(!focusedRoute(route))drawRoute(route);
   const border=new Path2D();for(const [x,y,nx,ny] of view.boundary){const a=point(x,y,naturalGroundAt(state.layout,x,y,view.controlState.params.cellMeters)+.02),b=point(nx,ny,naturalGroundAt(state.layout,nx,ny,view.controlState.params.cellMeters)+.02);if(a.hidden||b.hidden)continue;border.moveTo(a.x,a.y);border.lineTo(b.x,b.y);}
   drawControlBorderLine(ctx,border,1,view.controlState.params,nightMix);
-  const civilBorder=new Path2D();for(const [x,y,nx,ny] of view.civilBoundary){const a=point(x,y,naturalGroundAt(state.layout,x,y,view.controlState.params.cellMeters)+.025),b=point(nx,ny,naturalGroundAt(state.layout,nx,ny,view.controlState.params.cellMeters)+.025);if(!a.hidden&&!b.hidden){civilBorder.moveTo(a.x,a.y);civilBorder.lineTo(b.x,b.y);}}
+  const civilBorder=new Path2D();for(const [x,y,nx,ny] of [...view.civilBoundary,...(campUpgradeHover?view.upgradeBoundary:[])]){const a=point(x,y,naturalGroundAt(state.layout,x,y,view.controlState.params.cellMeters)+.025),b=point(nx,ny,naturalGroundAt(state.layout,nx,ny,view.controlState.params.cellMeters)+.025);if(!a.hidden&&!b.hidden){civilBorder.moveTo(a.x,a.y);civilBorder.lineTo(b.x,b.y);}}
   drawCivilizationBorderLine(ctx,civilBorder,1,view.controlState.params,nightMix);
   // 米制墙在远景很细；连续墙顶衬边和真实墙段共向，不能把道路误认为完整防线。
   for(const [id,body] of state.wallHealth)if(body.hp>0&&currentlyVisible(id)){
@@ -1447,6 +1454,8 @@ function update() {
   $('populationDetailBank').textContent=bankWorkers(state);$('populationDetailBank').closest('dl>div').hidden=!bankWorkers(state);
   $('populationDetailHospital').textContent=hospitalWorkers(state);$('populationDetailHospital').closest('dl>div').hidden=!hospitalWorkers(state);
   updateBankDetails();positionResourceDetails();
+  const campUpgrade=campUpgradeQuote(state);$('price-campUpgrade').textContent=campUpgrade.cost;$('campCivilInfo').textContent=`文明半径 ${campCivilRadius(state)} 格 · Lv.${(state.campLevel??0)+1}`;
+  $('campUpgrade').hidden=state.day<2||state.phase!=='build';$('campUpgrade').disabled=!!campUpgradeError(state)||paramsDirty();
   $('campHP').textContent = `HP ${Math.max(0,state.hp)} / ${state.params.campHP}`; $('campBar').style.width = `${Math.max(0,state.hp)/state.params.campHP*100}%`;
   const critical=!state.result&&campCritical(state);
   $('campPanel').classList.toggle('camp-critical',critical);viewport.classList.toggle('camp-critical',critical);
@@ -1565,6 +1574,7 @@ function demolitionTargetError(id){
 }
 // 预览读取真实执行条件，缓存当前格；静态状态不触发拒绝音或提醒动画。
 function updateTargetPreview(view){
+  if(campUpgradeHover){const error=campUpgradeError(state),q=campUpgradeQuote(state);setTargetPreview(error||`文明半径 ${q.before} → ${q.after} 格`,!error);return;}
   const status=toolAvailability[tool];
   if(!tool||!status||status.disabled||state.result||$('bankUpgradeDialog').open){setTargetPreview();return;}
   const key=[tool,hover].join(':');
@@ -1925,6 +1935,7 @@ function paramsEditor(params,scope='all') {
     container.append(row);
   }
   fields('全局',params,'',[['budget','资金',0,10000],['stepMs','移动节拍（毫秒）',50,5000],['wallCost','墙价',1,1000],['demolitionRefundPercent','旧投入拆除返还比例%',0,100],['wallHP','墙耐久',1,10000],['enemyPower','每个敌人拆墙伤害/拍',1,99],['defenseRepairPercent','全损维修费占墙造价%',1,100],['controlRadius','起步瞭望塔控制半径',1,30],['campCivilRadius','篝火文明半径',1,30],['campHP','篝火耐久',1,10000],['campRepairCost','火光修复单价/HP',1,1000],['nightTicks','每晚拍数',1,500],['nightCleanupSpeed','夜末清源速度倍率',1,4]]);
+  fields('篝火升级',params,'',[['campUpgradeCost','基础费用（逐级递增）',1,1000],['campUpgradeRadiusStep','每级文明半径增量',1,15],['campUpgradeMaxLevel','最多升级次数',1,10]]);
   fields('日夜操作',params,'',[['dayEndHoldMs','结束白天长按时长（毫秒）',300,3000]]);
   fields('视野',params,'',[['campS01','火光 S01 距离（格）',0,30],['outpostS01','瞭望塔 S01 距离（格）',0,30],['daySightMultiplier','白天倍率',0,3],['nightSightMultiplier','夜晚倍率',0,3],['eventSightMultiplier','事件倍率',0,3],['sourceRevealPadding','敌源局部 S1 外扩（格）',0,10]]);
   fields('住房与人口',params,'',[['initialPopulation','初始人口',0,10000],['productionCellsPerWorker','每名工人承担格数',1,100],['housingCellsPerResident','每名居民占用格数',1,100],['housingCostPerCell','住房新建每格费用',1,1000]]);
@@ -2543,3 +2554,12 @@ function frame(now){
 }
 document.addEventListener('visibilitychange',()=>{last=performance.now();if(document.hidden)cancelDayEnd();sound.setHidden(document.hidden);if(document.hidden&&state.phase==='battle'){paused=true;if(motion)motion.singleStep=false;timer=0;update();}});
 requestAnimationFrame(frame);
+
+// 直接升级操作不收费选工具；悬停预览范围与钱包，真正点击才扣款。
+for(const event of ['pointerenter','focus'])$('campUpgrade').addEventListener(event,()=>{campUpgradeHover=true;mapView=null;draw();});
+for(const event of ['pointerleave','blur'])$('campUpgrade').addEventListener(event,()=>{campUpgradeHover=false;mapView=null;setTargetPreview();draw();});
+$('campUpgrade').onclick=()=>{
+ if(paramsDirty()){showTopNotice('请先应用或取消参数预览。');return;}
+ const error=upgradeCamp(state);if(error){showTopNotice(error);return;}
+ campUpgradeHover=false;sound.play('upgrade');notify('篝火升级，文明范围扩大。');update();
+};

@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS, LARGE_CITY_OPTIMIZATION_KEYS } from './config.js?v=103';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS, LARGE_CITY_OPTIMIZATION_KEYS } from './config.js?v=105';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -62,7 +62,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
   const blocked=new Set(layout?layout.tiles.flatMap((t,id)=>t==='block'?[id]:[]):[]),walls=new Set([...fixedWalls,...blocked,...playerWalls]);
   const terrainWalls=new Set([...fixedWalls,...blocked]);
   const camp = layout?key(layout.camp.x,layout.camp.y):key(...DEFAULTS.camp), field = routeField(camp, terrainWalls);
-  const state = { outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), banks:new Map(), hospitals:new Map(), bankEarned:0, debtInterestCap:0, nightInterest:0, bankSettledDay:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, nightBuildSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
+  const state = { campLevel:0,campSpent:0,outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), banks:new Map(), hospitals:new Map(), bankEarned:0, debtInterestCap:0, nightInterest:0, bankSettledDay:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, nightBuildSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
     layout, blocked, terrainWalls, sites, siteByCell:layout?.version>=6?siteByCell:null, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
@@ -231,7 +231,7 @@ export function fireField(state) {
   }
   return fire;
 }
-export const funds = state => state.params.budget + (state.debugGold??0) + state.earned + state.economyEarned + (state.bankEarned??0) - [...(state.hospitals?.values()??[])].reduce((sum,h)=>sum+h.cost,0) - [...(state.banks?.values()??[])].reduce((sum,b)=>sum+b.cost,0) - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - [...state.outposts.values()].filter(p=>!p.starter).length*state.params.outpostCost - (state.nightBuildSpent??0) - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
+export const funds = state => state.params.budget - (state.campSpent??0) + (state.debugGold??0) + state.earned + state.economyEarned + (state.bankEarned??0) - [...(state.hospitals?.values()??[])].reduce((sum,h)=>sum+h.cost,0) - [...(state.banks?.values()??[])].reduce((sum,b)=>sum+b.cost,0) - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - [...state.outposts.values()].filter(p=>!p.starter).length*state.params.outpostCost - (state.nightBuildSpent??0) - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
 // 银行不另设账户：本金就是全局余额，停业仅撤销当前额度，不清偿既有债务。
 export const bankAt=(state,id)=>productionSite(id,state)?.role==='bank'?productionId(id,state):null;
 // 银行恢复原有整栋探索条件；医院由固定位置揭示发现，二者均不额外扩散迷雾。
@@ -374,7 +374,7 @@ function connectedOutposts(state){
   networkCache.set(state,{signature,connected});return connected;
 }
 // 文明覆盖只与控制求交，不授予额外施工权限。
-export function civilizationCoverage(state,id){return state.hp>0&&inStationRange(id,state.camp,state.params.campCivilRadius);}
+export function civilizationCoverage(state,id){return state.hp>0&&inStationRange(id,state.camp,Math.min(30,state.params.campCivilRadius+(state.campLevel??0)*state.params.campUpgradeRadiusStep));}
 export function civilizationMask(state,controlled=controlMask(state)) {
   const mask=new Set([...controlled].filter(id=>civilizationCoverage(state,id)));
   // 建筑按同一中心整栋接入，表现边界绕楼走，不在楼里切出半栋文明。
@@ -384,6 +384,24 @@ export function civilizationMask(state,controlled=controlMask(state)) {
 export function buildingCivilized(state,id){
   const p=productionSite(id,state);if(!p||!productionControlled(state,id))return false;
   return civilizationCoverage(state,key(p.x+Math.floor((p.width??p.size)/2),p.y+Math.floor((p.height??p.size)/2)));
+}
+// 篝火升级只扩文明；报价与只读候选共用，提前预览不会改变人口或收支。
+export const campCivilRadius=state=>Math.min(30,state.params.campCivilRadius+(state.campLevel??0)*state.params.campUpgradeRadiusStep);
+export function campUpgradeCandidate(state){return {...state,campLevel:(state.campLevel??0)+1};}
+export function campUpgradeQuote(state){
+ const candidate=campUpgradeCandidate(state);
+ return {cost:state.params.campUpgradeCost*((state.campLevel??0)+1),before:campCivilRadius(state),after:campCivilRadius(candidate),residents:population(candidate).total-population(state).total};
+}
+export function campUpgradeError(state){
+ if(state.phase!=='build'||state.result)return '只能在白天升级篝火。';
+ if(state.day<2)return '第2天起可升级篝火。';
+ if(state.hp<=0)return '请先恢复篝火。';
+ if((state.campLevel??0)>=state.params.campUpgradeMaxLevel||campCivilRadius(state)>=30)return '篝火已达最高等级。';
+ return buildResourceStatus(state,campUpgradeQuote(state).cost).message;
+}
+export function upgradeCamp(state){
+ const error=campUpgradeError(state);if(error)return error;
+ const q=campUpgradeQuote(state);recordBorrowing(state,q.cost);state.campSpent=(state.campSpent??0)+q.cost;state.campLevel=(state.campLevel??0)+1;revealControl(state);return '';
 }
 // 三种建筑表现由结构与接入共同决定；失去文明只暂停使用，不退回废墟。
 export function buildingStatus(state,id){
@@ -693,6 +711,7 @@ export function validateVisualParams(params){
 export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   const visualError=validateVisualParams(params);if(visualError)return visualError;
+  if(!integer(params.campUpgradeCost,1,1000)||!integer(params.campUpgradeRadiusStep,1,15)||!integer(params.campUpgradeMaxLevel,1,10))return '篝火升级基础费1–1000、半径增量1–15、最多等级1–10，均为整数。';
   if(!integer(params.campCivilRadius,1,30))return '篝火文明半径须为1–30格整数。';
   if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
   if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';

@@ -34,6 +34,7 @@ export const POPULATION_SVG='<svg viewBox="0 0 32 32" aria-hidden="true"><g fill
 export const WORKER_SVG='<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="currentColor"><circle cx="16" cy="12" r="5"/><path d="M5 29v-6a11 11 0 0 1 22 0v6zM9 9a7 7 0 0 1 14 0z"/></g><path d="M8 9h16M16 2v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 // 建设图标只定义一次；按钮、手册和地图缓存图片共用轮廓，昼夜仅改变颜色。
 const facilityPaths={
+  camp:'<path d="M16.64-.96C14.4 12.16 32.96 14.08 26.24 25.28 19.2 35.2 2.56 28.8 5.44 17.92L11.84 7.68V16.32Z" fill="currentColor"/><path d="M16.32 12.48 21.76 24.96H11.52Z" fill="#fff1b0"/>',
   near:'<path d="M10 4h4v12h-4zm8 0h4v12h-4z" fill="currentColor"/><rect x="6" y="13" width="20" height="13" rx="4" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="2.5"/><circle cx="16" cy="20" r="3" fill="currentColor"/><path d="M4 29h24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
   far:'<path d="M14 3h4v16h-4zm-2-2h8v4h-8z" fill="currentColor"/><circle cx="16" cy="20" r="6" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="2.5"/><path d="m12 24-6 5m14-5 6 5M5 29h22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>',
   wall:'<rect x="3" y="7" width="26" height="22" rx="2" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="2.5"/><path d="M3 14h26M3 22h26M16 7v7M10 14v8m12-8v8m-6 0v7M4 4h24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
@@ -47,7 +48,7 @@ const facilityPaths={
   bankLoan:'<g stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="currentColor" fill-opacity=".16"/><path d="M14 3v5h5" fill="currentColor" fill-opacity=".32"/><path d="M9 13h6m-6 5h6m-6 5h3M26 12v17m-4-4 4 4 4-4" fill="none"/></g>',
   watch:'<path d="M9 29 12 13h8l3 16M11 21l11 8M21 21l-11 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M6 12h20v4H6zM5 9 16 2 27 9z" fill="currentColor"/><path d="M10 9v3m12-3v3" stroke="currentColor" stroke-width="2"/>'
 };
-export const FACILITY_COLORS={near:['#28654f','#a0e7c3'],far:['#575487','#d2c2fa'],wall:['#62634c','#d9d0af'],production:['#346970','#a1d9d7'],housing:['#89582d','#efc18c'],watch:['#245d73','#b3e8f2'],bank:['#78612a','#efda94'],hospital:['#32736e','#bfead4'],bankCapacity:['#856426','#f1d486'],bankDeposit:['#326a4b','#a1e0b2'],bankLoan:['#3e6383','#b9d7f5']};
+export const FACILITY_COLORS={camp:['#98622e','#ffc17c'],near:['#28654f','#a0e7c3'],far:['#575487','#d2c2fa'],wall:['#62634c','#d9d0af'],production:['#346970','#a1d9d7'],housing:['#89582d','#efc18c'],watch:['#245d73','#b3e8f2'],bank:['#78612a','#efda94'],hospital:['#32736e','#bfead4'],bankCapacity:['#856426','#f1d486'],bankDeposit:['#326a4b','#a1e0b2'],bankLoan:['#3e6383','#b9d7f5']};
 export const FACILITY_SVGS=Object.fromEntries(Object.entries(facilityPaths).map(([name,path])=>{
   // 专精是完整徽章：边框围住主体但留白，窗口和地图共用，不重复叠框。
   const graphic=['bankCapacity','bankDeposit','bankLoan'].includes(name)?`<circle cx="16" cy="16" r="14.8" fill="currentColor" fill-opacity=".07" stroke="currentColor" stroke-width="1.4"/><g transform="translate(4.48 4.48) scale(.72)">${path}</g>`:path;
