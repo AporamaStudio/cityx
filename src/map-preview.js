@@ -1,6 +1,6 @@
 import {drawNaturalTerrain} from './natural-terrain.js?v=6';
 import {drawBlockTexture} from './city-textures.js?v=3';
-import {readMapSettings,mapSearch} from './map-settings.js?v=5';
+import {readMapSettings,mapSearch} from './map-settings.js?v=6';
 import {generateCityMap,walkableDistances} from './city-map.js?v=15';
 const $=id=>document.getElementById(id),canvas=$('map'),ctx=canvas.getContext('2d'),viewport=$('viewport');
 let appliedSettings,map,lookup=[],scale=16,panX=0,panY=0,hover=-1,drag=null,width=0,height=0;

@@ -1,17 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 // 独立测试进程在模块加载前选择大图，避免用旧60格编号验证256格状态。
-globalThis.location={search:''};
+globalThis.location={search:'?width=256&height=256'};
 const {SIZE,DEFAULTS}=await import('../src/config.js');
 const {MAP_DEFAULTS,battleMapSize}=await import('../src/map-settings.js');
+const largeSettings={...MAP_DEFAULTS,width:256,height:256};
 const {generateCityMap,walkableDistances}=await import('../src/city-map.js');
 const {createCampaign,key,xy,productionSite,productionControlled,productionQuote,buildProduction,buildTower,placementError,beginBattle,restoreNight,stepBattle}=await import('../src/model.js');
 
 test('256格主图生成、坐标、道路与起步建设、夜防重试使用同一尺寸',()=>{
-  assert.equal(SIZE,256);assert.equal(battleMapSize(MAP_DEFAULTS),256);
+  assert.equal(SIZE,256);assert.equal(battleMapSize(MAP_DEFAULTS),60);assert.equal(battleMapSize(largeSettings),256);
   assert.equal(battleMapSize({width:60,height:60}),60);
   assert.throws(()=>battleMapSize({width:50,height:100}));
-  const layout=generateCityMap(MAP_DEFAULTS),seen=new Set(),d=walkableDistances(layout);
+  const layout=generateCityMap(largeSettings),seen=new Set(),d=walkableDistances(layout);
   assert.equal(layout.tiles.length,65536);assert.deepEqual(xy(key(255,255)),[255,255]);
   for(const p of layout.blocks)for(let y=p.y;y<p.y+p.height;y++)for(let x=p.x;x<p.x+p.width;x++){
     const id=key(x,y);assert.ok(!seen.has(id));seen.add(id);assert.equal(layout.tiles[id],p.kind==='open'?'open':'block');
@@ -29,7 +30,7 @@ test('大城地标完整保留真实园区尺寸、身份和铁路连接，禁�
   const {CITY_LANDMARKS}=await import('../src/city-landmarks.js');
   const {clearPlot,outpostError,productionError}=await import('../src/model.js');
   for(const seed of ['cityx-01',0,1,2,3,4]){
-    const map=generateCityMap({...MAP_DEFAULTS,seed}),landmarks=map.blocks.filter(p=>p.landmark);
+    const map=generateCityMap({...largeSettings,seed}),landmarks=map.blocks.filter(p=>p.landmark);
     assert.equal(landmarks.length,12);
     for(const spec of CITY_LANDMARKS){const p=landmarks.find(p=>p.landmark===spec.id);assert.ok(p);assert.deepEqual([p.width*20,p.height*20],spec.meters);}
     const school=landmarks.find(p=>p.landmark==='school'),athletics=landmarks.find(p=>p.landmark==='athletics');assert.equal(school.y,athletics.y);
@@ -41,7 +42,7 @@ test('大城地标完整保留真实园区尺寸、身份和铁路连接，禁�
     }
     const d=walkableDistances(map);map.tiles.forEach((t,i)=>assert.equal(d[i]>=0,['road','open'].includes(t)));
   }
-  const s=createCampaign({...DEFAULTS,budget:1000},undefined,generateCityMap(MAP_DEFAULTS));s.day=3;
+  const s=createCampaign({...DEFAULTS,budget:1000},undefined,generateCityMap(largeSettings));s.day=3;
   for(const p of s.sites.filter(p=>p.landmark)){
     const id=key(p.x,p.y);s.camp=key(p.x-1,p.y);s.explored.add(id);assert.match(clearPlot(s,id),/地标保留/);assert.match(productionError(s,id),/地标保留/);assert.ok(outpostError(s,id));assert.ok(placementError(s,id));
   }
