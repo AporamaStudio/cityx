@@ -6,7 +6,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {addBuildingFoundation} from './city-building-style.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody} from './city-wrecks.js?v=2';
 import {VEHICLE_PALETTE} from './city-streets.js?v=5';
-import {createRoadModel} from './city-road-model.js?v=125';
+import {createRoadModel} from './city-road-model.js?v=126';
 import {createQualityPreview,attachCityhallLights,updateShelterFirelight} from './model-preview-quality.js?v=5';
 import {createPreviewEffects,groundGlow} from './model-preview-effects.js?v=4';
 

@@ -6,7 +6,7 @@ import {createCampaign,population,buildHousing,removeHousing,buildTower,applyTes
 function setup(blocks=[],params={}){
  const layout={width:SIZE,height:SIZE,camp:{x:15,y:25},blocks,tiles:Array(SIZE*SIZE).fill('road')};
  const wave=[{x:10,y:3,hp:6,count:1,first:1,interval:2}];
- const s=createCampaign({...DEFAULTS,budget:1000,...params},[wave,wave,wave],layout);s.day=3;return s;
+ const s=createCampaign({...DEFAULTS,budget:1000,campCivilRadius:30,...params},[wave,wave,wave],layout);s.day=3;return s;
 }
 function chain(s,xs,y=25){for(const x of xs)assert.equal(buildOutpost(s,key(x,y)),'');}
 

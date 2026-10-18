@@ -1,5 +1,5 @@
 import {landmarkById} from './city-landmarks.js?v=1';
-import {createLandmarkModel,createRailwayModel} from './city-landmark-model.js?v=125';
+import {createLandmarkModel,createRailwayModel} from './city-landmark-model.js?v=126';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
@@ -7,9 +7,9 @@ import {addBuildingFoundation,buildingVariation} from './city-building-style.js?
 import {operatingLights} from './city-building-lights.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody,createWreckInstances} from './city-wrecks.js?v=3';
 import {createUnknownCity} from './city-unknown.js?v=2';
-import {createRoadModel} from './city-road-model.js?v=125';
-import {createNaturalModel} from './city-natural-model.js?v=125';
-import {createSurroundingModel} from './city-surrounding-model.js?v=125';
+import {createRoadModel} from './city-road-model.js?v=126';
+import {createNaturalModel} from './city-natural-model.js?v=126';
+import {createSurroundingModel} from './city-surrounding-model.js?v=126';
 import {updateWater} from './city-water.js?v=3';
 import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {PLANT_MODELS} from './city-vegetation.js?v=2';

@@ -237,7 +237,7 @@ test('多格街区任意格操作同一投资，建筑至少碰一格才有生�
   assert.equal(s.production.size,1);assert.equal(funds(s),50);assert.ok(buildProduction(s,key(11,24)));
   assert.ok(changeWall(s,key(12,25)));assert.ok(buildOutpost(s,key(12,25)));
   assert.equal(removeProduction(s,key(11,25)),'');assert.equal(funds(s),70);
-  assert.equal(buildProduction(s,key(4,24)),'');assert.equal(funds(s),14);assert.equal(expectedIncome(s),9);
+  assert.equal(buildProduction(s,key(4,24)),'');assert.equal(funds(s),14);assert.equal(expectedIncome(s),0);s.params.campCivilRadius=30;assert.equal(expectedIncome(s),9);
   assert.match(productionError(s,key(11,24)),/资金不足/);
   const partial=createCampaign({...DEFAULTS,productionCostPerCell:8,renovationCostPercent:100,productionIncomePerCell:1,controlRadius:1});partial.day=2;assert.match(productionError(partial,key(11,24)),/碰到建筑至少一格/);
 });

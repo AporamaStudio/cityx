@@ -9,7 +9,7 @@ function make(kind='open') {
   for(let y=22;y<24;y++)for(let x=15;x<17;x++)tiles[key(x,y)]=kind==='open'?'open':'block';
   const layout={width:SIZE,height:SIZE,camp:{x:15,y:25},blocks:[plot],buildings:kind==='open'?[]:[plot],tiles};
   const wave=[{x:15,y:20,hp:6,count:1,first:1,interval:2}];
-  const s=createCampaign({...DEFAULTS,budget:1000,initialPopulation:30},Array(5).fill(wave),layout);s.day=3;return s;
+  const s=createCampaign({...DEFAULTS,campCivilRadius:30,budget:1000,initialPopulation:30},Array(5).fill(wave),layout);s.day=3;return s;
 }
 const run=s=>{for(let i=0;i<200&&s.phase==='battle';i++)stepBattle(s);assert.notEqual(s.phase,'battle');};
 
@@ -29,7 +29,7 @@ test('路线上的空地可建瞭望塔，原路保持通行，无损伤或退�
 test('建筑封住狭窄出口时允许退回道路，不因保留路线前缀而卡住',()=>{
   const map=structuredClone(make().layout);
   for(const x of [14,16]){map.blocks.push({x,y:20,width:1,height:2,kind:'building'});for(const y of [20,21])map.tiles[key(x,y)]='block';}
-  const wave=[{x:15,y:19,hp:6,count:1,first:1,interval:2}],s=createCampaign({...DEFAULTS,budget:1000},[wave],map);s.day=3;
+  const wave=[{x:15,y:19,hp:6,count:1,first:1,interval:2}],s=createCampaign({...DEFAULTS,campCivilRadius:30,budget:1000},[wave],map);s.day=3;
   assert.ok(s.attacks[0].path.includes(key(15,21)));assert.equal(buildProduction(s,key(15,22)),'');
   assert.equal(s.attacks[0].path[0],key(15,19));assert.ok(campCells(s).includes(s.attacks[0].path.at(-1)));
   assert.ok(s.attacks[0].path.every(id=>!s.blocked.has(id)));assert.equal(new Set(s.attacks[0].path).size,s.attacks[0].path.length);
@@ -90,7 +90,7 @@ test('重试保留清理、换建与绕行，整局重来恢复原废墟；拆�
 });
 
 test('面积经营报价支持矩形与更大地块，小地块快回款，大地块密度有上限',()=>{
-  const quote=(width,height)=>productionQuote({params:{...DEFAULTS,productionCostPerCell:8,productionIncomePerCell:1},sites:[{x:0,y:0,width,height}]},0);
+  const quote=(width,height)=>productionQuote({params:{...DEFAULTS,campCivilRadius:30,productionCostPerCell:8,productionIncomePerCell:1},sites:[{x:0,y:0,width,height}]},0);
   assert.deepEqual(quote(2,2),{area:4,cost:20,income:4});assert.deepEqual(quote(4,4),{area:16,cost:128,income:16});
   assert.deepEqual(quote(5,5),{area:25,cost:304,income:38});assert.deepEqual(quote(6,6),{area:36,cost:512,income:65});
   assert.deepEqual(quote(2,6),quote(3,4));
@@ -105,7 +105,7 @@ test('当天临时建筑撤销后恢复原始路径，同时保留其他建筑�
   const layout=structuredClone(make().layout),second={x:15,y:24,width:2,height:1,kind:'open'};
   layout.blocks.push(second);
   const wave=[{x:15,y:20,hp:6,count:1,first:1,interval:2}];
-  const s=createCampaign({...DEFAULTS,budget:1000},[wave],layout);s.day=3;
+  const s=createCampaign({...DEFAULTS,campCivilRadius:30,budget:1000},[wave],layout);s.day=3;
   const original=[...s.attacks[0].path],cash=funds(s),a=key(15,22),b=key(15,24);
   assert.equal(buildProduction(s,a),'');assert.notDeepEqual(s.attacks[0].path,original);
   assert.equal(removeProduction(s,a),'');assert.deepEqual(s.attacks[0].path,original);assert.equal(funds(s),cash);
