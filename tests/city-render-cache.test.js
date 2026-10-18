@@ -170,6 +170,22 @@ test('品质地标共享原索引几何与PBR贴图，米制缩放不按地块�
   assert.ok(geometry.index);assert.deepEqual(new THREE.Box3().setFromObject(object).getCenter(new THREE.Vector3()).toArray(),[120,.75,117.5]);
 });
 
+test('地标按制作地表原点落地，旋转合批的虚大包围盒及埋地底板不抬高园区',async()=>{
+  const {createLandmarkModel}=await loadBrowserModule('city-landmark-model.js');
+  const template=new THREE.Group(),material=new THREE.MeshStandardMaterial();
+  // 模拟已合批的倾斜网格：实际顶点在地表，局部包围盒旋转后却伸到地下。
+  const geometry=new THREE.BufferGeometry(),rotation=new THREE.Matrix4().makeRotationZ(.4);
+  geometry.setAttribute('position',new THREE.Float32BufferAttribute([-60,0,-50,60,0,50,60,1,50],3));geometry.applyMatrix4(rotation.clone().invert());
+  const mesh=new THREE.Mesh(geometry,material);mesh.rotation.z=.4;template.add(mesh);
+  const foundation=new THREE.Mesh(new THREE.BoxGeometry(120,.6,140),material);foundation.position.y=-.3;template.add(foundation);
+  assert.ok(new THREE.Box3().setFromObject(template).min.y<-20);
+  const object=createLandmarkModel(template,{x:117,y:114,w:6,h:7,cellMeters:20});object.updateMatrixWorld(true);
+  const model=object.children[0];assert.deepEqual(model.position.toArray(),[0,0,0]);
+  assert.deepEqual(model.getWorldPosition(new THREE.Vector3()).toArray(),[120,0,117.5]);
+  const actual=new THREE.Box3().setFromObject(object,true);assert.ok(Math.abs(actual.min.y+.03)<1e-7);
+  assert.ok(Math.abs(actual.max.y-.05)<1e-6);assert.strictEqual(model.children[0].geometry,geometry);
+});
+
 test('废墟合批保留世界几何、颜色和原地块屋顶拾取，数组共享且重复合批不重复染色',async()=>{
   const {batchStaticPlots}=await loadBrowserModule('city-static-batch.js');
   const make=(x,color)=>{const root=new THREE.Group(),material=new THREE.MeshStandardMaterial({color,roughness:.95}),mesh=new THREE.Mesh(new THREE.BoxGeometry(2,4,3).toNonIndexed(),material);mesh.castShadow=mesh.receiveShadow=true;root.position.set(x,2,10);root.add(mesh);root.updateMatrixWorld(true);return root;};

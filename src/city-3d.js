@@ -1,5 +1,5 @@
 import {landmarkById} from './city-landmarks.js?v=1';
-import {createLandmarkModel,createRailwayModel} from './city-landmark-model.js?v=1';
+import {createLandmarkModel,createRailwayModel} from './city-landmark-model.js?v=2';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';

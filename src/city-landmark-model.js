@@ -4,14 +4,14 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 // 品质园区严格按米缩放；共享已合批的索引几何，保留全部PBR贴图与材质差异。
 export function createLandmarkModel(template,plot){
   const model=template.clone(true),materials=new Map();model.updateMatrixWorld(true);
-  const bounds=new THREE.Box3().setFromObject(model),center=bounds.getCenter(new THREE.Vector3());
   // GLB已按材质离线合批，直接共享索引几何，避免运行时去索引再复制数百万面。
   model.traverse(node=>{if(node.isMesh){
     if(!materials.has(node.material))materials.set(node.material,node.material.clone());
     node.material=materials.get(node.material);node.castShadow=node.receiveShadow=true;
   }});
   const root=new THREE.Group();root.add(model);model.scale.setScalar(1/plot.cellMeters);
-  model.position.set(-center.x/plot.cellMeters,-bounds.min.y/plot.cellMeters,-center.z/plot.cellMeters);
+  // 品质GLB以园区中心为XZ原点、地表为Y=0，底板/地基允许埋地。
+  // 合批网格保留旋转，其保守包围盒可虚扩至地下数十米，不能据此抬高或居中园区。
   root.position.set(plot.x+plot.w/2,0,plot.y+plot.h/2);return root;
 }
 
