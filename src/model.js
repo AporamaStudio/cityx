@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=98';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS, LARGE_CITY_OPTIMIZATION_KEYS } from './config.js?v=100';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -621,6 +621,7 @@ export function changeWall(state, id, remove = false) {
 
 // 参数先验证、再一次性应用；不静默删除超预算设施或落在新控制范围外的布局。
 export function validateVisualParams(params){
+  if(LARGE_CITY_OPTIMIZATION_KEYS.some(key=>typeof params[key]!=='boolean'))return '大城优化选项须为开启或关闭。';
   const integer=(value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   if(!integer(params.obliqueElevationDegrees,25,80))return '斜视俯仰角须为 25–80 度整数（与水平面的夹角）。';
   if(!['orthographic','perspective'].includes(params.obliqueProjection))return '斜视观察投影须为正交或透视。';

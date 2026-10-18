@@ -1,0 +1,314 @@
+[
+  {
+    "id": "cityhall",
+    "name": "市政厅",
+    "authoredBoundsMeters": {
+      "min": [
+        -60,
+        -1.2200000286102295,
+        -70
+      ],
+      "max": [
+        60,
+        22.220002036912433,
+        70
+      ]
+    },
+    "beforeOriginOffsetMeters": [
+      0,
+      24.353990017475006,
+      1.24460572401631
+    ],
+    "afterOriginOffsetMeters": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "police",
+    "name": "警察局",
+    "authoredBoundsMeters": {
+      "min": [
+        -40,
+        -0.6000000238418579,
+        -50
+      ],
+      "max": [
+        40.5,
+        13.949999988079071,
+        50
+      ]
+    },
+    "beforeOriginOffsetMeters": [
+      -0.25000000000005684,
+      16.51428913925512,
+      0
+    ],
+    "afterOriginOffsetMeters": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "school",
+    "name": "学校",
+    "authoredBoundsMeters": {
+      "min": [
+        -60,
+        -0.6000000238418579,
+        -80
+      ],
+      "max": [
+        61.827334155215794,
+        13.949999988079071,
+        80
+      ]
+    },
+    "beforeOriginOffsetMeters": [
+      -0.9136670776078404,
+      0.6000000238418579,
+      0
+    ],
+    "afterOriginOffsetMeters": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "athletics",
+    "name": "操场",
+    "authoredBoundsMeters": {
+      "min": [
+        -80,
+        -0.8290958537898732,
+        -60
+      ],
+      "max": [
+        80,
+        16.199999630451202,
+        60
+      ]
+    },
+    "beforeOriginOffsetMeters": [
+      0,
+      13.170140893753736,
+      0
+    ],
+    "afterOriginOffsetMeters": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "supermarket",
+    "name": "超市",
+    "authoredBoundsMeters": {
+      "min": [
+        -40,
+        -0.6000000238418579,
+        -50
+      ],
+      "max": [
+        40.5,
+        8.850000560283661,
+        50
+      ]
+    },
+    "beforeOriginOffsetMeters": [
+      0.1558002943031056,
+      17.93678410100135,
+      0
+    ],
+    "afterOriginOffsetMeters": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "fire-station",
+    "name": "消防站",
+    "authoredBoundsMeters": {
+      "min": [
+        -30,
+        -0.6000000238418579,
+        -40
+      ],
+      "max": [
+        30,
+        19.235003292560577,
+        40
+      ]
+    },
+    "beforeOriginOffsetMeters": [
+      0,
+      0.6000000238418579,
+      0
+    ],
+    "afterOriginOffsetMeters": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "shelter",
+    "name": "避难所",
+    "authoredBoundsMeters": {
+      "min": [
+        -30,
+        -0.929999977350235,
+        -40
+      ],
+      "max": [
+        30,
+        13.599999904632568,
+        40
+      ]
+    },
+    "beforeOriginOffsetMeters": [
+      0,
+      6.194922354522836,
+      0
+    ],
+    "afterOriginOffsetMeters": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "railway",
+    "name": "火车站",
+    "authoredBoundsMeters": {
+      "min": [
+        -90,
+        -0.6000000238418579,
+        -50
+      ],
+      "max": [
+        90,
+        12.369998703365749,
+        50
+      ]
+    },
+    "beforeOriginOffsetMeters": [
+      0,
+      39.979754048851504,
+      5.529090482302479
+    ],
+    "afterOriginOffsetMeters": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "logistics",
+    "name": "物流中心",
+    "authoredBoundsMeters": {
+      "min": [
+        -70,
+        -0.6000000238418579,
+        -80
+      ],
+      "max": [
+        70,
+        13.330005907954098,
+        80
+      ]
+    },
+    "beforeOriginOffsetMeters": [
+      0,
+      22.117030897732718,
+      0
+    ],
+    "afterOriginOffsetMeters": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "power",
+    "name": "发电站",
+    "authoredBoundsMeters": {
+      "min": [
+        -80,
+        -0.6000000238418579,
+        -90
+      ],
+      "max": [
+        80,
+        42.999998981656134,
+        90
+      ]
+    },
+    "beforeOriginOffsetMeters": [
+      0,
+      44.348557375603484,
+      0
+    ],
+    "afterOriginOffsetMeters": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "waterworks",
+    "name": "水厂",
+    "authoredBoundsMeters": {
+      "min": [
+        -60,
+        -0.6000000238418579,
+        -70
+      ],
+      "max": [
+        61.827334155215794,
+        8.449999988079071,
+        70
+      ]
+    },
+    "beforeOriginOffsetMeters": [
+      -2.882030285467181,
+      36.242107379768925,
+      0
+    ],
+    "afterOriginOffsetMeters": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "communications",
+    "name": "通信中心",
+    "authoredBoundsMeters": {
+      "min": [
+        -40,
+        -0.6000000238418579,
+        -50
+      ],
+      "max": [
+        40.5,
+        35.41825944185257,
+        50
+      ]
+    },
+    "beforeOriginOffsetMeters": [
+      -0.25000000000005684,
+      16.741004332422477,
+      0
+    ],
+    "afterOriginOffsetMeters": [
+      0,
+      0,
+      0
+    ]
+  }
+]

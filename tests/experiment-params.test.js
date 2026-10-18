@@ -52,3 +52,12 @@ test('POI标牌尺寸、边框及淡化可独立调节，不改变玩法；非�
   const unchanged=structuredClone(state);
   for(const change of [{poiMarkerSizePx:31},{poiMarkerSizePx:81},{poiMarkerSizePx:55.5},{poiMarkerMinSizePx:31},{poiMarkerMinSizePx:73},{poiMarkerMinSizePx:44.5},{poiMarkerBorderPx:1},{poiMarkerBorderPx:7},{poiMarkerRouteOpacity:-1},{poiMarkerRouteOpacity:100.5},{poiMarkerNightOpacity:101},{poiMarkerNightOpacity:NaN}]){assert.match(applyExperimentParams(state,{...state.params,...change},'visual'),/POI标牌/);assert.deepEqual(state,unchanged);}
 });
+
+test('60格大城优化默认关闭，五组开关只作为视觉设置应用，不修改进度或玩法',async()=>{
+  const {LARGE_CITY_OPTIMIZATION_KEYS}=await import('../src/config.js');
+  const state=createCampaign(DEFAULTS),before=structuredClone(state),draft=structuredClone(state.params);
+  for(const key of LARGE_CITY_OPTIMIZATION_KEYS){assert.equal(DEFAULTS[key],false);draft[key]=true;}
+  assert.equal(applyExperimentParams(state,draft,'visual'),'');for(const key of LARGE_CITY_OPTIMIZATION_KEYS)before.params[key]=true;
+  assert.deepEqual(state,before);
+  draft.largeCityFog='true';assert.match(applyExperimentParams(state,draft,'visual'),/大城优化/);assert.equal(state.params.largeCityFog,true);
+});

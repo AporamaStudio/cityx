@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {drawFog,fogTransitionActive,cloudStrength} from '../src/fog.js';
+import {drawFog,fogTransitionActive,cloudStrength,fogRasterBounds,fogResourceStats,resetFogResources} from '../src/fog.js';
 import {createVisibility} from '../src/visibility.js';
 
 // 记录真实绘制函数生成的静态/动态遮罩，测试信息层级，不测试云纹形状。
@@ -88,4 +88,31 @@ test('远处实时揭示形成局部S1薄雾，撤回后立即回浓雾且保留
   assert.equal(alpha(26.5,5.5),0);assert.ok(alpha.veil(26.5,5.5)>0&&alpha.veil(26.5,5.5)<=77);
   sight.clear();block(sight,3,3,8,8);alpha=render(controlled,explored,601,0,0,2,3,3,sight);
   assert.equal(alpha(26.5,5.5),255);assert.equal(alpha.veil(26.5,5.5),255);assert.ok(explored.has(id(26,5)));
+});
+
+test('局部雾纹只裁剪绘制窗口，保留4像素精度和原世界遮罩；越界不会生成负尺寸',()=>{
+  const visibility=createVisibility(size,new Set([id(10,10)]),new Set([id(10,10)]),3,3),explored=new Set(),ctx=new CanvasStub().ctx;
+  drawFog(ctx,visibility,explored,0,800,3,0,2);const fullMask=ctx.last.image.ctx.mask;
+  const area={left:8,top:9,right:20,bottom:22},cropped=new CanvasStub().ctx;drawFog(cropped,visibility,explored,0,800,3,0,2,area);
+  assert.equal(cropped.last.image.width,48);assert.equal(cropped.last.image.height,52);assert.equal(cropped.last.image.ctx.mask,fullMask);
+  assert.deepEqual(cropped.last.rect,[8,9,12,13]);assert.equal(cropped.images[0],ctx.images[0]);
+  for(const viewport of [{left:-999,right:-900,top:-999,bottom:-900},{left:900,right:999,top:900,bottom:999},{left:4,right:12,top:6,bottom:15}]){
+    const bounds=fogRasterBounds(visibility,viewport);assert.ok(bounds.right>bounds.left&&bounds.bottom>bounds.top);assert.ok(bounds.left>=-visibility.border&&bounds.right<=size+visibility.border);
+  }
+});
+
+test('退雾期间平移窗口保持重叠像素和原计时，不重启动画；全城窗口不随旋转伸缩',()=>{
+  const controlled=new Set(),sight=new Set(),explored=new Set(),a={left:8,top:0,right:24,bottom:20},b={left:12,top:0,right:28,bottom:20};block(controlled,3,3,8,8);block(sight,3,3,12,12);
+  const paint=(area,time)=>{const ctx=new CanvasStub().ctx;drawFog(ctx,createVisibility(size,controlled,sight,3,3),explored,0,time,0,0,2,area);return ctx.last.image.ctx.mask.ctx.pixels.data;};
+  paint(a,900);block(sight,13,3,15,12);paint(a,901);const first=new Uint8ClampedArray(paint(a,901.1)),second=paint(b,901.1);
+  for(let y=2;y<18;y++)for(let x=13;x<23;x++){const ai=((y-a.top)*4*((a.right-a.left)*4)+(x-a.left)*4)*4+3,bi=((y-b.top)*4*((b.right-b.left)*4)+(x-b.left)*4)*4+3;assert.equal(first[ai],second[bi]);}
+  paint(b,901.4);assert.equal(fogTransitionActive(),false);
+  const visibility={size:256,border:205},one=fogRasterBounds(visibility,{left:-80,right:350,top:-200,bottom:400}),two=fogRasterBounds(visibility,{left:-200,right:440,top:-60,bottom:330});assert.deepEqual(one,two);
+});
+
+test('稳态雾复用目标数组，关闭雾释放画布和窗口数组，重新启用不继承旧退雾',()=>{
+  const visibility=createVisibility(size,new Set([id(12,12)]),new Set([id(12,12)]),3,3),ctx=new CanvasStub().ctx,explored=new Set(),area={left:8,top:8,right:24,bottom:24};
+  drawFog(ctx,visibility,explored,0,1000,0,0,2,area);const stats=fogResourceStats();assert.equal(stats.arrayBytes,64*64*8);assert.equal(stats.canvasRGBABytes,64*64*12);
+  resetFogResources();assert.equal(fogResourceStats(),null);assert.equal(fogTransitionActive(),false);assert.equal(visibility.rasterCacheBytes,0);
+  drawFog(ctx,visibility,explored,0,1001,0,0,2,area);assert.equal(fogTransitionActive(),false);assert.equal(fogResourceStats().arrayBytes,stats.arrayBytes);
 });

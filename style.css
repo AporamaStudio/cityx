@@ -389,7 +389,7 @@ body[data-time="night"]{--resource-unmet-ink:#ff9a8a}
 .manual-panel .legend-building{color:var(--legend-building)}.manual-panel .legend-land{color:var(--legend-land)}.manual-panel .legend-control{color:var(--legend-control)}
 @media(max-width:540px){.arena .map-footer{padding:6px;gap:5px}.map-footer .viewtools{gap:5px}.map-footer .map-scale{width:52px}.map-footer #zoom{width:33px}}
 
-/* 两个ⓘ共用预览/固定状态，透明桥接区允许鼠标移入浮层阅读。 */
+/* 图例与实验ⓘ共用预览/固定状态，透明桥接区允许鼠标移入浮层阅读。 */
 .legend-info{position:relative;flex:none}.legend-info.legend-open::before{content:"";position:absolute;z-index:30;left:0;bottom:100%;width:100%;height:7px}.legend-info button[aria-pressed="true"]{color:var(--text);background:var(--line);border-radius:50%}
 .info-tooltip{position:fixed;right:auto;bottom:auto;z-index:45;max-width:calc(100vw - 12px);max-height:calc(100vh - 12px);overflow:auto;visibility:visible;opacity:1;pointer-events:auto;background:var(--tooltip);color:var(--text);border:1px solid var(--line);box-shadow:0 8px 24px #0008}.info-tooltip[hidden]{display:none}
 .map-legend-tooltip{width:160px;padding:10px 12px;border-radius:8px;font-size:11px;line-height:1.5}.map-legend-tooltip .manual-rule{margin:0}.map-legend-tooltip .manual-rule+.manual-rule{margin-top:7px}.map-legend-tooltip .legend-building{color:var(--legend-building)}.map-legend-tooltip .legend-land{color:var(--legend-land)}.map-legend-tooltip .legend-control{color:var(--legend-control)}
@@ -451,3 +451,6 @@ body[data-time="night"]{--resource-unmet-ink:#ff9a8a}
 .city-loading{position:absolute;inset:0;z-index:20;display:grid;place-items:center;background:radial-gradient(ellipse at 25% 30%,#e4e7df 0%,transparent 60%),radial-gradient(ellipse at 80% 65%,#dce3e0 0%,transparent 55%),#c6d1cf;color:#344b50}
 .city-loading[hidden]{display:none}.city-loading-card{display:grid;gap:14px;justify-items:center;min-width:220px;padding:26px;border:1px solid #aebeb980;border-radius:12px;background:#e6ebe3b8}.city-loading-card strong{font-size:15px}.city-loading-card span{font-size:12px;color:#587076}.city-loading progress{width:210px;height:7px;border:0;border-radius:9px;overflow:hidden;accent-color:#538b7d}.city-loading progress::-webkit-progress-bar{background:#bdceca}.city-loading progress::-webkit-progress-value{background:#538b7d;border-radius:9px}
 #viewport:not([data-city-state="ready"]) #map{visibility:hidden;pointer-events:none}
+
+/* 优化名称与ⓘ并排，按钮不放进label，防止查看说明时误切换参数。 */
+.optimization-field{display:grid;grid-template-rows:minmax(30px,auto) auto;align-content:start;gap:3px;min-width:0}.optimization-field-head{display:flex;align-items:center;justify-content:space-between;gap:3px}.optimization-field-head label{line-height:1.4}.optimization-info{margin:0}.optimization-field select{width:100%;min-width:0}.optimization-tooltip{width:250px;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.6}.optimization-tooltip p{margin:0}.optimization-tooltip p+p{margin-top:6px}

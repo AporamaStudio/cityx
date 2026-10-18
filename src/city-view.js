@@ -65,6 +65,20 @@ export function viewBounds(view){
   if(corners.some(p=>p.sky))return {left:-8,right:(view.size??60)+8,top:-8,bottom:(view.size??60)+8};
   return {left:Math.min(...corners.map(p=>p.x)),right:Math.max(...corners.map(p=>p.x)),top:Math.min(...corners.map(p=>p.y)),bottom:Math.max(...corners.map(p=>p.y))};
 }
+// 保守覆盖屏内高处和能投影进屏幕的离屏物体；保留全部细节，不按距离降质。
+export function cityCasterPadding(view,height){
+  if(!view)return 16;
+  const elevation=view.elevation??Math.PI/2,tan=view.projection==='perspective'?Math.tan((view.fov??40)*Math.PI/360):0;
+  const down=Math.sin(elevation)-tan*Math.cos(elevation);if(down<=0)return Infinity;
+  const horizontal=Math.hypot(Math.cos(elevation)+tan*Math.sin(elevation),tan*view.width/view.height);
+  return 1+Math.max(0,height)*(horizontal/down+Math.hypot(1,1/6));
+}
+// 全城镜头可复用同一世界阴影；升到4096保证世界每纹素精度至少等于原2048跟随镜头。
+export function cityShadowVolume(bounds,width,height,exterior){
+  const extent=Math.max(64,Math.hypot(bounds.right-bounds.left,bounds.bottom-bounds.top)/2+16),worldExtent=Math.hypot(width+2*exterior,height+2*exterior)/2+16;
+  const stable=width>=128&&height>=128&&bounds.left<=0&&bounds.right>=width&&bounds.top<=0&&bounds.bottom>=height&&extent>=worldExtent/2;
+  return stable?{x:width/2,y:height/2,extent:worldExtent,resolution:4096,stable:true}:{x:(bounds.left+bounds.right)/2,y:(bounds.top+bounds.bottom)/2,extent,resolution:2048,stable:false};
+}
 // 绕城可完整旋转，俯仰保留25–80°，避免贴地穿楼或越过俯视翻转。
 export function orbitView(yaw,elevation,turn,tilt){
   return {yaw:((yaw+turn+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI,elevation:Math.max(25*Math.PI/180,Math.min(80*Math.PI/180,elevation+tilt))};

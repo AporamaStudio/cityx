@@ -106,3 +106,22 @@ test('狭窄S1在控制边界前恢复清晰，不因宽渐隐范围突然显现
   assert.ok(field.enemyAlpha(6.1,10.5)<.1);assert.ok(field.enemyAlpha(6.9,10.5)>.9);
   assert.equal(field.enemyAlpha(7,10.5),1);assert.equal(field.enemyAlpha(5.9,10.5),0);
 });
+
+test('256格距离场仅保留城内与雾带，外围窗口仍保持4像素采样且参数快照不被后续修改',()=>{
+  const size=256,controlled=new Set([253*size+128,254*size+128,255*size+128]),sight=new Set(controlled),params={...DEFAULTS},field=createVisibility(size,controlled,sight,3,3,1.5,params);
+  assert.equal(field.n,1088);assert.equal(field.border,205);assert.ok(field.arrayBytes<25*1024*1024);
+  const area={left:112,top:248,right:144,bottom:280},raster=field.raster(area);assert.equal(raster.width,128);assert.equal(raster.height,128);
+  for(let y=0;y<raster.height;y+=7)for(let x=0;x<raster.width;x+=11){const f=field.fogAt(area.left+(x+.5)/4,area.top+(y+.5)/4),i=y*raster.width+x;assert.ok(Math.abs(raster.cloud[i]-f.cloud)<1e-7);assert.ok(Math.abs(raster.veil[i]-f.veil)<1e-7);}
+  const before=field.fogAt(128,290);params.exteriorFogFarOpacity=100;assert.deepEqual(field.fogAt(128,290),before);
+  const next=createVisibility(size,controlled,sight,3,3,1.5,params);assert.notDeepEqual(next.fogAt(128,290),before);
+  assert.ok(Number.isInteger(createVisibility(60,new Set([30*60+30]),new Set([30*60+30]),5.6,7.1).n));
+});
+
+test('main完整雾场对照与紧凑路径保持城内视野和敌人权限，缓存彼此独立',async()=>{
+  const {createVisibility:reference,resetReferenceVisibility}=await import('../src/visibility-reference.js');
+  const controlled=new Set([30*60+30]),sight=new Set();for(let y=25;y<36;y++)for(let x=25;x<36;x++)sight.add(y*60+x);
+  const old=reference(60,controlled,sight,3,3,1.5,DEFAULTS),optimized=createVisibility(60,controlled,sight,3,3,1.5,DEFAULTS);
+  assert.equal(old.n,(60+48*2)*4);assert.equal(optimized.n,(60+8*2)*4);
+  for(let y=.125;y<60;y+=.5)for(let x=.125;x<60;x+=.5){assert.deepEqual(old.fogAt(x,y),optimized.fogAt(x,y));assert.equal(old.enemyAlpha(x,y),optimized.enemyAlpha(x,y));assert.equal(old.levelAt(x,y),optimized.levelAt(x,y));}
+  assert.equal(reference(60,controlled,sight,3,3,1.5,DEFAULTS),old);resetReferenceVisibility();assert.notEqual(reference(60,controlled,sight,3,3,1.5,DEFAULTS),old);
+});

@@ -1,0 +1,993 @@
+{
+  "sourceRevision": "b583b4d",
+  "started": "2026-10-18T05:03:00.680Z",
+  "cases": [
+    {
+      "size": 256,
+      "area": "whole",
+      "fog": 0,
+      "explored": 0,
+      "gpu": 1,
+      "pointer": 0
+    },
+    {
+      "size": 256,
+      "area": "whole",
+      "fog": 0,
+      "explored": 0,
+      "gpu": 1,
+      "pointer": 1
+    },
+    {
+      "size": 256,
+      "area": "whole",
+      "fog": 1,
+      "explored": 1,
+      "gpu": 1,
+      "pointer": 0
+    },
+    {
+      "size": 256,
+      "area": "whole",
+      "fog": 1,
+      "explored": 1,
+      "gpu": 1,
+      "pointer": 0,
+      "fogRender": 0
+    },
+    {
+      "size": 128,
+      "area": "whole",
+      "fog": 0,
+      "explored": 0,
+      "gpu": 1,
+      "pointer": 0
+    },
+    {
+      "size": 128,
+      "area": "whole",
+      "fog": 0,
+      "explored": 0,
+      "gpu": 1,
+      "pointer": 1
+    }
+  ],
+  "results": [
+    {
+      "case": {
+        "size": 256,
+        "area": "whole",
+        "fog": 0,
+        "explored": 0,
+        "gpu": 1,
+        "pointer": 0
+      },
+      "fogSamples": [
+        {
+          "x": 128,
+          "y": 128,
+          "density": {
+            "cloud": 1,
+            "veil": 1
+          },
+          "pixel": null
+        },
+        {
+          "x": 128,
+          "y": 64,
+          "density": {
+            "cloud": 1,
+            "veil": 1
+          },
+          "pixel": null
+        }
+      ],
+      "gpuMainMs": {
+        "samples": 22,
+        "mean": 27.155973045454548,
+        "p95": 28.258583
+      },
+      "fogRendered": false,
+      "pointerInside": false,
+      "rafFps": 28.331916737496464,
+      "size": 256,
+      "area": "whole",
+      "viewMode": "free",
+      "phase": "build",
+      "explored": false,
+      "layoutBlocks": 3164,
+      "landmarks": 12,
+      "renderSummary": {
+        "calls": {
+          "mean": 2865.2785923753668,
+          "p95": 2880
+        },
+        "triangles": {
+          "mean": 28381516.86217009,
+          "p95": 28394454
+        }
+      },
+      "stressGroups": 0,
+      "setupMs": 51.600000001490116,
+      "fog": false,
+      "width": 702,
+      "height": 580,
+      "cell": 2.030534351145038,
+      "firstFrameMs": 1288.7999999970198,
+      "readyMs": 2740.5,
+      "maxDrawMs": 1288.3999999985099,
+      "frames": 341,
+      "fps": 28.31540024650703,
+      "intervalMs": {
+        "mean": 35.316470588239675,
+        "p95": 37.100000001490116
+      },
+      "cpuMs": {
+        "mean": 34.67712609933094,
+        "p95": 36.399999998509884
+      },
+      "sections": {
+        "observationFrame": {
+          "mean": 29.268328445725952,
+          "p95": 31
+        },
+        "frameTotal": {
+          "mean": 34.694721407314375,
+          "p95": 36.399999998509884
+        },
+        "render": {
+          "mean": 2.1458823529455593,
+          "p95": 2.6999999955296516
+        },
+        "renderFacilities": {
+          "mean": 0.8061764708336662,
+          "p95": 1.1000000014901161
+        }
+      },
+      "groups": {},
+      "resources": {
+        "fogBindings": {
+          "buildings": {
+            "compiled": 1385,
+            "withUniform": 1385,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "streets": {
+            "compiled": 128,
+            "withUniform": 128,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "unknown": {
+            "compiled": 1,
+            "withUniform": 1,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "exterior": {
+            "compiled": 428,
+            "withUniform": 428,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "floor": {
+            "compiled": 1,
+            "withUniform": 1,
+            "active": 0,
+            "withoutUniform": 0
+          }
+        },
+        "cpuGeometryBytes": 786250378,
+        "geometryObjects": 9489,
+        "meshObjects": 24406,
+        "gpuGeometries": 1888,
+        "gpuTextures": 263,
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)",
+        "pixelRatio": 2,
+        "renderWidth": 1404,
+        "renderHeight": 1160,
+        "maxTextureSize": 16384,
+        "gpuTimerAvailable": true
+      },
+      "fogResources": null,
+      "mistCanvasBytes": 4,
+      "rawStats": {
+        "frame": 513,
+        "calls": 2871,
+        "triangles": 28386394,
+        "points": 0,
+        "lines": 0,
+        "figures": 0,
+        "capacity": 2048,
+        "clusterLights": 213,
+        "clusterPeak": 2,
+        "streetLights": 0,
+        "fireLights": 213,
+        "watchLights": 0,
+        "programs": 39
+      },
+      "stats": "高负载（CPU及连续交互帧率估计，非GPU利用率）。FPS是实际地图重绘率，空闲按需更新。显示回调CPU 35.0ms；2859次提交，28373k面，人物0，路灯/火光/塔灯槽位0/213/0，着色程序39。"
+    },
+    {
+      "case": {
+        "size": 256,
+        "area": "whole",
+        "fog": 0,
+        "explored": 0,
+        "gpu": 1,
+        "pointer": 1
+      },
+      "fogSamples": [
+        {
+          "x": 128,
+          "y": 128,
+          "density": {
+            "cloud": 1,
+            "veil": 1
+          },
+          "pixel": null
+        },
+        {
+          "x": 128,
+          "y": 64,
+          "density": {
+            "cloud": 1,
+            "veil": 1
+          },
+          "pixel": null
+        }
+      ],
+      "gpuMainMs": {
+        "samples": 21,
+        "mean": 27.27863838095238,
+        "p95": 27.85925
+      },
+      "fogRendered": false,
+      "pointerInside": true,
+      "rafFps": 28.165023706950425,
+      "size": 256,
+      "area": "whole",
+      "viewMode": "free",
+      "phase": "build",
+      "explored": false,
+      "layoutBlocks": 3164,
+      "landmarks": 12,
+      "renderSummary": {
+        "calls": {
+          "mean": 2865.5575221238937,
+          "p95": 2880
+        },
+        "triangles": {
+          "mean": 28381889.286135692,
+          "p95": 28394312
+        }
+      },
+      "stressGroups": 0,
+      "setupMs": 49.600000001490116,
+      "fog": false,
+      "width": 702,
+      "height": 580,
+      "cell": 2.030534351145038,
+      "firstFrameMs": 1352.5,
+      "readyMs": 2438.39999999851,
+      "maxDrawMs": 1351.1000000014901,
+      "frames": 339,
+      "fps": 28.175588936489557,
+      "intervalMs": {
+        "mean": 35.49171597634018,
+        "p95": 36.70000000298023
+      },
+      "cpuMs": {
+        "mean": 25.07551622414923,
+        "p95": 27.5
+      },
+      "sections": {
+        "observationFrame": {
+          "mean": 19.850737463034534,
+          "p95": 22.30000000447035
+        },
+        "frameTotal": {
+          "mean": 34.89115044241634,
+          "p95": 36.100000001490116
+        },
+        "observationPick": {
+          "mean": 9.785207100543222,
+          "p95": 12.400000005960464
+        },
+        "render": {
+          "mean": 1.941715976520932,
+          "p95": 2.399999998509884
+        },
+        "renderFacilities": {
+          "mean": 0.8109467456987977,
+          "p95": 1.1999999955296516
+        }
+      },
+      "groups": {},
+      "resources": {
+        "fogBindings": {
+          "buildings": {
+            "compiled": 1385,
+            "withUniform": 1385,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "streets": {
+            "compiled": 128,
+            "withUniform": 128,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "unknown": {
+            "compiled": 1,
+            "withUniform": 1,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "exterior": {
+            "compiled": 428,
+            "withUniform": 428,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "floor": {
+            "compiled": 1,
+            "withUniform": 1,
+            "active": 0,
+            "withoutUniform": 0
+          }
+        },
+        "cpuGeometryBytes": 786250378,
+        "geometryObjects": 9489,
+        "meshObjects": 24406,
+        "gpuGeometries": 1888,
+        "gpuTextures": 263,
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)",
+        "pixelRatio": 2,
+        "renderWidth": 1404,
+        "renderHeight": 1160,
+        "maxTextureSize": 16384,
+        "gpuTimerAvailable": true
+      },
+      "fogResources": null,
+      "mistCanvasBytes": 4,
+      "rawStats": {
+        "frame": 495,
+        "calls": 2861,
+        "triangles": 28376010,
+        "points": 0,
+        "lines": 0,
+        "figures": 0,
+        "capacity": 2048,
+        "clusterLights": 213,
+        "clusterPeak": 2,
+        "streetLights": 0,
+        "fireLights": 213,
+        "watchLights": 0,
+        "programs": 39
+      },
+      "stats": "高负载（CPU及连续交互帧率估计，非GPU利用率）。FPS是实际地图重绘率，空闲按需更新。显示回调CPU 34.7ms；2861次提交，28378k面，人物0，路灯/火光/塔灯槽位0/213/0，着色程序39。"
+    },
+    {
+      "case": {
+        "size": 256,
+        "area": "whole",
+        "fog": 1,
+        "explored": 1,
+        "gpu": 1,
+        "pointer": 0
+      },
+      "fogSamples": [
+        {
+          "x": 128,
+          "y": 128,
+          "density": {
+            "cloud": 1,
+            "veil": 1
+          },
+          "pixel": [
+            214,
+            222,
+            220,
+            255
+          ]
+        },
+        {
+          "x": 128,
+          "y": 64,
+          "density": {
+            "cloud": 1,
+            "veil": 1
+          },
+          "pixel": [
+            201,
+            212,
+            213,
+            255
+          ]
+        }
+      ],
+      "gpuMainMs": {
+        "samples": 24,
+        "mean": 25.69668183333334,
+        "p95": 26.685583
+      },
+      "fogRendered": true,
+      "pointerInside": false,
+      "rafFps": 30.248739635848505,
+      "size": 256,
+      "area": "whole",
+      "viewMode": "free",
+      "phase": "build",
+      "explored": true,
+      "layoutBlocks": 3164,
+      "landmarks": 12,
+      "renderSummary": {
+        "calls": {
+          "mean": 2120.6923076923076,
+          "p95": 2135
+        },
+        "triangles": {
+          "mean": 27801318.043956045,
+          "p95": 27813572
+        }
+      },
+      "stressGroups": 0,
+      "setupMs": 62.899999998509884,
+      "fog": true,
+      "width": 702,
+      "height": 580,
+      "cell": 2.030534351145038,
+      "firstFrameMs": 1470.1000000014901,
+      "readyMs": 2331.60000000149,
+      "maxDrawMs": 1469.7999999970198,
+      "frames": 364,
+      "fps": 30.254538180738383,
+      "intervalMs": {
+        "mean": 33.052892561971156,
+        "p95": 34.600000001490116
+      },
+      "cpuMs": {
+        "mean": 32.45796703301616,
+        "p95": 34.100000001490116
+      },
+      "sections": {
+        "observationFrame": {
+          "mean": 25.835164835144365,
+          "p95": 27.30000000447035
+        },
+        "frameTotal": {
+          "mean": 32.4714285714736,
+          "p95": 34.100000001490116
+        },
+        "render": {
+          "mean": 2.0024793387567703,
+          "p95": 2.399999998509884
+        },
+        "renderFacilities": {
+          "mean": 0.07272727262054264,
+          "p95": 0.20000000298023224
+        },
+        "fogDraw": {
+          "mean": 0.05564738288727017,
+          "p95": 0.10000000149011612
+        }
+      },
+      "groups": {},
+      "resources": {
+        "fogBindings": {
+          "buildings": {
+            "compiled": 1385,
+            "withUniform": 1385,
+            "active": 1385,
+            "withoutUniform": 0
+          },
+          "streets": {
+            "compiled": 7,
+            "withUniform": 7,
+            "active": 7,
+            "withoutUniform": 0
+          },
+          "unknown": {
+            "compiled": 1,
+            "withUniform": 1,
+            "active": 1,
+            "withoutUniform": 0
+          },
+          "exterior": {
+            "compiled": 428,
+            "withUniform": 428,
+            "active": 428,
+            "withoutUniform": 0
+          },
+          "floor": {
+            "compiled": 1,
+            "withUniform": 1,
+            "active": 1,
+            "withoutUniform": 0
+          }
+        },
+        "cpuGeometryBytes": 733481834,
+        "geometryObjects": 9160,
+        "meshObjects": 22205,
+        "gpuGeometries": 1559,
+        "gpuTextures": 263,
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)",
+        "pixelRatio": 2,
+        "renderWidth": 1404,
+        "renderHeight": 1160,
+        "maxTextureSize": 16384,
+        "gpuTimerAvailable": true
+      },
+      "fogResources": {
+        "width": 2664,
+        "height": 2664,
+        "arrayBytes": 56775168,
+        "canvasRGBABytes": 85162752,
+        "visibilityArrayBytes": 24928256,
+        "exteriorCacheBytes": 55590912
+      },
+      "mistCanvasBytes": 28387584,
+      "rawStats": {
+        "frame": 527,
+        "calls": 2115,
+        "triangles": 27796022,
+        "points": 0,
+        "lines": 0,
+        "figures": 0,
+        "capacity": 2048,
+        "clusterLights": 5,
+        "clusterPeak": 1,
+        "streetLights": 0,
+        "fireLights": 5,
+        "watchLights": 0,
+        "programs": 39
+      },
+      "stats": "高负载（CPU及连续交互帧率估计，非GPU利用率）。FPS是实际地图重绘率，空闲按需更新。显示回调CPU 32.2ms；2114次提交，27796k面，人物0，路灯/火光/塔灯槽位0/5/0，着色程序39。"
+    },
+    {
+      "case": {
+        "size": 256,
+        "area": "whole",
+        "fog": 1,
+        "explored": 1,
+        "gpu": 1,
+        "pointer": 0,
+        "fogRender": 0
+      },
+      "fogSamples": [
+        {
+          "x": 128,
+          "y": 128,
+          "density": {
+            "cloud": 1,
+            "veil": 1
+          },
+          "pixel": null
+        },
+        {
+          "x": 128,
+          "y": 64,
+          "density": {
+            "cloud": 1,
+            "veil": 1
+          },
+          "pixel": null
+        }
+      ],
+      "gpuMainMs": {
+        "samples": 24,
+        "mean": 25.243568874999998,
+        "p95": 25.869875
+      },
+      "fogRendered": false,
+      "pointerInside": false,
+      "rafFps": 30.917954914788115,
+      "size": 256,
+      "area": "whole",
+      "viewMode": "free",
+      "phase": "build",
+      "explored": true,
+      "layoutBlocks": 3164,
+      "landmarks": 12,
+      "renderSummary": {
+        "calls": {
+          "mean": 2121.2634408602153,
+          "p95": 2135
+        },
+        "triangles": {
+          "mean": 27801878.241935484,
+          "p95": 27813572
+        }
+      },
+      "stressGroups": 0,
+      "setupMs": 61.5,
+      "fog": true,
+      "width": 702,
+      "height": 580,
+      "cell": 2.030534351145038,
+      "firstFrameMs": 1208.1000000014901,
+      "readyMs": 2062.89999999851,
+      "maxDrawMs": 1207.7000000029802,
+      "frames": 372,
+      "fps": 30.923624482163632,
+      "intervalMs": {
+        "mean": 32.33773584906865,
+        "p95": 34.100000001490116
+      },
+      "cpuMs": {
+        "mean": 31.736827957253624,
+        "p95": 33.5
+      },
+      "sections": {
+        "render": {
+          "mean": 1.91478494632869,
+          "p95": 2.399999998509884
+        },
+        "renderFacilities": {
+          "mean": 0.07419354849124468,
+          "p95": 0.20000000298023224
+        },
+        "observationFrame": {
+          "mean": 25.08225806435991,
+          "p95": 26.799999997019768
+        },
+        "frameTotal": {
+          "mean": 31.749731183032033,
+          "p95": 33.599999994039536
+        }
+      },
+      "groups": {},
+      "resources": {
+        "fogBindings": {
+          "buildings": {
+            "compiled": 1385,
+            "withUniform": 1385,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "streets": {
+            "compiled": 7,
+            "withUniform": 7,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "unknown": {
+            "compiled": 1,
+            "withUniform": 1,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "exterior": {
+            "compiled": 428,
+            "withUniform": 428,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "floor": {
+            "compiled": 1,
+            "withUniform": 1,
+            "active": 0,
+            "withoutUniform": 0
+          }
+        },
+        "cpuGeometryBytes": 733481834,
+        "geometryObjects": 9160,
+        "meshObjects": 22205,
+        "gpuGeometries": 1559,
+        "gpuTextures": 263,
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)",
+        "pixelRatio": 2,
+        "renderWidth": 1404,
+        "renderHeight": 1160,
+        "maxTextureSize": 16384,
+        "gpuTimerAvailable": true
+      },
+      "fogResources": null,
+      "mistCanvasBytes": 4,
+      "rawStats": {
+        "frame": 536,
+        "calls": 2092,
+        "triangles": 27776518,
+        "points": 0,
+        "lines": 0,
+        "figures": 0,
+        "capacity": 2048,
+        "clusterLights": 5,
+        "clusterPeak": 1,
+        "streetLights": 0,
+        "fireLights": 5,
+        "watchLights": 0,
+        "programs": 39
+      },
+      "stats": "高负载（CPU及连续交互帧率估计，非GPU利用率）。FPS是实际地图重绘率，空闲按需更新。显示回调CPU 32.3ms；2120次提交，27802k面，人物0，路灯/火光/塔灯槽位0/5/0，着色程序39。"
+    },
+    {
+      "case": {
+        "size": 128,
+        "area": "whole",
+        "fog": 0,
+        "explored": 0,
+        "gpu": 1,
+        "pointer": 0
+      },
+      "fogSamples": [
+        {
+          "x": 64,
+          "y": 64,
+          "density": {
+            "cloud": 1,
+            "veil": 1
+          },
+          "pixel": null
+        },
+        {
+          "x": 64,
+          "y": 32,
+          "density": {
+            "cloud": 1,
+            "veil": 1
+          },
+          "pixel": null
+        }
+      ],
+      "gpuMainMs": {
+        "samples": 36,
+        "mean": 13.823136111111111,
+        "p95": 15.818375
+      },
+      "fogRendered": false,
+      "pointerInside": false,
+      "rafFps": 46.539608799913104,
+      "size": 128,
+      "area": "whole",
+      "viewMode": "free",
+      "phase": "build",
+      "explored": false,
+      "layoutBlocks": 725,
+      "landmarks": 12,
+      "renderSummary": {
+        "calls": {
+          "mean": 1246.4587813620071,
+          "p95": 1259
+        },
+        "triangles": {
+          "mean": 9518943.953405017,
+          "p95": 9530945
+        }
+      },
+      "stressGroups": 0,
+      "setupMs": 21,
+      "fog": false,
+      "width": 702,
+      "height": 580,
+      "cell": 3.970149253731343,
+      "firstFrameMs": 317.6000000014901,
+      "readyMs": 810.7000000029802,
+      "maxDrawMs": 317.1000000014901,
+      "frames": 558,
+      "fps": 46.47398458100054,
+      "intervalMs": {
+        "mean": 21.517414721715493,
+        "p95": 27
+      },
+      "cpuMs": {
+        "mean": 15.59283154129341,
+        "p95": 24
+      },
+      "sections": {
+        "render": {
+          "mean": 1.217921147022837,
+          "p95": 2.2000000029802322
+        },
+        "renderFacilities": {
+          "mean": 0.6132616487909175,
+          "p95": 1.1000000014901161
+        },
+        "observationFrame": {
+          "mean": 11.107526881934067,
+          "p95": 17.69999999552965
+        },
+        "frameTotal": {
+          "mean": 15.634229390825208,
+          "p95": 24.099999994039536
+        }
+      },
+      "groups": {},
+      "resources": {
+        "fogBindings": {
+          "buildings": {
+            "compiled": 761,
+            "withUniform": 761,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "streets": {
+            "compiled": 32,
+            "withUniform": 32,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "unknown": {
+            "compiled": 1,
+            "withUniform": 1,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "exterior": {
+            "compiled": 203,
+            "withUniform": 203,
+            "active": 0,
+            "withoutUniform": 0
+          },
+          "floor": {
+            "compiled": 1,
+            "withUniform": 1,
+            "active": 0,
+            "withoutUniform": 0
+          }
+        },
+        "cpuGeometryBytes": 373133930,
+        "geometryObjects": 2881,
+        "meshObjects": 6817,
+        "gpuGeometries": 998,
+        "gpuTextures": 167,
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)",
+        "pixelRatio": 2,
+        "renderWidth": 1404,
+        "renderHeight": 1160,
+        "maxTextureSize": 16384,
+        "gpuTimerAvailable": true
+      },
+      "fogResources": null,
+      "mistCanvasBytes": 4,
+      "rawStats": {
+        "frame": 780,
+        "calls": 1252,
+        "triangles": 9527013,
+        "points": 0,
+        "lines": 0,
+        "figures": 0,
+        "capacity": 2048,
+        "clusterLights": 56,
+        "clusterPeak": 2,
+        "streetLights": 0,
+        "fireLights": 56,
+        "watchLights": 0,
+        "programs": 40
+      },
+      "stats": "高负载（CPU及连续交互帧率估计，非GPU利用率）。FPS是实际地图重绘率，空闲按需更新。显示回调CPU 20.2ms；1253次提交，9527k面，人物0，路灯/火光/塔灯槽位0/56/0，着色程序40。"
+    },
+    {
+      "case": {
+        "size": 128,
+        "area": "whole",
+        "fog": 0,
+        "explored": 0,
+        "gpu": 1,
+        "pointer": 1
+      },
+      "fogSamples": [
+        {
+          "x": 64,
+          "y": 64,
+          "density": {
+            "cloud": 1,
+            "veil": 1
+          },
+          "pixel": null
+        },
+        {
+          "x": 64,
+          "y": 32,
+          "density": {
+            "cloud": 1,
+            "veil": 1
+          },
+          "pixel": null
+        }
+      ],
+      "gpuMainMs": {
+        "samples": 45,
+        "mean": 12.645978155555555,
+        "p95": 14.664499
+      },
+      "fogRendered": false,
+      "pointerInside": true,
+      "rafFps": 58.166143809341534,
+      "size": 128,
+      "area": "whole",
+      "viewMode": "free",
+      "phase": "build",
+      "explored": false,
+      "layoutBlocks": 725,
+      "landmarks": 12,
+      "renderSummary": {
+        "calls": {
+          "mean": 1246.6685714285713,
+          "p95": 1259
+        },
+        "triangles": {
+          "mean": 9519040.165714286,
+          "p95": 9530233
+        }
+      },
+      "stressGroups": 0,
+      "setupMs": 15.299999997019768,
+      "fog": false,
+      "width": 702,
+      "height": 580,
+      "cell": 3.970149253731343,
+      "firstFrameMs": 328.29999999701977,
+      "readyMs": 897.3999999985099,
+      "maxDrawMs": 325.8999999985099,
+      "frames": 700,
+      "fps": 58.19859124439356,
+      "intervalMs": {
+        "mean": 17.18254649499498,
+        "p95": 19.5
+      },
+      "cpuMs": {
+        "mean": 5.238285714249526,
+        "p95": 5.600000001490116
+      },
+      "sections": {
+        "observationFrame": {
+          "mean": 3.608714285727058,
+          "p95": 3.899999998509884
+        },
+        "frameTotal": {
+          "mean": 11.348714285790921,
+          "p95": 14
+        },
+        "observationPick": {
+          "mean": 6.0719599428457425,
+          "p95": 8.699999995529652
+        },
+        "render": {
+          "mean": 0.5008583691008442,
+          "p95": 0.6000000014901161
+        },
+        "renderFacilities": {
+          "mean": 0.23319027173160994,
+          "p95": 0.30000000447034836
+        }
+      },
+      "groups": {},
+      "resources": {
+        "fogBindings": {},
+        "cpuGeometryBytes": 373133930,
+        "geometryObjects": 2881,
+        "meshObjects": 6817,
+        "gpuGeometries": 998,
+        "gpuTextures": 167,
+        "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)",
+        "pixelRatio": 2,
+        "renderWidth": 1404,
+        "renderHeight": 1160,
+        "maxTextureSize": 16384,
+        "gpuTimerAvailable": true
+      },
+      "fogResources": null,
+      "mistCanvasBytes": 4,
+      "rawStats": {
+        "frame": 1030,
+        "calls": 1252,
+        "triangles": 9528493,
+        "points": 0,
+        "lines": 0,
+        "figures": 0,
+        "capacity": 2048,
+        "clusterLights": 56,
+        "clusterPeak": 2,
+        "streetLights": 0,
+        "fireLights": 56,
+        "watchLights": 0,
+        "programs": 40
+      },
+      "stats": "中负载（CPU及连续交互帧率估计，非GPU利用率）。FPS是实际地图重绘率，空闲按需更新。显示回调CPU 12.4ms；1254次提交，9527k面，人物0，路灯/火光/塔灯槽位0/56/0，着色程序40。"
+    }
+  ],
+  "extraCasesNote": "末项在独立页面按相同入口、参数与计时规则补测；GPU查询可能扰动帧率，不与无查询主表直接计算收益。"
+}
