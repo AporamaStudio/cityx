@@ -7,9 +7,9 @@ import {addBuildingFoundation,buildingVariation} from './city-building-style.js?
 import {operatingLights} from './city-building-lights.js?v=1';
 import {createWreckDressing,updateWreckDressing,styleWreckBody,styleVehicleBody,createWreckInstances} from './city-wrecks.js?v=3';
 import {createUnknownCity} from './city-unknown.js?v=2';
-import {createRoadModel} from './city-road-model.js?v=6';
+import {createRoadModel} from './city-road-model.js?v=7';
 import {createNaturalModel} from './city-natural-model.js?v=8';
-import {createSurroundingModel} from './city-surrounding-model.js?v=12';
+import {createSurroundingModel} from './city-surrounding-model.js?v=13';
 import {updateWater} from './city-water.js?v=3';
 import {naturalGroundAt} from './natural-terrain.js?v=7';
 import {PLANT_MODELS} from './city-vegetation.js?v=2';
@@ -253,13 +253,13 @@ export function createCity3D({onReady,onProgress,onError}){
         const entry=entries.get(plot.id),staticRuin=plot.status==='ruin'&&['housing','production'].includes(plot.type)&&plot.id!==constructionPreview?.id;
         if(!staticRuin){entry.object.visible=true;continue;}
         entry.object.visible=false;
-        const x=Math.floor(plot.x/16)*16,y=Math.floor(plot.y/16)*16,id=x+':'+y;
-        if(!batchPlots.has(id))batchPlots.set(id,{x,y,w:16,h:16,plots:[]});batchPlots.get(id).plots.push(plot);
+        const x=Math.floor(plot.x/32)*32,y=Math.floor(plot.y/32)*32,id=x+':'+y;
+        if(!batchPlots.has(id))batchPlots.set(id,{x,y,w:32,h:32,plots:[]});batchPlots.get(id).plots.push(plot);
       }
       // 块成员必须来自完整描述，镜头只开关可见性；不能随旋转拆散已有合批。
       const allBatchPlots=new Map();
       for(const plot of plotInput)if(plot.status==='ruin'&&['housing','production'].includes(plot.type)&&plot.id!==constructionPreview?.id&&entries.has(plot.id)){
-        const id=Math.floor(plot.x/16)*16+':'+Math.floor(plot.y/16)*16;
+        const id=Math.floor(plot.x/32)*32+':'+Math.floor(plot.y/32)*32;
         if(!allBatchPlots.has(id))allBatchPlots.set(id,[]);allBatchPlots.get(id).push(plot);
       }
       for(const [id,batch] of buildingBatches){batch.object.visible=batchPlots.has(id);if(!allBatchPlots.has(id)){release(batch);buildingBatches.delete(id);}}
@@ -338,7 +338,7 @@ export function createCity3D({onReady,onProgress,onError}){
       const lightOffset=streetLightOffset;
       let streetsChanged=false;
       if(geographyChanged||streetInputs[0]!==lamps||streetInputs[1]!==dressing||streetInputs[2]!==cellMeters){
-        streetChunks=spatialChunks(lamps,dressing);streetInputs=[lamps,dressing,cellMeters];
+        streetChunks=spatialChunks(lamps,dressing,32);streetInputs=[lamps,dressing,cellMeters];
         streetLights=[];
         for(const lamp of lamps){const offset=lightOffset.clone().multiplyScalar(streetScale).applyAxisAngle(new THREE.Vector3(0,1,0),lamp.angle);streetLights.push({x:lamp.x+offset.x,y:lamp.y+offset.z,height:offset.y+naturalGroundAt(layout,lamp.x,lamp.y,cellMeters)});}
         for(const [id,entry] of streetEntries)if(geographyChanged||entry.signature!==streetChunks.get(id)?.signature){release(entry);streetEntries.delete(id);}

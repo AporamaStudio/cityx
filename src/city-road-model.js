@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import {roadCellParts} from './city-roads.js?v=1';
 import {naturalGroundAt} from './natural-terrain.js?v=6';
 
-// 路面/标线用米制平面，路缘保留真实高度；分块按材质合批，近景无需放大底图。
+// 路面/标线用米制平面，路缘保留真实高度；按32格块以顶点色合批，近景无需放大底图。
 export function createRoadModel(layout,cellMeters=20,visible=()=>true){
   const root=new THREE.Group(),batches=new Map(),colors=new Map();
   for(let y=0;y<layout.height;y++)for(let x=0;x<layout.width;x++)if(visible(y*layout.width+x)){
     for(const part of roadCellParts(layout,x,y,cellMeters)){
-      const batch=[Math.floor(x/8),Math.floor(y/8)].join(':'),height=part.height/cellMeters+.002;
+      const batch=[Math.floor(x/32),Math.floor(y/32)].join(':'),height=part.height/cellMeters+.002;
       if(!batches.has(batch))batches.set(batch,{positions:[],normals:[],colors:[],indices:[]});
       if(!colors.has(part.color))colors.set(part.color,new THREE.Color(part.color));
       const b=batches.get(batch),a=part.x,z=part.y,r=a+part.w,s=z+part.h;

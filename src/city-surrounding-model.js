@@ -8,9 +8,9 @@ export function createSurroundingModel(layout,models,cellMeters=20){
   const root=new THREE.Group(),land=surroundingLandscape(layout),batches=new Map(),center=new THREE.Vector3(),haze={value:new THREE.Color('#c4cfd0').convertLinearToSRGB()};root.userData.haze=haze;root.userData.cityNoPick=true;
   const add=(geometry,source,cast=false,abandoned=false)=>{
     if(geometry.index){const plain=geometry.toNonIndexed();geometry.dispose();geometry=plain;}
-    // 每240m分块；全局合批的大包围球会让近景仍提交整片离屏林地。
+    // 林地仍按240m分块；低面数地表/水系按960m合批，保留原几何与局部剔除。
     geometry.computeBoundingBox();geometry.boundingBox.getCenter(center);
-    const material=typeof source==='string'?{color:new THREE.Color(source)}:source,water=material.color.getHexString()==='528592',key=[Math.floor(center.x/12),Math.floor(center.z/12),water,material.map?.uuid??'',abandoned,cast].join(':');
+    const material=typeof source==='string'?{color:new THREE.Color(source)}:source,water=material.color.getHexString()==='528592',span=cast?12:48,key=[Math.floor(center.x/span),Math.floor(center.z/span),water,material.map?.uuid??'',abandoned,cast].join(':');
     for(const name of Object.keys(geometry.attributes))if(!['position','normal',...(material.map?['uv']:[]),...(material.color.getHexString()==='528592'?['cityWaterDepth']:[])].includes(name))geometry.deleteAttribute(name);
     if(!water){const colors=new Float32Array(geometry.attributes.position.count*3);for(let i=0;i<colors.length;i+=3)colors.set([material.color.r,material.color.g,material.color.b],i);geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));}
     if(!batches.has(key))batches.set(key,{geometries:[],water,map:material.map,cast,abandoned});const batch=batches.get(key);batch.geometries.push(geometry);
