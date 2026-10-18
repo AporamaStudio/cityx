@@ -1869,11 +1869,33 @@ function resetSourceEditors(){
 }
 $('sourceNight').onchange=()=>{sourceDrafts[editingNight-1]=readSources();editingNight=Number($('sourceNight').value);$('forecastDay').value=String(editingNight-1);sourceEditor(sourceDrafts[editingNight-1]);update();};
 $('settings').addEventListener('toggle',()=>{if(!$('settings').open)editorSourcePreview=null;else $('forecastDay').value=String(editingNight-1);mapView=null;updateForecast();draw();});
+// 只解释当前可切换的渲染路径；不把性能目标写成已测收益。
+const optimizationHelp={
+  largeCityFog:['只生成镜头附近的雾纹，使用紧凑雾场，减少计算与贴图上传。','使用main原来的完整雾场和退雾流程。','两种处理都不改变探索与敌人显隐规则。'],
+  largeCityRuinBatch:['复用同款废墟模型，以分块合批减少绘制提交。','按原方式逐地块生成废墟。','保留模型细节与占地；切换时会重新准备楼体。'],
+  largeCityPointGrid:['按区域分桶，只计算可能照到当前位置的火光。','使用原来的点光源处理。','保留火光数量、颜色与范围；路灯预算由城市照明设置控制。'],
+  largeCityWorldShadow:['全城视野条件满足时，复用4096分辨率的固定阴影。','使用2048分辨率的跟随镜头阴影。','局部视野仍使用跟随镜头阴影。'],
+  largeCityDirectCanvas:['将WebGL画面直接合成到地图，减少一次整屏复制。','先复制到中转画布，再合成地图。','敌人、路线和HP的分层关系保持不变。']
+};
+function optimizationInfo(name,label){
+  const root=document.createElement('span'),button=document.createElement('button'),panel=document.createElement('div');
+  root.className='legend-info forecast-info optimization-info';button.type='button';button.id=`${name}Info`;
+  panel.id=`${name}Help`;panel.className='info-tooltip optimization-tooltip';panel.role='tooltip';panel.hidden=true;
+  button.setAttribute('aria-label',`${label}说明`);button.setAttribute('aria-controls',panel.id);button.setAttribute('aria-describedby',panel.id);button.setAttribute('aria-expanded','false');button.setAttribute('aria-pressed','false');
+  button.append($('forecastInfo').firstElementChild.cloneNode(true));
+  optimizationHelp[name].forEach((text,index)=>{const line=document.createElement('p');if(index<2){const prefix=document.createElement('strong');prefix.textContent=index===0?'开启：':'关闭：';line.append(prefix);}line.append(text);panel.append(line);});
+  root.append(button,panel);registerLegendTip(button,panel);return root;
+}
 // 小型参数面板：仅编辑当前实验，默认值仍保留在 config.js。
 function paramsEditor(params,scope='all') {
   invalidateParamReads();
   const optimizationOpen=$('largeCityOptimizations')?.open??false;
-  if(scope!=='visual')$('params').replaceChildren();if(scope!=='gameplay')$('visualParams').replaceChildren();
+  if(scope!=='visual')$('params').replaceChildren();
+  if(scope!=='gameplay'){
+    // 重画视觉草稿时注销旧ⓘ，避免固定浮层和失效DOM引用留在共享列表中。
+    closeLegendTips();for(let i=legendTips.length-1;i>=0;i--)if($('visualParams').contains(legendTips[i].root))legendTips.splice(i,1);
+    $('visualParams').replaceChildren();
+  }
   // 两区沿用同一控件生成方式，应用/取消/默认只重画自己的草稿。
   function fields(title, values, prefix, specs, target='params',group=null) {
     if(scope!=='all'&&(target==='visualParams')!==(scope==='visual'))return;
@@ -1887,7 +1909,11 @@ function paramsEditor(params,scope='all') {
       else{input.type='number';input.min=min;input.max=max;input.step=['productionIncomePerCell','productionSmallCostFloor','productionMaxDensity','bankDepositPercent','bankLoanPercent','bankUpgradeRatePoints','bankLoanMinPercent','bankRateMaxPercent','enemyFogFadeCells','controlBorderInnerCells','controlBorderOuterCells','controlBorderLinePx','upgradeFlowHeightMeters'].includes(name)||name.endsWith('Multiplier')?0.1:1;}
       if(name==='bankUpgradeCapacityMultiplier')input.step=1;
       input.value=String(values[name]);input.dataset.param=prefix+name;input.setAttribute('aria-label',`${title} ${label}`);
-      input.addEventListener('input',()=>refreshParams(target==='visualParams'?'visual':'gameplay'));wrap.append(input);row.append(wrap);
+      input.addEventListener('input',()=>refreshParams(target==='visualParams'?'visual':'gameplay'));
+      if(group==='largeCityOptimizations'){
+        const field=document.createElement('div'),head=document.createElement('div');field.className='optimization-field';head.className='optimization-field-head';
+        input.id=`param-${name}`;wrap.htmlFor=input.id;head.append(wrap,optimizationInfo(name,label));field.append(head,input);row.append(field);
+      }else{wrap.append(input);row.append(wrap);}
     }
     container.append(row);
   }
@@ -1905,7 +1931,7 @@ function paramsEditor(params,scope='all') {
   fields('瞭望塔',params,'',[['outpostCost','造价',1,1000],['outpostWorkers','每座用工',0,100],['outpostRadius','半径',1,30],['outpostMinDistance','最小间距',1,30]]);
   for(const type of ['A','B'])fields(`武器 ${type}`,params.weapons[type],type+'.',[['shape','范围形状'],['range','半径',1,8],['power','每拍火力',1,99],['cost','价格',1,1000]]);
   if(scope!=='gameplay'){
-    const section=document.createElement('details'),summary=document.createElement('summary');section.id='largeCityOptimizations';section.open=optimizationOpen;summary.textContent='大城优化';section.append(summary);$('visualParams').append(section);
+    const section=document.createElement('details'),summary=document.createElement('summary');section.id='largeCityOptimizations';section.open=optimizationOpen;summary.textContent='大城优化';section.append(summary);section.addEventListener('toggle',()=>{if(!section.open)closeLegendTips();});$('visualParams').append(section);
   }
   fields('大城优化',params,'',[['largeCityFog','云雾优化'],['largeCityRuinBatch','废墟合批与实例'],['largeCityPointGrid','火光分桶'],['largeCityWorldShadow','全城阴影缓存'],['largeCityDirectCanvas','画面直接合成']],'visualParams','largeCityOptimizations');
   fields('城市照明',params,'',[['streetLightBudget','真实路灯预算（盏，0关闭）',0,64]],'visualParams');
@@ -2106,7 +2132,8 @@ $('mapLegend').append(...Array.from($('mapLegendGuide').querySelectorAll('.manua
   row.querySelectorAll('canvas').forEach((canvas,i)=>copy.querySelectorAll('canvas')[i].getContext('2d').drawImage(canvas,0,0));
   return copy;
 }));
-const legendTips=[['forecastInfo','forecastLegend'],['mapLegendHelp','mapLegend']].map(([button,panel])=>({button:$(button),panel:$(panel),root:$(button).parentElement,open:false,pinned:false}));
+const legendTips=[];
+for(const [button,panel] of [['forecastInfo','forecastLegend'],['mapLegendHelp','mapLegend']])registerLegendTip($(button),$(panel));
 function closeLegendTips(except){
   for(const tip of legendTips){
     if(tip===except)continue;
@@ -2122,7 +2149,8 @@ function openLegendTip(tip){
   tip.panel.style.left=`${Math.max(6,Math.min(anchor.right-box.width,document.documentElement.clientWidth-box.width-6))}px`;
   tip.panel.style.top=`${Math.max(6,Math.min(anchor.top-box.height-6,window.innerHeight-box.height-6))}px`;
 }
-for(const tip of legendTips){
+function registerLegendTip(button,panel){
+  const tip={button,panel,root:button.parentElement,open:false,pinned:false};legendTips.push(tip);
   tip.root.addEventListener('pointerenter',event=>{if(event.pointerType==='mouse')openLegendTip(tip);});
   const leave=event=>{if(!tip.pinned&&!tip.root.contains(event.relatedTarget))closeLegendTips();};
   tip.root.addEventListener('pointerleave',leave);tip.panel.addEventListener('pointerleave',leave);
