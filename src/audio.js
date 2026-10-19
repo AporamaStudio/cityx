@@ -22,7 +22,7 @@ export function createGameAudio(options={}) {
   let ctx,music,effects,day,night,master,noise,wet,timer=null,nextBeat=0,beat=0;
   let mode='day',hidden=false,paused=false,idle=false,unlocked=false,unavailable=false,waking=null;
   const lastEffect=new Map();
-  let dayEnd=null;
+  let dayEnd=null,machineryBus=null,machineryPresence=0;
   const combatVoices=new Set();
 
   // 音量平滑变化，开关与昼夜过渡不产生突兀的截断声。
@@ -121,6 +121,10 @@ export function createGameAudio(options={}) {
     if(!settings.effects||settings.effectsVolume===0)stopCombat();
     syncLevels();startClock();
   }
+  function setMachineryPresence(value){if(value>0&&ctx&&settings.effects&&!machineryBus){
+    machineryBus=ctx.createGain();machineryBus.gain.value=0;machineryBus.connect(effects);
+    for(const [hz,volume] of [[48,.38],[97,.08]]){const motor=ctx.createOscillator(),gain=ctx.createGain();motor.type='sine';motor.frequency.value=hz;gain.gain.value=volume;motor.connect(gain);gain.connect(machineryBus);motor.start();}
+    }machineryPresence=Math.max(0,Math.min(1,value));level(machineryBus,hidden||mode==='silent'?0:machineryPresence*.12,.25);}
   function setScene(phase,isPaused=false,isIdle=false) {
     const next=phase==='build'?'day':['won','lost'].includes(phase)?'silent':'night';
     if(next!=='night'||isPaused&&!paused||isIdle)stopCombat();
@@ -265,5 +269,5 @@ export function createGameAudio(options={}) {
       [50,45,38].forEach((note,i)=>tone(effects,note,at+i*.16,.65,.11,'triangle',.025));
     }
   }
-  return {get settings(){return {...settings};},unlock,configure,setScene,setHidden,play,fireShots,updateShotView,beginDayEnd,endDayEnd};
+  return {get settings(){return {...settings};},unlock,configure,setScene,setHidden,play,fireShots,updateShotView,setMachineryPresence,beginDayEnd,endDayEnd};
 }

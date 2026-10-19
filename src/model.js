@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=100';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=101';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -654,6 +654,7 @@ export function changeWall(state, id, remove = false) {
 
 // 参数先验证、再一次性应用；不静默删除超预算设施或落在新控制范围外的布局。
 export function validateVisualParams(params){
+  if(!['pollutionAshPercent','pollutionDustPercent','pollutionCloudPercent'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=100)||!Number.isFinite(params.pollutionCloudHeightMeters)||params.pollutionCloudHeightMeters<10||params.pollutionCloudHeightMeters>200)return '污染强度须为0–100%，脏云高度须为10–200米。';
   const integer=(value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   if(!integer(params.obliqueElevationDegrees,25,80))return '斜视俯仰角须为 25–80 度整数（与水平面的夹角）。';
   if(!['orthographic','perspective'].includes(params.obliqueProjection))return '斜视观察投影须为正交或透视。';

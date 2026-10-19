@@ -1,3 +1,4 @@
+import {createCityPollution} from './city-pollution.js?v=2';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
@@ -86,6 +87,9 @@ export function createCity3D({onReady,onProgress,onError}){
   const localLights=[];
   const effects=createCityEffects(scene);
   const upgradeEffects=createUpgradePreview(effects.group);
+  const pollution=createCityPollution(scene);let pollutionGeometry=-1;
+  // 固定槽位只改变强度和位置；大量中继不无限增加实时光源，也不扫动灯头。
+  const machineryLights=Array.from({length:8},(_,i)=>{const light=i<4?new THREE.PointLight('#e0f1dc',0,1,2):new THREE.SpotLight('#e0f1dc',0,1,.7,.7,2);scene.add(light);if(light.target)scene.add(light.target);return light;});
   let unknown=new THREE.Group(),unknownKey='';scene.add(unknown);
   const models=new Map(),entries=new Map(),props=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',lastProps='',pixels='',geometryVersion=0;
   let constructionEntry=null,constructionBase=null,constructionKey='';
@@ -123,7 +127,7 @@ export function createCity3D({onReady,onProgress,onError}){
     prepareExamples();
     // 当前楼体与预览共用同一组结构特征；独立副本分批准备昼夜，不改真实父节点。
     warmupRoot.children=[exterior,nature,buildings,facilities,streets,roads,unknown,enemies,examples,effects.group,observation.warmupRoot()];
-    const lights=[...localLights,...effects.nightLights()];
+    const lights=[...localLights,...machineryLights,...effects.nightLights()];
     shaderWarmup.request(`${geometryVersion}:${localLights.length}:${effects.nightLightSignature()}`,warmupRoot,camera,lights);
   }
   let loaded=0;
@@ -133,7 +137,7 @@ export function createCity3D({onReady,onProgress,onError}){
     models.set(name,object);onProgress(++loaded,Object.keys(files).length);
   })).then(()=>{ready=true;onReady();}).catch(error=>{ready=false;onError(error);});
   function release(entry){
-    geometryVersion++;entry.object.removeFromParent();shaderWarmup.release(()=>{const maps=new Set();entry.object.traverse(node=>{if(node.isMesh){if(node.material.map?.userData.cityOwned)maps.add(node.material.map);node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});for(const map of maps)map.dispose();});
+    geometryVersion++;entry.object.removeFromParent();shaderWarmup.release(()=>{const maps=new Set();entry.object.traverse(node=>{if(node.isMesh||node.userData.coreFlow){if(node.material.map?.userData.cityOwned)maps.add(node.material.map);node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});for(const map of maps)map.dispose();});
   }
   function build(plot,sample=false){
     if(!sample)geometryVersion++;const {id,x,y,w,h,type,status,cellMeters}=plot,landmark=['hospital','bank'].includes(type);
@@ -169,7 +173,7 @@ export function createCity3D({onReady,onProgress,onError}){
     isReady(){return ready;},
     isPrepared(){return initialPrepared;},
     observationPick(x,y,width,height,view){return ready?observation.pick(x,y,width,height,view):null;},
-    observationFrame(options){if(!ready)return null;const image=observation.render({...options,objects:[exterior,nature,unknown,buildings,facilities,streets,roads],enemies,hasEnemies:zombieCrowds.stats().figures>0,geometryVersion,effects:effects.group});warmNight(observation.warmupCamera());return image;},
+    observationFrame(options){if(!ready)return null;const image=observation.render({...options,objects:[exterior,nature,unknown,buildings,facilities,streets,roads,pollution.group],enemies,hasEnemies:zombieCrowds.stats().figures>0,geometryVersion,effects:effects.group});warmNight(observation.warmupCamera());return image;},
     observationEnemiesFrame(){return ready?observation.enemiesFrame():null;},
     facilityTopAt(id){const entry=props.get(id);return entry?entry.object.position.y+entry.height*entry.object.scale.y:0;},
     baseAt(id){return entries.get(id)?.object.userData.podiumHeight??0;},
@@ -299,6 +303,7 @@ export function createCity3D({onReady,onProgress,onError}){
       upgradeEffects.update(fx.upgrades??[],fx.time,fx.upgradeStyle,fx.reducedMotion);
       zombieCrowds.update(items.filter(item=>item.asset==='enemy'),fx);
       const active=new Set(items.map(p=>p.id));for(const [id,entry] of props)if(!active.has(id)){release(entry);props.delete(id);}
+      const machinery=[];
       for(const item of items){
         if(item.asset==='enemy')continue;
         const shape=`${item.asset}:${item.w}:${item.h}:${item.connections??''}:${item.cellMeters??''}:${item.dead??false}:${item.color??''}`;
@@ -309,14 +314,28 @@ export function createCity3D({onReady,onProgress,onError}){
           if(['near','far'].includes(item.asset))model.traverse(node=>{if(node.isMesh){const color=node.material.name==='#6c7775'?'#354b4b':['#3f5057','#1e2b32'].includes(node.material.name)?'#98aaa1':item.asset==='far'?'#c3c5d0':'#a8b7a0';node.material.color.set(color);node.material.userData.baseColor=node.material.color.clone();node.material.emissive.set(color);node.material.emissiveIntensity=.10;}});
           const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
           if(item.asset!=='wall'){const meters=['camp','watch'].includes(item.asset),scale=meters?1/item.cellMeters:Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(meters?0:-center.x*scale,meters?0:-bounds.min.y*scale,meters?0:-center.z*scale);}
+          if(item.asset==='camp'){
+            const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(32*3),3));const flow=new THREE.Points(geometry,new THREE.PointsMaterial({color:'#b7fff0',size:2.5,sizeAttenuation:false,transparent:true,opacity:.7,depthWrite:false}));flow.userData.ownGeometry=true;flow.userData.coreFlow=true;object.add(flow);
+          }
           geometryVersion++;facilities.add(object);props.set(item.id,{object,signature:shape,height:new THREE.Box3().setFromObject(object).max.y,motion:facilityMotion(object),wreck:item.asset==='wreck'?createWreckDressing(object,item.w,item.h):null});
         }
         const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);if(item.asset==='wreck')object.rotation.y=item.angle??0;object.scale.y=item.dead&&item.asset!=='sourceRuined'?.3:1;
         object.traverse(node=>{if(node.isMesh){node.material.opacity=item.alpha??1;node.material.transparent=node.material.opacity<1;if(!node.material.userData.baseColor)node.material.userData.baseColor=node.material.color.clone();node.material.color.copy(node.material.userData.baseColor).lerp(new THREE.Color('#84867a'),item.dead?.85:(1-(item.health??1))*.5);if(['#ff9538','#ffd36b'].includes(node.material.name))node.visible=!item.dead;}});
+        if(['camp','watch'].includes(item.asset)){
+          object.updateMatrixWorld(true);
+          object.traverse(node=>{
+            if(node.userData.coreFlow){node.visible=!item.dead&&item.alpha!==.45;const a=node.geometry.attributes.position;for(let i=0;i<32;i++){const t=fx.reducedMotion?(i%8)/8:((i%8)/8+fx.time*.22)%1,arm=Math.floor(i/8)*Math.PI/2;const r=7*(1-t)/item.cellMeters;a.setXYZ(i,Math.cos(arm)*r,(5+17*t)/item.cellMeters,Math.sin(arm)*r);}a.needsUpdate=true;}
+            if(node.isMesh&&node.material.userData.machineryDayEmission!==undefined){const m=node.material,d=m.userData.machineryDayEmission,n=m.userData.machineryNightEmission??d,pulse=node.name.startsWith('AlienCore')&&!fx.reducedMotion?.92+.08*Math.sin(fx.time*1.8):1;m.emissiveIntensity=item.dead||item.alpha<1||item.connected===false?0:(d+(n-d)*night)*pulse;}
+            for(const entry of [...(node.userData.machineryLights??[]),...(node.userData.machinerySpotLights??[])])if(!item.dead&&item.alpha!==.45&&item.connected!==false){const position=new THREE.Vector3().fromArray(entry.position).multiplyScalar(1/item.cellMeters).applyMatrix4(object.matrixWorld),target=entry.target?new THREE.Vector3().fromArray(entry.target).multiplyScalar(1/item.cellMeters).applyMatrix4(object.matrixWorld):null;machinery.push({...entry,position,target,scale:1/item.cellMeters});}
+          });
+        }
         animateFacility(props.get(item.id),item,fx);
         if(props.get(item.id).wreck)updateWreckDressing(props.get(item.id).wreck,fx.time,night,fx.reducedMotion);
       }
       const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+JSON.stringify(fx.impacts)+JSON.stringify(fx.transitions)+JSON.stringify(fx.upgrades)+JSON.stringify([fx.upgradeStyle.upgradeFlowHeightMeters,fx.upgradeStyle.upgradeFlowCycleMs,fx.upgradeStyle.upgradeFlowOpacity])+`/${lastFrame}:${night}:${fx.time}:${fx.cameraKey}`;
+      for(let i=0;i<8;i++){const light=machineryLights[i],candidate=machinery.filter(p=>!!p.target===(i>=4))[i%4];light.intensity=0;if(candidate){light.position.copy(candidate.position);light.color.set(candidate.color);light.distance=candidate.range*candidate.scale;light.intensity=candidate.power*candidate.scale*candidate.scale*(candidate.day?1:night);if(candidate.target){light.target.position.copy(candidate.target);light.angle=candidate.angle;}}}
+      pollution.update(fx.purified,fx.visible,fx.upgradeStyle,fx.time,fx.reducedMotion);
+      if(pollutionGeometry!==geometryVersion){for(const group of [nature,buildings,streets,roads,observation.warmupRoot()])pollution.bind(group);pollutionGeometry=geometryVersion;}
       if(signature!==lastProps){
         effects.updateDefense(fx.defenseHits??[],fx.time);
         effects.updateTransitions(fx.transitions??[],fx.time);effects.updateShots(fx.shots,fx.impacts??[],props,fx.time,fx.cell,fx.cellMeters,night,fx.pixelsAt);
