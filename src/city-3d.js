@@ -22,7 +22,7 @@ import {constructionAppearance,constructionMaskTexture,bindConstructionMask,setC
 import {createUpgradePreview} from './city-upgrade-preview.js?v=2';
 
 // 城市只读取显示描述；格子命中、权限、寻路和结算继续由原游戏负责。
-const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'generated/watchtower',wall:'generated/brick-wall',camp:'generated/campfire',plaza:'generated/camp-plaza',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
+const files={home:'kenney/suburban/building-type-a',small:'kenney/suburban/building-type-h',wide:'kenney/suburban/building-type-u',factory:'kenney/industrial/building-a',workshop:'kenney/industrial/building-f',hospital:'generated/hospital',hospitalRuined:'generated/hospital-ruined',bank:'generated/bank',bankRuined:'generated/bank-ruined',near:'generated/cannon-near',far:'generated/cannon-long',watch:'mechanical-tower-quality/mechanical-tower',wall:'generated/brick-wall',camp:'purification-tower-quality/purification-tower',plaza:'generated/camp-plaza',source:'generated/enemy-source',sourceRuined:'generated/enemy-source-ruined',street:'generated/streetlight',wreck:'generated/burnt-car',trash:'generated/trash',rubble:'generated/rubble',bench:'generated/street-bench',planter:'generated/street-planter',car:'generated/civil-car',damagedCar:'generated/damaged-car'};
 for(const name of ['farmland','wheatfield','wheatfield-abandoned','wheatfield-burnt','barn','barn-abandoned','hay-bale'])files[name]='generated/'+name;
 for(const [name,file] of Object.entries(PLANT_MODELS))files[name]='generated/'+file;
 for(const name of ['home','small','wide','factory','workshop'])files[name+'Ruined']=files[name]+'-ruined';
@@ -128,7 +128,9 @@ export function createCity3D({onReady,onProgress,onError}){
   }
   let loaded=0;
   Promise.all(Object.entries(files).map(async ([name,file])=>{
-    models.set(name,(await loader.loadAsync(resource(file))).scene);onProgress(++loaded,Object.keys(files).length);
+    const object=(await loader.loadAsync(resource(file))).scene;
+    if(['camp','watch'].includes(name)){const remove=[];object.traverse(node=>{if(/^(DisplaySite|ScaleCar)([._]|$)/.test(node.name))remove.push(node);});remove.forEach(node=>node.removeFromParent());}
+    models.set(name,object);onProgress(++loaded,Object.keys(files).length);
   })).then(()=>{ready=true;onReady();}).catch(error=>{ready=false;onError(error);});
   function release(entry){
     geometryVersion++;entry.object.removeFromParent();shaderWarmup.release(()=>{const maps=new Set();entry.object.traverse(node=>{if(node.isMesh){if(node.material.map?.userData.cityOwned)maps.add(node.material.map);node.material.dispose();if(node.userData.ownGeometry)node.geometry.dispose();}});for(const map of maps)map.dispose();});
@@ -306,7 +308,7 @@ export function createCity3D({onReady,onProgress,onError}){
           // 灰色炮体与灰屋顶分离；材质名保留，后坐、炮口和弹迹仍读取原节点。
           if(['near','far'].includes(item.asset))model.traverse(node=>{if(node.isMesh){const color=node.material.name==='#6c7775'?'#354b4b':['#3f5057','#1e2b32'].includes(node.material.name)?'#98aaa1':item.asset==='far'?'#c3c5d0':'#a8b7a0';node.material.color.set(color);node.material.userData.baseColor=node.material.color.clone();node.material.emissive.set(color);node.material.emissiveIntensity=.10;}});
           const bounds=new THREE.Box3().setFromObject(model),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
-          if(item.asset!=='wall'){const scale=Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);}
+          if(item.asset!=='wall'){const meters=['camp','watch'].includes(item.asset),scale=meters?1/item.cellMeters:Math.min(item.w/size.x,item.h/size.z);model.scale.setScalar(scale);model.position.set(meters?0:-center.x*scale,meters?0:-bounds.min.y*scale,meters?0:-center.z*scale);}
           geometryVersion++;facilities.add(object);props.set(item.id,{object,signature:shape,height:new THREE.Box3().setFromObject(object).max.y,motion:facilityMotion(object),wreck:item.asset==='wreck'?createWreckDressing(object,item.w,item.h):null});
         }
         const {object}=props.get(item.id);object.position.set(item.x,item.roof??0,item.y);if(item.asset==='wreck')object.rotation.y=item.angle??0;object.scale.y=item.dead&&item.asset!=='sourceRuined'?.3:1;

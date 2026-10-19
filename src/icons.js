@@ -1,10 +1,6 @@
-// 地图和状态栏共用同一篝火形状，避免两处示意不一致。
-export function drawCampfire(ctx,x,y,size,alive=true){
-  ctx.save();ctx.translate(x,y);ctx.scale(size,size);
-  ctx.fillStyle=alive?'#ffc17c':'#75615b';ctx.beginPath();ctx.moveTo(.52,-.03);ctx.bezierCurveTo(.45,.38,1.03,.44,.82,.79);ctx.bezierCurveTo(.6,1.1,.08,.9,.17,.56);ctx.lineTo(.37,.24);ctx.lineTo(.37,.51);ctx.closePath();ctx.fill();
-  if(alive){ctx.fillStyle='#fff1b0';ctx.beginPath();ctx.moveTo(.51,.39);ctx.lineTo(.68,.78);ctx.lineTo(.36,.78);ctx.closePath();ctx.fill();}
-  ctx.restore();
-}
+// 净化核心与人工支架共用轮廓；旧函数名仅保留调用兼容，不再画火焰。
+const CORE_PATH='M16 3 21 12 18 25h-4l-3-13ZM3 29l5-19 3 1-4 18Zm22 0-4-18 3-1 5 19Z';
+export function drawCampfire(ctx,x,y,size,alive=true){ctx.save();ctx.translate(x,y);ctx.scale(size/32,size/32);ctx.fillStyle=alive?'#91d9d5':'#6a7776';ctx.fill(new Path2D(CORE_PATH));ctx.strokeStyle=alive?'#d6eeeb':'#87908c';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(16,21,9,3,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
 
 // 敌源耐久徽记：盾牌与剩余HP并列，大小占地共用一个标签。
 export function drawShield(ctx,x,y,size){
@@ -45,9 +41,11 @@ const facilityPaths={
   bankCapacity:'<g stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h26M7 2 3 5l4 3M25 2l4 3-4 3M7 12v-1h17" fill="none"/><rect x="3" y="12" width="26" height="17" rx="3" fill="currentColor" fill-opacity=".16"/><path d="M29 17h-7a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h7z" fill="currentColor" fill-opacity=".32"/></g><circle cx="24" cy="20.5" r="1.3" fill="currentColor"/>',
   bankDeposit:'<g stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h5l6-6 6 2 8-5m-5 0h5v5" fill="none"/><path d="M4 20v7c0 4 14 4 14 0v-7z" fill="currentColor" fill-opacity=".18"/><ellipse cx="11" cy="20" rx="7" ry="3" fill="currentColor" fill-opacity=".32"/><path d="M4 24c0 4 14 4 14 0" fill="none"/></g>',
   bankLoan:'<g stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="currentColor" fill-opacity=".16"/><path d="M14 3v5h5" fill="currentColor" fill-opacity=".32"/><path d="M9 13h6m-6 5h6m-6 5h3M26 12v17m-4-4 4 4 4-4" fill="none"/></g>',
-  watch:'<path d="M9 29 12 13h8l3 16M11 21l11 8M21 21l-11 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M6 12h20v4H6zM5 9 16 2 27 9z" fill="currentColor"/><path d="M10 9v3m12-3v3" stroke="currentColor" stroke-width="2"/>'
+  camp:`<path d="${CORE_PATH}" fill="currentColor"/><ellipse cx="16" cy="21" rx="9" ry="3" fill="none" stroke="currentColor" stroke-width="2"/>`,
+  watch:'<path d="M7 29 12 11h8l5 18M10 19l13 9M22 19 9 28M5 29h22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><rect x="9" y="7" width="14" height="5" rx="1" fill="currentColor"/><ellipse cx="16" cy="4" rx="5" ry="2" fill="currentColor"/>'
+
 };
-export const FACILITY_COLORS={near:['#28654f','#a0e7c3'],far:['#575487','#d2c2fa'],wall:['#62634c','#d9d0af'],production:['#346970','#a1d9d7'],housing:['#89582d','#efc18c'],watch:['#245d73','#b3e8f2'],bank:['#78612a','#efda94'],hospital:['#32736e','#bfead4'],bankCapacity:['#856426','#f1d486'],bankDeposit:['#326a4b','#a1e0b2'],bankLoan:['#3e6383','#b9d7f5']};
+export const FACILITY_COLORS={camp:['#347b7b','#b4f1e4'],near:['#28654f','#a0e7c3'],far:['#575487','#d2c2fa'],wall:['#62634c','#d9d0af'],production:['#346970','#a1d9d7'],housing:['#89582d','#efc18c'],watch:['#245d73','#b3e8f2'],bank:['#78612a','#efda94'],hospital:['#32736e','#bfead4'],bankCapacity:['#856426','#f1d486'],bankDeposit:['#326a4b','#a1e0b2'],bankLoan:['#3e6383','#b9d7f5']};
 export const FACILITY_SVGS=Object.fromEntries(Object.entries(facilityPaths).map(([name,path])=>{
   // 专精是完整徽章：边框围住主体但留白，窗口和地图共用，不重复叠框。
   const graphic=['bankCapacity','bankDeposit','bankLoan'].includes(name)?`<circle cx="16" cy="16" r="14.8" fill="currentColor" fill-opacity=".07" stroke="currentColor" stroke-width="1.4"/><g transform="translate(4.48 4.48) scale(.72)">${path}</g>`:path;

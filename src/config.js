@@ -32,7 +32,7 @@ export const DEFAULTS = {
   // POI标牌随局部屏幕尺度在上下限间平滑变化；默认实底，关注战斗时整枚淡化。
   poiMarkerMinSizePx:40, poiMarkerSizePx:56, poiMarkerBorderPx:4, poiMarkerRouteOpacity:50, poiMarkerNightOpacity:65,
   // 敌源按完整占地边缘外扩揭雾，0只显示占地；与视野面板同步。
-  campS01: 6, outpostS01: 9, daySightMultiplier: 1, nightSightMultiplier: 0.6, eventSightMultiplier: 1, sourceRevealPadding: 2,
+  campS01: 2, outpostS01: 2, sourceRevealPadding: 2,
   // 云纹流速只影响外观，0静止；保持两层云的方向与速度比例。
   cloudSpeedMultiplier: 1,
   // S01由火光/瞭望塔的有效视野决定；视野外S12/S23分别渐入中雾/浓雾。
@@ -54,10 +54,10 @@ export const DEFAULTS = {
   bankUpgradeCost:25, bankUpgradeCapacityMultiplier:2, bankUpgradeRatePoints:2, bankLoanMinPercent:2, bankRateMaxPercent:100,
   // 架炮不占用施工人力；夜间只加收金币，倍率仍可调节。
   nightTowerCostMultiplier: 2,
-  budget: 100, wallCost: 2, wallHP: 12, enemyPower: 1, defenseRepairPercent: 50, demolitionRefundPercent: 50, controlRadius: 9, campHP: 30, stepMs: 450,
+  budget: 100, wallCost: 2, wallHP: 12, enemyPower: 1, defenseRepairPercent: 50, demolitionRefundPercent: 50, controlRadius: 10, campRadiusStep:2, campHP: 30, stepMs: 450,
   // 火光危急提示按最大 HP 百分比判断，0 关闭持续警示；受击仍短暂泛红。
   campWarningPercent: 30,
-  outpostMinDistance: 2, outpostWorkers: 1, outpostCost: 25, outpostRadius: 6, campRepairCost: 5,
+  outpostMinDistance: 2, outpostCost: 25, outpostRadius: 6, campRepairCost: 5,
   // 源头按实际占地生成独立耐久；固定清源预算，末段仅加速播放，不能省略攻击。
   sourceCellHPMin:12, sourceCellHPMax:30, sourceRegenHP:0, nightTicks:160, nightCleanupSpeed:2,
   // 仅空闲夜末的进度过渡，0关闭动画；不增加战斗拍数或清源伤害。
