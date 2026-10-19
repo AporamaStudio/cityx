@@ -54,7 +54,18 @@ export function campCells(state,id=state.camp){const [x,y]=xy(id);return [[x,y],
 export function circleCells(center,radius){
  const cells=[];for(let y=Math.max(0,Math.floor(center[1]-radius));y<Math.min(SIZE,Math.ceil(center[1]+radius));y++)for(let x=Math.max(0,Math.floor(center[0]-radius));x<Math.min(SIZE,Math.ceil(center[0]+radius));x++)if(Math.hypot(x+.5-center[0],y+.5-center[1])<=radius+1e-9)cells.push(key(x,y));return cells;
 }
-export function purificationMask(state){const cells=new Set();for(const c of livingCamps(state))for(const id of circleCells(campCenter(state,c.id),campRadius(state,c.id)))cells.add(id);return cells;}
+const purificationCache=new WeakMap();
+export function purificationMask(state){
+ const signature=[state.params.controlRadius,state.params.campRadiusStep,...allCamps(state).map(c=>`${c.id}:${c.hp>0}:${c.level}`)].join('|'),old=purificationCache.get(state);if(old?.signature===signature)return old.cells;
+ const cells=new Set();for(const c of livingCamps(state))for(const id of circleCells(campCenter(state,c.id),campRadius(state,c.id)))cells.add(id);purificationCache.set(state,{signature,cells});return cells;
+}
+// 完整原始地块逐格检查；架炮、缺口或减少经营格不能绕过净化资格。
+export function plotPurified(state,id){const cells=productionCells(id,state),mask=purificationMask(state);return cells.length>0&&cells.every(cell=>mask.has(cell));}
+export function buildingStatus(state,id){const c=plotContent(state,id);return c.status==='empty'?'empty':c.status!=='building'?'ruin':plotPurified(state,id)&&productionControlled(state,id)?'connected':'repaired';}
+export const hospitalActive=(state,id)=>state.hospitals.has(productionId(id,state))&&plotPurified(state,id)&&productionControlled(state,id);
+// 未净化住房不入住；已接通后失效保留居民，视作暂时安置，不让人口凭空消失。
+export function housingResidents(state,id){const cap=housingQuote(state,id).residents,record=state.housing.get(productionId(id,state));return plotPurified(state,id)&&productionControlled(state,id)?cap:Math.min(cap,record?.admitted??0);}
+
 
 function campPath(state,path) {
   const cells=new Set(campCells(state)),at=path.findIndex(id=>cells.has(id));
@@ -245,7 +256,7 @@ export function poiDiscovered(state,id){
   return kind==='bank'?cells.length>0&&cells.every(cell=>isExplored(state,cell)):kind==='hospital'&&cells.some(cell=>isExplored(state,cell));
 }
 export const bankDiscovered=(state,id)=>bankAt(state,id)!==null&&poiDiscovered(state,id);
-export const bankActive=(state,id)=>state.banks?.has(id)&&productionControlled(state,id)&&population(state).free>=0;
+export const bankActive=(state,id)=>state.banks?.has(id)&&productionControlled(state,id)&&plotPurified(state,id)&&population(state).free>=0;
 export const bankWorkers=state=>(state.banks?.size??0)*state.params.bankWorkers;
 export const hospitalWorkers=state=>(state.hospitals?.size??0)*state.params.hospitalWorkers;
 export const bankCapacityFor=(state,id)=>Math.ceil(state.params.bankCapacity*(state.banks?.get(bankAt(state,id))?.upgrade==='capacity'?state.params.bankUpgradeCapacityMultiplier:1));
@@ -359,7 +370,7 @@ export function inGroundControl(state,id,radius=state.params.controlRadius){
  return campCovers(candidate,id)||[...connectedOutposts(candidate)].some(center=>inStationRange(id,center,state.params.outpostRadius));
 }
 export function rawControlMask(state,radius=state.params.controlRadius){
- const candidate=radius===state.params.controlRadius?state:{...state,params:{...state.params,controlRadius:radius}},mask=purificationMask(candidate);
+ const candidate=radius===state.params.controlRadius?state:{...state,params:{...state.params,controlRadius:radius}},mask=new Set(purificationMask(candidate));
  for(const id of connectedOutposts(candidate)){const [x,y]=xy(id);for(const cell of circleCells([x+.5,y+.5],candidate.params.outpostRadius))mask.add(cell);}return mask;
 }
 // 必须沿有效根节点向外传播，失联闭环不会自行供电或继续侦察。
@@ -898,7 +909,7 @@ export function economyBuildQuote(state,id,type){
   const before=map.has(plot)?contentCells(state,id).length:0,after=availableCells(state,id).length,added=after-before;
   const existing=new Set(map.has(plot)?contentCells(state,id):[]),cells=availableCells(state,id).filter(cell=>!existing.has(cell));
   const cost=economyAreaCost(state,id,type,cells),restored=cells.filter(cell=>renovationCells(state,id,type).has(cell)).length;
-  return {added,cost,mode:restored===added&&added>0?'renovation':restored?'mixed':'new',labor:type==='production'?Math.ceil(after/state.params.productionCellsPerWorker)-Math.ceil(before/state.params.productionCellsPerWorker):0,residents:type==='housing'?Math.ceil(after/state.params.housingCellsPerResident)-Math.ceil(before/state.params.housingCellsPerResident):0,income:areaQuote(state,id,after).income};
+  return {added,cost,mode:restored===added&&added>0?'renovation':restored?'mixed':'new',labor:type==='production'?Math.ceil(after/state.params.productionCellsPerWorker)-Math.ceil(before/state.params.productionCellsPerWorker):0,residents:type==='housing'&&plotPurified(state,id)?Math.ceil(after/state.params.housingCellsPerResident)-Math.ceil(before/state.params.housingCellsPerResident):0,income:areaQuote(state,id,after).income};
 }
 // 每格保留投入日期，次日补建不会把旧建筑的投资变成当天全返。
 function addEconomyInvestment(state,id,type,quote){
@@ -907,7 +918,7 @@ function addEconomyInvestment(state,id,type,quote){
   const added=availableCells(state,id).filter(cell=>!existing.has(cell));
   const prices=economyCellCosts(state,id,type);
   added.forEach(cell=>paid.set(cell,{cost:prices.get(cell),day:state.day}));
-  map.set(plot,{day:old?.day??state.day,cost:(old?.cost??0)+quote.cost,paid});
+  map.set(plot,{admitted:old?.admitted??0,day:old?.day??state.day,cost:(old?.cost??0)+quote.cost,paid});
 }
 function investmentRefund(state,entries){
   let today=0,older=0;
@@ -918,7 +929,7 @@ function investmentRefund(state,entries){
 export function embeddingQuote(state,id){
   const c=plotContent(state,id),cells=contentCells(state,id),occupied=cells.includes(id),plot=productionId(id,state);
   const building=occupied&&c.status==='building',home=building&&c.type==='housing',factory=building&&c.type==='production';
-  const residents=home?Math.ceil(cells.length/state.params.housingCellsPerResident)-Math.ceil((cells.length-1)/state.params.housingCellsPerResident):0;
+  const residents=home?Math.max(0,housingResidents(state,id)-Math.ceil((cells.length-1)/state.params.housingCellsPerResident)):0;
   const released=factory?Math.ceil(cells.length/state.params.productionCellsPerWorker)-Math.ceil((cells.length-1)/state.params.productionCellsPerWorker):0;
   const record=home?state.housing.get(plot):factory?state.production.get(plot):null;
   const invested=record?.cost??(home?housingQuote(state,id).cost:factory?productionQuote(state,id).cost:0);
@@ -968,7 +979,7 @@ function applyEmbedding(state,id,preserveBuilding=false){
   if(!footprint.size)state.plotContents.set(plot,{status:'empty',type:null,cells:remaining});
 }
 export function population(state){
-  const total=state.params.initialPopulation+(state.debugPopulation??0)+[...state.housing.keys()].reduce((n,id)=>n+housingQuote(state,id).residents,0);
+  const total=state.params.initialPopulation+(state.debugPopulation??0)+[...state.housing.keys()].reduce((n,id)=>n+housingResidents(state,id),0);
   // 用工随设施持续占用，拆除即时释放；不另存分配记录，避免重试或改建漏结算。
   const working=[...state.production.keys()].reduce((n,id)=>n+productionLabor(state,id),0)+bankWorkers(state)+hospitalWorkers(state);
   return {total,working,free:total-working};
@@ -995,7 +1006,7 @@ export function housingRemovalError(state,id){
   if(state.phase!=='build')return '防守中不能拆除住房。';
   if(!state.housing.has(productionId(id,state)))return '这里没有住房。';
   const support=buildingRemovalError(state,id);if(support)return support;
-  return population(state).free<housingQuote(state,id).residents?'现有生产、瞭望塔或地标依赖这些居民，请先拆除用工设施或补建住房。':'';
+  return population(state).free<housingResidents(state,id)?'现有生产、瞭望塔或地标依赖这些居民，请先拆除用工设施或补建住房。':'';
 }
 export function removeHousing(state,id){
   const error=housingRemovalError(state,id);if(error)return error;
@@ -1006,7 +1017,7 @@ export function productionControlled(state,id) {
   const cells=buildingCells(state,id);
   return cells.length?cells.some(cell=>inGroundControl(state,cell)):productionCells(id,state).length>0&&productionCells(id,state).every(cell=>inGroundControl(state,cell));
 }
-export const productionActive=(state,id)=>productionControlled(state,id);
+export const productionActive=(state,id)=>productionControlled(state,id)&&plotPurified(state,id);
 export const expectedIncome=state=>[...state.production.keys()].filter(id=>productionActive(state,id)).reduce((sum,id)=>sum+productionQuote(state,id).income,0);
 export function productionError(state,id,{ignoreResources=false}={}) {
   if(state.phase!=='build')return '只能在建设阶段恢复生产。';
@@ -1171,6 +1182,7 @@ function initializeExploration(state){
 }
 export const isExplored=(state,id)=>!state.explored||state.explored.has(id);
 export function revealControl(state){
+  for(const [id,record] of state.housing)if(plotPurified(state,id)&&productionControlled(state,id))record.admitted=housingQuote(state,id).residents;
   if(!state.explored)return;
   const seen=visionField(state);for(const id of seen)state.explored.add(id);
   for(const source of state.enemySources?.values()??[])if(source.firstNight<=state.day||sourceCells(source).some(id=>seen.has(id))||seen.has(key(source.x,source.y))){source.discovered=true;for(const id of sourceCells(source))state.explored.add(id);}

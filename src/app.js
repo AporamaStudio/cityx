@@ -19,7 +19,7 @@ import {controlBorderTexture,drawControlBorderBands,drawControlBorderLine,drawCo
 import {poiBadgeSVG,drawCampfire,drawShield,drawSourcePin,SOURCE_PIN_SVG,SOURCE_DESTROYED_SVG,SPAWN_BLOCKED_SVG,WATCHTOWER_SVG,POPULATION_SVG,WORKER_SVG,FACILITY_SVGS,FACILITY_COLORS} from './icons.js?v=16';
 import {createGameAudio} from './audio.js?v=11';
 import { SIZE, DEFAULTS, VISUAL_PARAM_KEYS } from './config.js?v=100';
-import {allCamps,livingCamps,campCells,campCenter,campRadius,purificationMask,poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=123';
+import {housingResidents,plotPurified,buildingStatus,hospitalActive,allCamps,livingCamps,campCells,campCenter,campRadius,purificationMask,poiDiscovered,hospitalWorkers,hospitalError,restoreHospital,pendingHospitals,hospitalDiscovered,economyConstructionPreview,buildResourceStatus,economyBuildAvailability,applyExperimentParams,validateVisualParams, bankActive,bankDiscovered,pendingBanks,bankUpgradeError,bankUpgradeQuote,upgradeBank,bankWorkers,bankFinance,bankError,restoreBank,availableFunds,canAfford,configureSourceMap, configureSourceNight, finishIdleNight, enemyBatchStatus, campaignGoals, routeTimingReport, nightCleanupState, sourcePlans, sourceCells, enemySourceAt, sourceControlled, sourceAttackPlan, syncSourceHealth, outpostRemovalPreview, towerBuildCost, buildingCells, buildingRemovalError, rawControlMask, controlMask, controlBoundary, streetEdgeAccess, knownSources, firstNightReady, contentCells, economyBuildQuote, embeddingQuote, visionField, clearingError, applyTestScenario, population, productionLabor, housingQuote, housingError, buildHousing, removeHousing, housingRemovalError, initialView, isExplored, revealControl, plotContent, clearPlot, rebuildTerrain, demolitionQuote, buildTower, removeTower, battleRoutes, productionId, productionCells, productionQuote, productionControlled, productionActive, productionSite, productionError, buildProduction, removeProduction, expectedIncome, key, xy, inside, createCampaign, campaignComplete, campCritical, beginBattle, restoreNight, restartCampaign, coverage, fireField, funds, placementError, validateSources, stepBattle, wallPreview, changeWall, validateParams, inControl, forecastAttacks, potentialSourceRoute, lockAttacks, enemyAction, enemyKey, repairQuote, repairError, repairFacility, outpostError, buildOutpost, removeOutpost, enterMorning } from './model.js?v=124';
 import {generateCityMap} from './city-map.js?v=14';
 import {readMapSettings} from './map-settings.js?v=2';
 import {SOURCE_WAVE_DEFAULTS,sourceMaxHP,resolveSourceCatalog} from './enemy-sources.js?v=4';
@@ -526,7 +526,7 @@ function cannonSoundView(id){
 // 静态城市描述随游戏状态更新一次；镜头和动效帧只消费结果。
 function citySceneDescriptor(view){
   const {controlled,controlState}=view;
-  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:['hospital','bank'].includes(p.site.role)?p.site.role:p.content.type,status:p.content.status,upgrade:state.banks.get(id)?.upgrade??null,powered:p.controlled&&(state.hospitals.has(id)||state.production.has(id)&&productionActive(state,id)||state.housing.has(id)||bankActive(state,id)),cellMeters:controlState.params.cellMeters}));
+  const cityPlots=[...view.towers.plots].filter(([id,p])=>p.footprint.length&&p.content.status!=='empty'&&p.site.role!=='camp'&&(p.controlled||p.cells.every(visibleCell))).map(([id,p])=>({id,x:p.site.x,y:p.site.y,w:p.site.width??p.site.size,h:p.site.height??p.site.size,type:['hospital','bank'].includes(p.site.role)?p.site.role:p.content.type,status:p.content.status,upgrade:state.banks.get(id)?.upgrade??null,powered:p.controlled&&(hospitalActive(state,id)||state.production.has(id)&&productionActive(state,id)||state.housing.has(id)&&plotPurified(state,id)||bankActive(state,id)),cellMeters:controlState.params.cellMeters}));
   const streetLamps=operatingStreetLamps(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.outposts.keys()]),cellMeters:controlState.params.cellMeters});
   const vehicles=streetVehicles(cityPlots,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys()]),lamps:streetLamps,cellMeters:controlState.params.cellMeters}),wrecks=vehicles.filter(car=>car.asset==='wreck');
   const streetDressing=[...operatingStreetProps(streetLamps,{layout:state.layout,controlled,visible:currentlyVisible,occupied:new Set([...state.walls,...state.playerWalls,...state.outposts.keys(),...vehicles.map(p=>key(Math.floor(p.x),Math.floor(p.y)))]),cellMeters:controlState.params.cellMeters}),...vehicles.filter(car=>car.asset!=='wreck')];
@@ -699,7 +699,7 @@ function paintMap() {
     if(quote.type&&!error&&!draftDirty){
       if(quote.type==='outpost')freeDelta=0;
       else if(quote.type==='production')freeDelta=productionLabor(state,hover);
-      else if(quote.type==='housing')totalDelta=freeDelta=-housingQuote(state,hover).residents;
+      else if(quote.type==='housing')totalDelta=freeDelta=-housingResidents(state,hover);
       // 预览独立于已到账提示，不改真实余额，也不覆盖战斗收入动画。
       goldDelta=quote.refund;erasePreview.hidden=false;
       if(erasePreview.dataset.refund!==String(quote.refund)){
@@ -1097,7 +1097,7 @@ function paintMap() {
       // 地图先比较产出；悬停补齐费用与持续用工，按钮和资源栏继续预览实际成本。
       if(details)rows.push({text:`${buildQuote?buildQuote.labor:productionLabor(state,id)}`,icon:'people',suffix:'',color:'#f4d3a2',unmet:shortage?.workers});
       rows.push({text:`+${complete&&!active?0:quote.income}`,icon:'coin',suffix:'',color:'#bff5ce'});
-    }else rows.push({text:`+${quote.residents}`,icon:'residents',suffix:'',color:'#f4d3a2'});
+    }else rows.push({text:`${plotPurified(state,id)?'+':'◷ +'}${quote.residents}`,icon:'residents',suffix:'',color:'#f4d3a2'});
     ctx.save();ctx.globalAlpha=!weaponSelected&&!complete&&!focused&&!canAfford(state,quote.cost) ? .6 : 1;
     ctx.font='600 10px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
     const iconSize=10,rowHeight=14;
@@ -1548,6 +1548,7 @@ function updateTargetPreview(view){
   if(view.dirty){setTargetPreview('请先应用或取消参数预览。');return;}
   const validators={production:productionError,housing:housingError,outpost:outpostError,bank:bankError,hospital:hospitalError,bankUpgrade:bankUpgradeError,repair:repairError,erase:(_state,id)=>demolitionTargetError(id),wall:(_state,id)=>wallPreview(state,id).error,build:(_state,id)=>weaponPlacementError(id),long:(_state,id)=>weaponPlacementError(id)};
   const error=targetReason(validators[tool]?.(state,hover)||'',hover);
+  if(!error&&['production','housing','bank'].includes(tool)&&!plotPurified(state,hover)){setTargetPreview('可修复 · 地块尚未完全净化',true);return;}
   if(!error){setTargetPreview(tool==='erase'?'可拆除':tool==='repair'?'可修复':tool==='bankUpgrade'?'可升级':['bank','hospital'].includes(tool)?'可恢复':'可建设',true);return;}
   setTargetPreview(error);
 }
@@ -2158,9 +2159,9 @@ canvas.addEventListener('pointerup',e=>{
   if(tool==='hospital'){actionError=restoreHospital(state,id);notify(actionError?'':'医院已修复，守住本晚后结算收复目标。');}
   else if(tool==='bank'){actionError=restoreBank(state,id);notify(actionError?'':'银行已恢复，金融额度增加。');}
   else if(tool==='housing'){
-    const error=actionError=buildHousing(state,id);notify(error?'':`住房已完成，新增 ${population(state).total-beforePeople} 人。`);
+    const error=actionError=buildHousing(state,id);notify(error?'':plotPurified(state,id)?`住房接通，新增 ${population(state).total-beforePeople} 人。`:'住房已修复，地块尚未完全净化。');
   } else if(tool==='production'){
-    const error=actionError=buildProduction(state,id);notify(error?'':`生产已完成，守夜后收入 +${productionQuote(state,id).income}。`);
+    const error=actionError=buildProduction(state,id);notify(error?'':productionActive(state,productionId(id,state))?`生产接通，守夜后收入 +${productionQuote(state,id).income}。`:'生产已修复，地块尚未完全净化。');
   } else if(['outpost','repair'].includes(tool)){
     const error=actionError=tool==='repair'?repairFacility(state,id):buildOutpost(state,id);notify(error?'':(tool==='repair'?(id===state.camp?`净化核心恢复 ${state.hp-beforeHP} HP。`:'墙已修满。'):'机械塔已建立，控制区扩张。'));
   } else if(tool==='wall'){
