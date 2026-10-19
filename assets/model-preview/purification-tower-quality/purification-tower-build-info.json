@@ -1,0 +1,27 @@
+{
+  "asset": "purification-tower",
+  "units": "meters",
+  "footprint": [
+    40,
+    40
+  ],
+  "equipmentMeters": [
+    20,
+    20,
+    26
+  ],
+  "sourceObjects": 754,
+  "materials": 18,
+  "batches": 20,
+  "triangles": 61004,
+  "glbBytes": 5190160,
+  "pointLights": 4,
+  "fixedSpotLights": 0,
+  "parts": [
+    "DisplaySite",
+    "AlienCore",
+    "ScaleCar"
+  ],
+  "blender": "5.2.0 LTS",
+  "buildSeconds": 2.4
+}

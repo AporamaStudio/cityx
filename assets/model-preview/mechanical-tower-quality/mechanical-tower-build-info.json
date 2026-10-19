@@ -1,0 +1,26 @@
+{
+  "asset": "mechanical-tower",
+  "units": "meters",
+  "footprint": [
+    20,
+    20
+  ],
+  "equipmentMeters": [
+    5,
+    5,
+    18
+  ],
+  "sourceObjects": 272,
+  "materials": 17,
+  "batches": 19,
+  "triangles": 16068,
+  "glbBytes": 1905268,
+  "pointLights": 1,
+  "fixedSpotLights": 4,
+  "parts": [
+    "DisplaySite",
+    "ScaleCar"
+  ],
+  "blender": "5.2.0 LTS",
+  "buildSeconds": 0.5
+}

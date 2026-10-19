@@ -183,3 +183,32 @@ Three.js **0.180.0**，MIT，来自官方npm包 `three`。仅保留预览所需�
 小配楼风化污迹按实际片数限制在楼体范围；折落板片及其立缝/钢筋使用局部变换共同定位。废弃版已重新输出，避免小配楼墙外悬空污迹；三态源文件逐个打开并检查已打包贴图、可编辑修饰器与米制数据。
 
 本轮10件均已完成同址三态，共30份Blend、30份GLB和60张1440×1152实际昼夜渲染，入口为独立3D预览v46。新POI运行模型、下载和离线图使用一致资产版本，避免刷新脚本后仍看到旧废弃版；当前仍不符合主游戏运行预算的承诺。
+
+## 净化塔、机械塔与旧机械体品质样板（2026-10-19）
+
+使用内置生图的 `concepts/purification-system-2026-10-19/01`～`03`参考板，按市政厅已确认pipeline制作原创模型，不使用第三方机械模型。参考偏写实，实际采用大轮廓简洁、主要连接有几何、近景有倒角/PBR的mid poly写实方向；并非逐像素复刻概念图。六张概念图与完整提示词已由 `484e568` 保存，概念图不等于以下实际渲染。
+
+| id | 样板尺度 | 主要构件 | 全样板三角形 / GLB字节 |
+| --- | --- | --- | --- |
+| purification-tower | 40×40m展示用地、20m基础平台、约26m高，核心约4m宽 | 四组斜柱/人工夹臂、液压缸、分层异质核心及细亮裂隙、处理腔、陶瓷叠片、机柜、管线和检修步道 | 61004 / 5190160 |
+| mechanical-tower | 20×20m用地、5×5m设备基座、18m桅杆 | 格构X撑、爬梯、天线/机柜、四向固定LED与向上灯面，展示灰地保持污染 | 16068 / 1905268 |
+| legacy-machine | 汽车量级，约2.54m宽、4.51m长，天线高约2.25m；8×8m只是展示地台 | 分节履带/负重轮、斜面装甲、回转座、短炮管、红橙光学镜与动力格栅 | 40872 / 3202848 |
+
+统计含展示地台、配套物件和比例车，不能直接当作主游戏单件预算或帧率指标。模型是当前美术提案，尚待用户确认；没有加入等级变体、废弃变体、独立机械交战AI或替换主游戏模型。
+
+### 制作与复现
+
+- 入口 `scripts/build-machinery-blender.py`，造型 `scripts/machinery_models.py`，导出/材质 `scripts/machinery_quality.py`；复用 `poi_quality.py` 的米制基础构件及市政厅打包原创材质，不复用市政厅建筑几何。需要仓库原市政厅Blend及本机Blender5.2 LTS。
+- 每件输出 `<id>-quality/<id>.blend`、`.glb`、`<id>-build-info.json`，以及 `renders/<id>-day.png` / `-night.png` / `-top.png`，三张均为同一实际模型的96采样、1440×1152 Cycles渲染。源码保留中文分件、倒角/加权法线、打包贴图、参考相机和原生灯位；默认隐藏关系辅助线，不覆盖用户已打开场景。重复执行会重建对应输出，手工修改请另存或同步回脚本。
+- GLB以独立副本固化修饰器，只在相同枢轴/材质内部合批。保留 `DisplaySite` 可拆地台、`ScaleCar` 比例车、`AlienCore` 核心、`TrackLeft/Right` 履带、嵌套的 `Turret → Barrel` 回转/俯仰节点。保留节点不表示已完成动作或战斗逻辑。
+- 新漆面/磨损纹理与法线由numpy原创生成、打包及内嵌GLB；底色PNG使用sRGB编码，法线Non-Color；直接构造的圆柱/球补齐同名米制UV，避免导出负纹理坐标索引。旧市政厅材质和资产未重写。
+- 灯位保存在 `machineryLights` / `machinerySpotLights`，发光材质用 `machineryDayEmission` / `machineryNightEmission`。核心白天也工作，固定LED夜间打开；灯位移到灯壳/核心表面外避免真实渲染自遮挡。机械塔没有旋转或追踪探照灯；向上灯以发光面表达，尚无体积光柱。预览专用金属反射补光不更改主游戏照明。
+- 本轮是静态模型/灯光样板。净化外扩光流、近景声音、机械运动/开火和真实迷雾权限仍待运行时接入；不烘焙成GLB动作，不将展示灰地当作新污染玩法。
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python-exit-code 1 --python scripts/build-machinery-blender.py -- --asset purification-tower --render --samples 96 --size 1440
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python-exit-code 1 --python scripts/build-machinery-blender.py -- --asset mechanical-tower --render --samples 96 --size 1440
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python-exit-code 1 --python scripts/build-machinery-blender.py -- --asset legacy-machine --render --samples 96 --size 1440
+```
+
+不加 `--render` 只重建源文件、GLB及统计。预览入口为「单体模型样板 → 净化塔／机械塔／机械敌人」，或 `model-preview.html?asset=<id>`，提供GLB、Blend、参考图和实际昼夜渲染链接；俯视可用现有按钮检查。只在首次选择时装载该单件，不增加页面启动三态资产。没有推送或发布。

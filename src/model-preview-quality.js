@@ -8,14 +8,14 @@ export function createQualityPreview(renderer,scene,sun,sky){
   }
   const pmrem=new THREE.PMREMGenerator(renderer),environment=pmrem.fromScene(room,.02);pmrem.dispose();walls.forEach(m=>m.material.dispose());geometry.dispose();
   let active=false;
-  return (enabled,night)=>{
+  return (enabled,night,metallic=false)=>{
     if(active!==enabled){
       active=enabled;sun.shadow.map?.dispose();sun.shadow.map=null;
       sun.shadow.mapSize.set(enabled?4096:2048,enabled?4096:2048);
       const extent=enabled?12:38;Object.assign(sun.shadow.camera,{left:-extent,right:extent,top:extent,bottom:-extent});sun.shadow.camera.updateProjectionMatrix();
     }
-    scene.environment=enabled?environment.texture:null;scene.environmentIntensity=night?.08:.45;
-    if(enabled){sky.intensity=night?.6:.9;sun.intensity=night?.7:3.2;sun.shadow.normalBias=.012;sun.shadow.bias=-.00008;}
+    scene.environment=enabled?environment.texture:null;scene.environmentIntensity=metallic?(night?.4:1.2):(night?.08:.45);
+    if(enabled){sky.intensity=metallic?(night?.85:1.25):(night?.6:.9);sun.intensity=night?.7:3.2;sun.shadow.normalBias=.012;sun.shadow.bias=-.00008;}
     else{sky.intensity=night?1.5:2.4;sun.intensity=night?.9:3.2;sun.shadow.normalBias=.03;sun.shadow.bias=-.00025;}
   };
 }
@@ -34,6 +34,18 @@ export function attachCityhallLights(object,scale){
     }
   });
   object.add(lighting);
+}
+
+// 新机械样板共用原生米制灯位；核心白天也工作，固定LED只在夜间照地。
+export function attachMachineryLights(object,scale){
+  const descriptions=[];
+  object.traverse(node=>{descriptions.push(...(node.userData.machineryLights??[]),...(node.userData.machinerySpotLights??[]));});
+  for(const entry of descriptions){
+    const light=entry.target?new THREE.SpotLight(entry.color,entry.power*scale*scale,entry.range*scale,entry.angle,.7,2):new THREE.PointLight(entry.color,entry.power*scale*scale,entry.range*scale,2);
+    light.position.fromArray(entry.position);light.userData.machineryWorkLight={day:Boolean(entry.day)};
+    if(entry.target){const target=new THREE.Object3D();target.position.fromArray(entry.target);object.add(target);light.target=target;}
+    object.add(light);
+  }
 }
 
 // 只驱动孤立避难所的局部发光与真实灯位；使用预览的可暂停时钟，不烘焙进模型动画。

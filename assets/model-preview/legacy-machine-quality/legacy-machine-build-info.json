@@ -1,0 +1,29 @@
+{
+  "asset": "legacy-machine",
+  "units": "meters",
+  "footprint": [
+    8,
+    8
+  ],
+  "equipmentMeters": [
+    2.5,
+    4.6,
+    1.9
+  ],
+  "sourceObjects": 486,
+  "materials": 11,
+  "batches": 25,
+  "triangles": 40872,
+  "glbBytes": 3202848,
+  "pointLights": 0,
+  "fixedSpotLights": 0,
+  "parts": [
+    "DisplaySite",
+    "TrackLeft",
+    "TrackRight",
+    "Turret",
+    "Barrel"
+  ],
+  "blender": "5.2.0 LTS",
+  "buildSeconds": 1.2
+}
