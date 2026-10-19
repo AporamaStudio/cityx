@@ -30,3 +30,18 @@ test('净化差一个格也不接通，经营面积减少不会绕过完整地�
  const cells=productionCells(key(18,24),s),pure=purificationMask(s);assert.equal(cells.filter(id=>!pure.has(id)).length,1);assert.equal(plotPurified(s,key(18,24)),false);
  s.plotContents.set(key(18,24),{status:'building',type:'production',cells:new Set(cells.filter(id=>pure.has(id))),footprint:new Set(cells)});assert.equal(plotPurified(s,key(18,24)),false);
 });
+
+test('在大空地内只占四格，新塔不改当晚目标、次日起可进入目标池',async()=>{
+ const {createCampaign,buildCamp,campBuildError,availableCells,forecastAttacks,upgradeCamp,campRadius,repairFacility,repairQuote,funds,beginBattle,restoreNight}=await import('../src/model.js');
+ const blocks=[{x:18,y:25,width:4,height:4,kind:'open'}],layout={width:60,height:60,camp:{x:15,y:25},blocks,tiles:Array(3600).fill('road')};
+ const waves=Array.from({length:5},()=>[{x:25,y:26,hp:3,count:1,first:1,interval:1}]);const s=createCampaign({...DEFAULTS,budget:1000},waves,layout);s.day=3;
+ const attacks=structuredClone(s.attacks),id=key(19,26);assert.equal(campBuildError(s,id),'');const cash=funds(s);assert.equal(buildCamp(s,id),'');assert.equal(campCells(s,id).length,4);assert.equal(availableCells(s,id).length,12);assert.equal(funds(s),cash-80);assert.deepEqual(s.attacks,attacks);assert.equal(forecastAttacks(s,4)[0].target,id);
+ assert.equal(upgradeCamp(s,id),'');assert.equal(campRadius(s,id),12);assert.equal(campRadius(s),10);assert.equal(upgradeCamp(s,id),'');assert.equal(campRadius(s,id),14);assert.ok(upgradeCamp(s,id));
+ s.extraCamps.get(id).hp=20;assert.equal(repairQuote(s,key(20,27)).missing,10);assert.equal(repairQuote(s,key(1,1)).missing,0);assert.equal(repairFacility(s,key(20,27)),'');assert.equal(s.extraCamps.get(id).hp,30);assert.equal(s.hp,30);
+ const snapshot=beginBattle(s);s.extraCamps.get(id).hp=1;assert.equal(restoreNight(snapshot).extraCamps.get(id).hp,30);
+});
+test('普通进攻对各净化塔独立结算，一座失守不会立即结束整局',async()=>{
+ const {beginBattle,stepBattle,rebuildFields}=await import('../src/model.js');const s=createState([{x:1,y:1,hp:1,count:1,first:99,interval:1}]);s.extraCamps.set(key(35,35),{hp:30,level:0,day:0});rebuildFields(s);beginBattle(s);
+ const enemy=(id,target,hp)=>({id,target,hp,members:1,sources:[0],origins:['0:0'],path:[id]});s.enemies=[enemy(s.camp,s.camp,99)];stepBattle(s);assert.equal(s.hp,0);assert.equal(s.phase,'battle');assert.equal(s.extraCamps.get(key(35,35)).hp,30);
+ s.enemies=[enemy(key(36,36),key(35,35),99)];stepBattle(s);assert.equal(s.phase,'lost');
+});
