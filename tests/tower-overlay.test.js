@@ -48,7 +48,7 @@ test('住房嵌炮仍检查经营劳动力，而非仅凭边缘与余额放行',
   const s=setup();s.params.controlRadius=9;s.explored=new Set(Array.from({length:SIZE*SIZE},(_,i)=>i));
   assert.equal(buildHousing(s,remote),'');s.debugPopulation=-s.params.initialPopulation;
   // 9格住房提供5人；用满这5人后，移除一个住房格不能再架炮。
-  s.outposts=new Map([[key(10,11),{day:3}]]);s.params.outpostWorkers=5;
+  s.production.set(origin,{cost:1});s.params.productionCellsPerWorker=2;
   assertMatches(s);assert.equal(overlay(s).eligible('A').has(remote),false);
 });
 

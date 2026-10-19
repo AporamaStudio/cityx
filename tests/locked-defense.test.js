@@ -31,18 +31,18 @@ test('控制边缘参数校验，视觉外溢不扩大地面或建筑控制',()=
 });
 
 // 使用真实的特殊地块占地，外侧与角落都不能被中央图标缩小成一格目标。
-const campMap=()=>({...layout(),blocks:[{x:14,y:24,width:3,height:3,kind:'open',role:'camp'}]});
+const campMap=()=>({...layout(),camp:{x:15,y:24},blocks:[{x:14,y:24,width:3,height:3,kind:'open',role:'camp'}]});
 const campState=(x,y,hp=5)=>createCampaign(DEFAULTS,[[{x,y,hp,count:1,first:1,interval:3}]],campMap());
 
-test('火光完整3×3占地均受击，地块外不扣血，预告止于首个进入格',()=>{
-  const base=campState(15,23),area=campCells(base);assert.equal(area.length,9);
+test('净化塔实际2×2占地均受击，地块外不扣血，预告止于首个进入格',()=>{
+  const base=campState(15,23),area=campCells(base);assert.equal(area.length,4);
   for(const id of area){
     const s=campState(id%SIZE,Math.floor(id/SIZE));s.phase='battle';stepBattle(s);
     assert.equal(s.hp,25);assert.equal(s.enemies.length,0);assert.equal(s.earned,0);
-    assert.deepEqual(s.events.filter(e=>e.type==='leak'),[{type:'leak',id,value:5,tick:1}]);
+    assert.deepEqual(s.events.filter(e=>e.type==='leak'),[{type:'leak',id,target:s.camp,value:5,tick:1}]);
     stepBattle(s);assert.equal(s.hp,25);
   }
-  for(const [x,y] of [[15,23],[13,25],[17,25],[15,27]]){
+  for(const [x,y] of [[15,23],[14,24],[17,24],[15,26]]){
     const s=campState(x,y),path=s.attacks[0].path;
     assert.equal(s.attacks[0].target,s.camp);assert.equal(path.length,2);
     assert.ok(area.includes(path.at(-1)));assert.ok(!area.includes(path[0]));
@@ -60,10 +60,10 @@ test('广场入口先结算炮火，完全消灭发奖励而不伤火光',()=>{
   }
 });
 
-test('广场入口的墙仍拖延进攻，破墙下一拍进入才伤火光',()=>{
-  const s=campState(15,23),wall=key(15,24);assert.equal(changeWall(s,wall),'');s.wallHealth.get(wall).hp=1;s.phase='battle';
-  step(s,2);assert.equal(s.hp,30);assert.equal(s.enemies[0].id,key(15,23));assert.equal(s.wallHealth.get(wall).hp,0);
-  stepBattle(s);assert.equal(s.hp,25);assert.equal(s.enemies.length,0);assert.equal(s.events.find(e=>e.type==='leak').id,wall);
+test('墙在净化塔占地外拖延进攻，破墙后仍先走过墙格再进入塔',()=>{
+ const s=campState(15,22),wall=key(15,23);assert.equal(changeWall(s,wall),'');s.wallHealth.get(wall).hp=1;s.phase='battle';
+ step(s,2);assert.equal(s.hp,30);assert.equal(s.enemies[0].id,key(15,22));assert.equal(s.wallHealth.get(wall).hp,0);
+ stepBattle(s);assert.equal(s.hp,30);assert.equal(s.enemies[0].id,wall);stepBattle(s);assert.equal(s.hp,25);assert.equal(s.enemies.length,0);assert.equal(s.events.find(e=>e.type==='leak').id,key(15,24));
 });
 
 test('同拍合流进入广场只按总剩余HP伤害一次，成员结果保留',()=>{
@@ -109,7 +109,7 @@ test('敌人经过建筑炮位持续前进，不因邻接或高火力改目标',
 test('炮塔无维修报价，受损墙仍可次日按损伤维修',()=>{
   const s=make(100),tower=key(14,24),wall=key(15,22);assert.equal(buildTower(s,tower,'A'),'');changeWall(s,wall);
   s.wallHealth.get(wall).hp=0;const money=funds(s);s.phase='won';enterMorning(s);
-  assert.equal(repairQuote(s,tower).missing,0);assert.match(repairFacility(s,tower),/受损火光或墙/);assert.ok(fireField(s).size>0);
+  assert.equal(repairQuote(s,tower).missing,0);assert.match(repairFacility(s,tower),/受损净化核心或墙/);assert.ok(fireField(s).size>0);
   assert.equal(repairQuote(s,wall).cost,1);assert.equal(repairFacility(s,wall),'');assert.equal(s.wallHealth.get(wall).hp,12);assert.equal(funds(s),money-1);
   assert.equal(s.towerDays.get(tower),1);
 });

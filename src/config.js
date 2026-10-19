@@ -55,7 +55,8 @@ export const DEFAULTS = {
   bankUpgradeCost:25, bankUpgradeCapacityMultiplier:2, bankUpgradeRatePoints:2, bankLoanMinPercent:2, bankRateMaxPercent:100,
   // 架炮不占用施工人力；夜间只加收金币，倍率仍可调节。
   nightTowerCostMultiplier: 2,
-  budget: 100, wallCost: 2, wallHP: 12, enemyPower: 1, defenseRepairPercent: 50, demolitionRefundPercent: 50, controlRadius: 10, campRadiusStep:2, campBuildCost:80, campUpgradeCost:40, campHP: 30, stepMs: 450,
+  // 净化精华按敌源占地掉落；新建和两级升级分别消耗4／2／3，不使用金币或授信。
+  budget: 100, wallCost: 2, wallHP: 12, enemyPower: 1, defenseRepairPercent: 50, demolitionRefundPercent: 50, controlRadius: 10, campRadiusStep:2, initialEssence:0, sourceEssencePerCell:1, campBuildEssence:4, campUpgradeEssence2:2, campUpgradeEssence3:3, campHP: 30, stepMs: 450,
   // 火光危急提示按最大 HP 百分比判断，0 关闭持续警示；受击仍短暂泛红。
   campWarningPercent: 30,
   outpostMinDistance: 2, outpostCost: 25, outpostRadius: 6, campRepairCost: 5,

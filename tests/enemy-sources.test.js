@@ -95,7 +95,7 @@ test('整晚固定拍数，清源不省略，天亮撤退不伤火光也不发�
 });
 test('末拍受击仍可失败，晚于天亮的出兵配置拒绝，HP范围按占地封顶',()=>{
  const s=setup({nightTicks:1});beginBattle(s);s.hp=1;
- s.attacks=[{index:0,x:15,y:24,hp:6,count:1,first:1,interval:1,target:s.camp,path:[]}];stepBattle(s);
+ s.attacks=[{index:0,x:15,y:25,hp:6,count:1,first:1,interval:1,target:s.camp,path:[]}];stepBattle(s);
  assert.equal(s.phase,'lost');assert.equal(s.economySettled,false);assert.equal(s.withdrawn,0);
  assert.match(validateSources([{...s.sources[0],first:2}],s),/天亮/);
  assert.match(validateParams({...s.params,sourceCellHPMin:30,sourceCellHPMax:12},s,false),/上限/);
@@ -116,7 +116,7 @@ test('第100拍消灭最后敌人，余下60拍继续逐拍攻击源头，不少
 
 test('最后出兵前的空档不能跳过；所有来袭结束且无可清源才跳至黎明',()=>{
  const s=setup({nightTicks:160,sourceRegenHP:5});s.enemySources.get('source-1').hp=15;
- beginBattle(s);s.attacks=[{index:0,x:15,y:24,hp:1,count:1,first:10,interval:1,target:s.camp,path:[]}];
+ beginBattle(s);s.attacks=[{index:0,x:15,y:25,hp:1,count:1,first:10,interval:1,target:s.camp,path:[]}];
  assert.equal(nightCleanupState(s),null);for(let i=0;i<9;i++){stepBattle(s);assert.equal(s.tick,i+1);assert.equal(s.phase,'battle');}
  stepBattle(s);assert.equal(s.tick,160);assert.equal(s.phase,'won');assert.equal(s.hp,999);assert.equal(s.withdrawn,0);
  assert.equal(s.enemySources.get('source-1').hp,20);assert.equal(s.events.find(e=>e.type==='leak').tick,10);
@@ -175,7 +175,7 @@ test('全部当前出兵被阻止但仍可攻击另一源，剩余160拍清源�
 test('空闲夜末动画延迟结算而不补跑拍数；收入与回血只结算一次，重试可撤回',()=>{
  const s=setup({nightTicks:160,sourceRegenHP:5});s.day=2;s.enemySources.get('source-1').hp=15;
  assert.equal(buildProduction(s,key(13,22)),'');
- s.attacks=[{index:0,x:15,y:24,hp:1,count:1,first:1,interval:1,target:s.camp,path:[]}];
+ s.attacks=[{index:0,x:15,y:25,hp:1,count:1,first:1,interval:1,target:s.camp,path:[]}];
  const direct=structuredClone(s),before=funds(s),snapshot=beginBattle(s);beginBattle(direct);
  stepBattle(s,null,true);stepBattle(direct);
  assert.equal(s.tick,1);assert.equal(s.phase,'battle');assert.equal(s.economySettled,false);assert.equal(funds(s),before);

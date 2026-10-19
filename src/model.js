@@ -1,4 +1,4 @@
-import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=101';
+import { SIZE, DEFAULTS, WAVES, PRODUCTION_SITES, VISUAL_PARAM_KEYS } from './config.js?v=102';
 import {generateEnemySources,sourceCells,sourceDeparture,sourceMaxHP,resolveSourceCatalog,bindSourceWaves,syncSourceSchedule} from './enemy-sources.js?v=4';
 export {sourceCells} from './enemy-sources.js?v=4';
 export const key = (x, y) => y * SIZE + x;
@@ -16,8 +16,8 @@ export function makeWalls() {
 }
 
 // 从目标向外搜索，每格首次发现时就确定唯一下一格。
-export function routeField(camp, walls) {
-  const next = new Map(), distance = new Map([[camp, 0]]), queue = [camp];
+export function routeField(camp, walls, targets=[camp]) {
+  const next = new Map(), distance = new Map(targets.map(id=>[id,0])), queue = [...targets];
   for (let i = 0; i < queue.length; i++) {
     const id = queue[i], [x, y] = xy(id);
     for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) {
@@ -44,15 +44,15 @@ export function coverage(id, range = 1, shape = 'diamond') {
 }
 
 // 净化塔身份保留旧主塔字段以兼容重试；新增塔统一从实体入口读取。
-export function campRecord(state,id=state.camp){return id===state.camp?{id,hp:state.hp,level:state.campLevel??0,day:0}:state.extraCamps?.has(id)?{...state.extraCamps.get(id),id}:null;}
+export function campRecord(state,id=state.camp){if(id<0)id=state.camp;return id===state.camp?{id,hp:state.hp,level:state.campLevel??0,day:0}:state.extraCamps?.has(id)?{...state.extraCamps.get(id),id}:null;}
 export const allCamps=state=>[campRecord(state),...[...(state.extraCamps?.keys()??[])].map(id=>campRecord(state,id))];
-function setCampHP(state,id,hp){if(id===state.camp)state.hp=hp;else if(state.extraCamps.has(id))state.extraCamps.get(id).hp=hp;}
+function setCampHP(state,id,hp){if(id<0)id=state.camp;if(id===state.camp)state.hp=hp;else if(state.extraCamps.has(id))state.extraCamps.get(id).hp=hp;}
 export function campAt(state,id){return allCamps(state).find(c=>campCells(state,c.id).includes(id))?.id;}
 export const livingCamps=state=>allCamps(state).filter(c=>c.hp>0);
 export const campCenter=(state,id=state.camp)=>{const [x,y]=xy(id);return [x+1,y+1];};
 export const campRadius=(state,id=state.camp)=>state.params.controlRadius+(campRecord(state,id)?.level??0)*state.params.campRadiusStep;
 // 2×2只是实际占地，不能把其所在的大空地整块当成设施或受击区。
-export function campCells(state,id=state.camp){const [x,y]=xy(id);return [[x,y],[x+1,y],[x,y+1],[x+1,y+1]].filter(p=>inside(...p)).map(p=>key(...p));}
+export function campCells(state,id=state.camp){if(id<0)id=state.camp;const [x,y]=xy(id);return [[x,y],[x+1,y],[x,y+1],[x+1,y+1]].filter(p=>inside(...p)).map(p=>key(...p));}
 export function circleCells(center,radius){
  const cells=[];for(let y=Math.max(0,Math.floor(center[1]-radius));y<Math.min(SIZE,Math.ceil(center[1]+radius));y++)for(let x=Math.max(0,Math.floor(center[0]-radius));x<Math.min(SIZE,Math.ceil(center[0]+radius));x++)if(Math.hypot(x+.5-center[0],y+.5-center[1])<=radius+1e-9)cells.push(key(x,y));return cells;
 }
@@ -61,6 +61,10 @@ export function purificationMask(state){
  const signature=[state.params.controlRadius,state.params.campRadiusStep,...allCamps(state).map(c=>`${c.id}:${c.hp>0}:${c.level}`)].join('|'),old=purificationCache.get(state);if(old?.signature===signature)return old.cells;
  const cells=new Set();for(const c of livingCamps(state))for(const id of circleCells(campCenter(state,c.id),campRadius(state,c.id)))cells.add(id);purificationCache.set(state,{signature,cells});return cells;
 }
+// 精华独立于金币/授信；敌源清除自动入账，重试随战前快照一并回滚。
+export const essenceBalance=state=>(state.params.initialEssence??0)+(state.essenceEarned??0)-(state.essenceSpent??0)+(state.debugEssence??0);
+export const sourceEssenceReward=(state,source)=>sourceCells(source).length*state.params.sourceEssencePerCell;
+export function essenceResourceStatus(state,cost){const missing=Math.max(0,cost-essenceBalance(state));return {cost,gold:false,workers:false,essence:missing>0,message:missing?`净化精华不足，缺 ${missing} 份。`:''};}
 // 建造时预览也是只读候选，永不重选当天已锁定进攻。
 export function campBuildError(state,id,{ignoreResources=false}={}){
  if(state.result||state.phase!=='build')return '只能在白天建造净化塔。';if(state.day<3)return '第3天起可建造新净化塔。';
@@ -68,14 +72,14 @@ export function campBuildError(state,id,{ignoreResources=false}={}){
  const cells=campCells(state,id),plot=productionId(id,state);if(plot===null||cells.some(cell=>productionId(cell,state)!==plot||plotContent(state,cell).status!=='empty'))return '请选择同一空地内的完整2×2区域。';
  if(cells.some(cell=>!isExplored(state,cell)||!inGroundControl(state,cell)))return '2×2用地须已探索并在基础控制内。';
  if(cells.some(cell=>!terrainTraversable(state,cell)||state.playerWalls.has(cell)||state.towers.has(cell)||state.outposts.has(cell)||campAt(state,cell)!==undefined))return '2×2用地存在障碍或其他设施。';
- return ignoreResources?'':buildResourceStatus(state,state.params.campBuildCost).message;
+ return ignoreResources?'':essenceResourceStatus(state,state.params.campBuildEssence).message;
 }
 export function campBuildCandidate(state,id){const extraCamps=new Map(state.extraCamps);extraCamps.set(id,{hp:state.params.campHP,level:0,day:state.day});return {...state,extraCamps};}
-export function buildCamp(state,id){const error=campBuildError(state,id);if(error)return error;recordBorrowing(state,state.params.campBuildCost);state.campSpent+=state.params.campBuildCost;state.extraCamps.set(id,{hp:state.params.campHP,level:0,day:state.day});rebuildFields(state);revealControl(state);return '';}
+export function buildCamp(state,id){const error=campBuildError(state,id);if(error)return error;state.essenceSpent+=state.params.campBuildEssence;state.extraCamps.set(id,{hp:state.params.campHP,level:0,day:state.day});rebuildFields(state);revealControl(state);return '';}
 export function campUpgradeCandidate(state,id=state.camp){if(id===state.camp)return {...state,campLevel:state.campLevel+1};const extraCamps=new Map(state.extraCamps);extraCamps.set(id,{...extraCamps.get(id),level:campRecord(state,id).level+1});return {...state,extraCamps};}
-export function campUpgradeQuote(state,id=state.camp){const c=campRecord(state,id);return {cost:state.params.campUpgradeCost*((c?.level??0)+1),before:campRadius(state,id),after:campRadius(state,id)+state.params.campRadiusStep};}
-export function campUpgradeError(state,id=state.camp){const c=campRecord(state,id);if(state.result||state.phase!=='build'||state.day<2)return '第2天起在白天升级。';if(!c||c.hp<=0)return '请先修复净化塔。';if(c.level>=2)return '已达到Lv.3。';return buildResourceStatus(state,campUpgradeQuote(state,id).cost).message;}
-export function upgradeCamp(state,id=state.camp){const error=campUpgradeError(state,id);if(error)return error;const q=campUpgradeQuote(state,id);recordBorrowing(state,q.cost);state.campSpent+=q.cost;if(id===state.camp)state.campLevel++;else state.extraCamps.get(id).level++;revealControl(state);return '';}
+export function campUpgradeQuote(state,id=state.camp){const c=campRecord(state,id);return {cost:(c?.level??0)===0?state.params.campUpgradeEssence2:state.params.campUpgradeEssence3,before:campRadius(state,id),after:campRadius(state,id)+state.params.campRadiusStep};}
+export function campUpgradeError(state,id=state.camp,{ignoreResources=false}={}){const c=campRecord(state,id);if(state.result||state.phase!=='build'||state.day<2)return '第2天起在白天升级。';if(!c||c.hp<=0)return '请先修复净化塔。';if(c.level>=2)return '已达到Lv.3。';return ignoreResources?'':essenceResourceStatus(state,campUpgradeQuote(state,id).cost).message;}
+export function upgradeCamp(state,id=state.camp){const error=campUpgradeError(state,id);if(error)return error;const q=campUpgradeQuote(state,id);state.essenceSpent+=q.cost;if(id===state.camp)state.campLevel++;else state.extraCamps.get(id).level++;revealControl(state);return '';}
 
 // 完整原始地块逐格检查；架炮、缺口或减少经营格不能绕过净化资格。
 export function plotPurified(state,id){const cells=productionCells(id,state),mask=purificationMask(state);return cells.length>0&&cells.every(cell=>mask.has(cell));}
@@ -98,7 +102,7 @@ export function createState(sources = DEFAULTS.sources, towers = new Map(), play
   const blocked=new Set(layout?layout.tiles.flatMap((t,id)=>t==='block'?[id]:[]):[]),walls=new Set([...fixedWalls,...blocked,...playerWalls]);
   const terrainWalls=new Set([...fixedWalls,...blocked]);
   const camp = layout?key(layout.camp.x,layout.camp.y):key(...DEFAULTS.camp), field = routeField(camp, terrainWalls);
-  const state = {extraCamps:new Map(),campLevel:0,campSpent:0, outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), banks:new Map(), hospitals:new Map(), bankEarned:0, debtInterestCap:0, nightInterest:0, bankSettledDay:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, nightBuildSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
+  const state = {extraCamps:new Map(),campLevel:0,essenceEarned:0,essenceSpent:0,debugEssence:0, outposts: new Map([...outposts].map(([id,p])=>[id,{...p}])), production:new Map(), housing:new Map(), banks:new Map(), hospitals:new Map(), bankEarned:0, debtInterestCap:0, nightInterest:0, bankSettledDay:0, debugGold:0, debugPopulation:0, economyEarned:0, nightEconomy:0, economySettled:false, productionReport:null, wallDays:new Map([...playerWalls].map(id=>[id,1])), towerDays:new Map([...towers.keys()].map(id=>[id,1])), demolitionSpent:0, nightBuildSpent:0, repairSpent:0, earned:0, nightEarned:0, day:1,
     layout, blocked, terrainWalls, sites, fixedWalls, playerWalls: new Set(playerWalls), walls, camp, field, sources: structuredClone(sources).map(s=>({...s,target:s.target??-2})),
     wallHealth:new Map([...playerWalls].map(id=>[id,{hp:params.wallHP,max:params.wallHP}])), attacks:[],
     params: structuredClone(params), towers: new Map(towers), phase: 'build', tick: 0,
@@ -181,7 +185,7 @@ export function knownSources(state) {
 }
 export const firstNightReady=state=>state.day!==1||state.towers.size>0;
 export const campaignComplete=state=>!!state.result;
-// 医院碰到即整栋受控，但修复且连回火光才完成目标；修复记录不随失控丢失。
+// 医院碰到即整栋受控，但修复且连回净化核心才完成目标；修复记录不随失控丢失。
 export function campaignGoals(state){
   const connected=connectedOutposts(state),active={...state,outposts:new Map([...state.outposts].filter(([id])=>connected.has(id)))};
   const hospitals=state.sites.filter(p=>p.role==='hospital'),sources=[...(state.enemySources?.values()??[])];
@@ -265,7 +269,7 @@ export function fireField(state) {
   }
   return fire;
 }
-export const funds = state => state.params.budget - (state.campSpent??0) + (state.debugGold??0) + state.earned + state.economyEarned + (state.bankEarned??0) - [...(state.hospitals?.values()??[])].reduce((sum,h)=>sum+h.cost,0) - [...(state.banks?.values()??[])].reduce((sum,b)=>sum+b.cost,0) - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - state.outposts.size*state.params.outpostCost - (state.nightBuildSpent??0) - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
+export const funds = state => state.params.budget + (state.debugGold??0) + state.earned + state.economyEarned + (state.bankEarned??0) - [...(state.hospitals?.values()??[])].reduce((sum,h)=>sum+h.cost,0) - [...(state.banks?.values()??[])].reduce((sum,b)=>sum+b.cost,0) - [...state.production.keys()].reduce((sum,id)=>sum+(state.production.get(id).cost??productionQuote(state,id).cost),0) - [...state.housing.keys()].reduce((sum,id)=>sum+(state.housing.get(id).cost??housingQuote(state,id).cost),0) - state.outposts.size*state.params.outpostCost - (state.nightBuildSpent??0) - state.repairSpent - state.demolitionSpent - state.playerWalls.size * state.params.wallCost - [...state.towers.values()].reduce((sum,type)=>sum+state.params.weapons[type].cost,0);
 // 银行不另设账户：本金就是全局余额，停业仅撤销当前额度，不清偿既有债务。
 export const bankAt=(state,id)=>productionSite(id,state)?.role==='bank'?productionId(id,state):null;
 // 银行恢复原有整栋探索条件；医院由固定位置揭示发现，二者均不额外扩散迷雾。
@@ -404,9 +408,9 @@ function connectedOutposts(state){
 function disconnectedControlCells(state){
   const connected=connectedOutposts(state);
   if(connected.size===state.outposts.size)return new Set();
-  const active={...state,outposts:new Map([...state.outposts].filter(([id])=>connected.has(id)))};
-  const mask=rawControlMask(active);
-  return new Set([...rawControlMask(state)].filter(id=>!mask.has(id)));
+  const effective=rawControlMask(state),lost=new Set();
+  for(const id of state.outposts.keys())if(!connected.has(id)){const [x,y]=xy(id);for(const cell of circleCells([x+.5,y+.5],state.params.outpostRadius))if(!effective.has(cell))lost.add(cell);}
+  return lost;
 }
 export function inControl(state,id,radius=state.params.controlRadius) {
   if(inGroundControl(state,id,radius))return true;
@@ -418,6 +422,12 @@ export function controlMask(state,radius=state.params.controlRadius,raw=rawContr
   const mask=new Set(raw);
   for(const p of state.sites){const cells=buildingCells(state,key(p.x,p.y));if(cells.some(id=>raw.has(id)))for(const id of cells)mask.add(id);}
   return mask;
+}
+// 扩张方案只吸附整栋已探索建筑；雾外仅画基础圆采样，不能提前泄露楼体。
+export function expansionPreview(state,candidate){
+  const raw=rawControlMask(candidate),controlled=new Set(raw);
+  for(const p of state.sites){const cells=buildingCells(state,key(p.x,p.y));if(cells.length&&cells.every(id=>isExplored(state,id))&&cells.some(id=>raw.has(id)))for(const id of cells)controlled.add(id);}
+  return {candidate,controlled,purified:purificationMask(candidate),boundary:controlBoundary(controlled)};
 }
 export function controlBoundary(mask) {
   const edges=[];
@@ -443,7 +453,7 @@ export function rebuildTerrain(state) {
   revealControl(state);
 }
 export function rebuildFields(state) {
-  state.fields=new Map(allCamps(state).map(c=>[c.id,routeField(c.id,state.terrainWalls)]));state.field=state.fields.get(state.camp);
+  state.fields=new Map(allCamps(state).map(c=>[c.id,routeField(c.id,state.terrainWalls,campCells(state,c.id))]));state.field=state.fields.get(state.camp);
 }
 // 绕过不可攻击建筑，并在最近可达的前方路线格重新接上；墙不参与搜索。
 export function repairPath(state,original,departure=[],target=state.camp) {
@@ -467,7 +477,7 @@ export function repairPath(state,original,departure=[],target=state.camp) {
       }
     }
     // 狭窄出口被建筑堵住时允许退回路口；仍只按通行距离走向原目标。
-    if(goal===undefined){const fallback=pathFrom(path[0],state.fields?.get(target)??state.field);return fallback.at(-1)===target?campPath(state,fallback,target):[];}
+    if(goal===undefined){const fallback=pathFrom(path[0],state.fields?.get(target)??state.field);return campCells(state,target).includes(fallback.at(-1))?campPath(state,fallback,target):[];}
     const detour=[];for(let id=goal;id!==null;id=visited.get(id))detour.push(id);
     path=[...path.slice(0,blockedAt-1),...detour.reverse(),...path.slice(goals.get(goal)+1)];
   }
@@ -476,7 +486,7 @@ export function repairPath(state,original,departure=[],target=state.camp) {
 function sourceAttack(state,source,index,night=state.day){
   const entity=state.enemySources?.get(source.sourceId),departure=entity?sourceDeparture(entity).slice(0,-1):[];
   const exit=key(entity?.x??source.x,entity?.y??source.y);
-  const candidates=livingCamps(state).filter(c=>c.day<night).map(c=>({id:c.id,field:c.id===state.camp?state.field:state.fields?.get(c.id)??routeField(c.id,state.terrainWalls)})).filter(c=>c.field.distance.has(exit));
+  const candidates=livingCamps(state).filter(c=>c.day<night).map(c=>({id:c.id,field:c.id===state.camp?state.field:state.fields?.get(c.id)??routeField(c.id,state.terrainWalls,campCells(state,c.id))})).filter(c=>c.field.distance.has(exit));
   candidates.sort((a,b)=>a.field.distance.get(exit)-b.field.distance.get(exit)||a.id-b.id);
   const selected=candidates[0]??{id:state.camp,field:state.field},target=selected.id,path=campPath(state,[...departure,...pathFrom(exit,selected.field)],target),[x,y]=xy(path[0]??exit);
   return {...structuredClone(source),x,y,index,target,departure,originalPath:[...path],path};
@@ -492,7 +502,7 @@ export function potentialSourceRoute(state,sourceId){
   const route=sourceAttack(state,{sourceId:source.id,x:source.x,y:source.y},source.index);
   return campCells(state,route.target).includes(route.path.at(-1))?{sourceId:source.id,index:source.index,path:route.path,potential:true}:null;
 }
-// 只读校验出兵表：出生当拍不移动，进入火光任意一格即到达；不计墙与炮火。
+// 只读校验出兵表：出生当拍不移动，进入净化核心任意一格即到达；不计墙与炮火。
 export function routeTimingReport(state) {
   const deadline=state.params.nightTicks,nights=[];
   let farthest=null,latest=null,total=0,late=0,unreachable=0;
@@ -514,12 +524,12 @@ export function routeTimingReport(state) {
   }
   return {nightTicks:deadline,stepMs:state.params.stepMs,farthest,latest,total,late,unreachable,nights};
 }
-// 来源、目标与初始路线在白天开始锁定；瞭望塔不进入目标池。
+// 来源、目标与初始路线在白天开始锁定；机械塔不进入目标池。
 export function lockAttacks(state) {
   state.attacks=state.sources.map((source,index)=>sourceAttack(state,source,index));
 }
 export const enemyKey=(enemy)=>`${enemy.id}:${enemy.target}`;
-// 火光按余额购买整数 HP，余款保留；墙仍一次修满，瞭望塔无需维修。
+// 净化核心按余额购买整数 HP，余款保留；墙仍一次修满，机械塔无需维修。
 export function repairQuote(state,id) {
   const anchor=campAt(state,id),camp=anchor===undefined?null:campRecord(state,anchor),wall=state.wallHealth.get(id),target=camp?{hp:camp.hp,max:state.params.campHP}:wall;
   const missing=target?Math.max(0,target.max-target.hp):0,type=camp?'camp':wall?'wall':'';
@@ -531,7 +541,7 @@ export function repairError(state,id) {
   if(state.phase!=='build')return '防守中不能修复。';
   if(state.day<2)return '次日才能修复受损设施。';
   const quote=repairQuote(state,id);
-  if(!quote.missing)return '请选择受损火光或墙。';
+  if(!quote.missing)return '请选择受损净化核心或墙。';
   if(quote.type==='camp'&&!quote.restore)return `资金不足，至少需要 ${state.params.campRepairCost} 钱恢复 1 HP。`;
   if((quote.type==='wall'&&!inGroundControl(state,id)))return '这里不在控制范围内，无法维修防线。';
   return !canAfford(state,quote.cost)?`资金不足，修满需要 ${quote.cost} 钱（${quote.missing} HP）。`:'';
@@ -547,7 +557,7 @@ export function repairFacility(state,id) {
   }
   return '';
 }
-// 瞭望塔仅占锚点一格；街区经营与防御设施共用土地但独立拆除。
+// 机械塔仅占锚点一格；街区经营与防御设施共用土地但独立拆除。
 export const outpostAt=(state,id)=>state.outposts.has(id)?id:undefined;
 export function plotBuildError(state,id) {
   const cells=productionCells(id,state);
@@ -560,34 +570,34 @@ export function plotBuildError(state,id) {
   if(cells.some(cell=>reservedSources(state).some(s=>key(s.x,s.y)===cell)))return '不能覆盖敌人来源。';
   return '';
 }
-export function outpostError(state,id) {
-  if(state.day<3)return '第 3 天开放瞭望塔。';
-  if(state.phase!=='build')return '防守中不能建设瞭望塔。';
+export function outpostError(state,id,{ignoreResources=false}={}) {
+  if(state.day<3)return '第 3 天开放机械塔。';
+  if(state.phase!=='build')return '防守中不能建设机械塔。';
   if(!Number.isInteger(id)||!inside(...xy(id)))return '请选择地图内的格子。';
   if(!isExplored(state,id))return '该位置尚未探索。';
   const connected=connectedOutposts(state);
-  if(!inGroundControl(state,id))return '瞭望塔落点须被篝火或已连接篝火的瞭望塔基础地面控制范围覆盖。';
-  if(productionSite(id,state)?.role==='hospital')return '医院为保留目标，不能建设瞭望塔。';
-  if(!terrainTraversable(state,id))return '瞭望塔只能建在可通行的道路、空地或自然地面。';
+  if(!inGroundControl(state,id))return '机械塔落点须被净化塔或已连接净化塔的机械塔基础地面控制范围覆盖。';
+  if(productionSite(id,state)?.role==='hospital')return '医院为保留目标，不能建设机械塔。';
+  if(!terrainTraversable(state,id))return '机械塔只能建在可通行的道路、空地或自然地面。';
   if(state.towers.has(id)||state.playerWalls.has(id)||state.outposts.has(id)||campAt(state,id)!==undefined||reservedSources(state).some(s=>key(s.x,s.y)===id))return '该格已有设施或保留目标。';
   const [x,y]=xy(id),distance=state.params.outpostMinDistance;
-  if([...state.outposts.keys()].some(anchor=>{const [ax,ay]=xy(anchor);return Math.hypot(x-ax,y-ay)<distance;}))return `瞭望塔间距至少 ${distance} 格。`;
-  return buildResourceStatus(state,state.params.outpostCost).message;
+  if([...state.outposts.keys()].some(anchor=>{const [ax,ay]=xy(anchor);return Math.hypot(x-ax,y-ay)<distance;}))return `机械塔间距至少 ${distance} 格。`;
+  return ignoreResources?'':buildResourceStatus(state,state.params.outpostCost).message;
 }
 export function buildOutpost(state,id) {
   const error=outpostError(state,id);if(error)return error;
-  // 挑高瞭望塔只提供控制和视野，地面保持通行，不参与建筑清场。
+  // 挑高机械塔只提供控制和视野，地面保持通行，不参与建筑清场。
   recordBorrowing(state,state.params.outpostCost);state.outposts.set(id,{day:state.day});revealControl(state);return '';
 }
 // 拆除预览与实际操作共用校验，失败时不改变控制、探索、设施或金币。
 export function outpostRemovalPreview(state,id){
   const disconnected=new Set();
-  if(state.phase!=='build')return {error:'只能在建设阶段拆除瞭望塔。',disconnected};
-  const anchor=outpostAt(state,id);if(anchor===undefined)return {error:'这里没有瞭望塔。',disconnected};
+  if(state.phase!=='build')return {error:'只能在建设阶段拆除机械塔。',disconnected};
+  const anchor=outpostAt(state,id);if(anchor===undefined)return {error:'这里没有机械塔。',disconnected};
   const posts=new Map(state.outposts);posts.delete(anchor);const candidate={...state,outposts:posts};
   const isolated=disconnectedControlCells(candidate);
-  if(isolated.size)return {error:'拆除会使红色区域的瞭望塔失去与篝火的连接；塔的落点须被已连接据点覆盖，请先补建连接或拆除外围塔。',disconnected:isolated};
-  if([...state.playerWalls].some(cell=>inGroundControl(state,cell)&&!inGroundControl(candidate,cell))||[...state.towers.keys()].some(cell=>inControl(state,cell)&&!inControl(candidate,cell))||[...state.production.keys(),...state.housing.keys()].some(cell=>productionControlled(state,cell)&&!productionControlled(candidate,cell)))return {error:'其他设施依赖此瞭望塔的控制范围，请先拆除外围设施。',disconnected};
+  if(isolated.size)return {error:'拆除会使红色区域的机械塔失去与净化塔的连接；塔的落点须被已连接据点覆盖，请先补建连接或拆除外围塔。',disconnected:isolated};
+  if([...state.playerWalls].some(cell=>inGroundControl(state,cell)&&!inGroundControl(candidate,cell))||[...state.towers.keys()].some(cell=>inControl(state,cell)&&!inControl(candidate,cell))||[...state.production.keys(),...state.housing.keys()].some(cell=>productionControlled(state,cell)&&!productionControlled(candidate,cell)))return {error:'其他设施依赖此机械塔的控制范围，请先拆除外围设施。',disconnected};
   return {error:'',disconnected};
 }
 export function removeOutpost(state,id) {
@@ -634,9 +644,9 @@ export function wallPreview(state, id, remove = false) {
   else if (!remove && !inGroundControl(state,id)) error = '超出基础地面控制范围，不能建墙。';
   else if (!remove && state.blocked.has(id)) error = '建筑或废墟占地，需先清理为空地。';
   else if (!remove && state.fixedWalls.has(id)) error = '水域或自然障碍不能建墙。';
-  else if (!remove && (state.towers.has(id)||state.outposts.has(id)||campAt(state,id)!==undefined)) error = '这里已有炮塔或瞭望塔，不能叠建墙。';
+  else if (!remove && (state.towers.has(id)||state.outposts.has(id)||campAt(state,id)!==undefined)) error = '这里已有炮塔、机械塔或净化塔，不能叠建墙。';
   else if (!remove && (state.walls.has(id)||state.playerWalls.has(id))) error = '这里已有墙或墙的废墟，请选择修复或拆除。';
-  else if (!remove && (id === state.camp || reservedSources(state).some(s=>key(s.x,s.y)===id))) error = '不能覆盖篝火或敌人源头。';
+  else if (!remove && (id === state.camp || reservedSources(state).some(s=>key(s.x,s.y)===id))) error = '不能覆盖净化塔或敌人源头。';
   else if (!remove && !canAfford(state,state.params.wallCost)) error = buildResourceStatus(state,state.params.wallCost).message;
   if (error) return { error, field: state.field };
   const walls = new Set(state.walls);
@@ -678,7 +688,7 @@ export function validateVisualParams(params){
   if(!Number.isFinite(params.upgradeFlowHeightMeters)||params.upgradeFlowHeightMeters<0||params.upgradeFlowHeightMeters>12)return '升级光流高度须为0–12米，0关闭光幕。';
   if(!integer(params.upgradeFlowMinPx,0,40))return '升级光流投影最小距离须为0–40像素整数。';
   if(!integer(params.upgradeFlowCycleMs,500,6000)||!integer(params.upgradeFlowOpacity,0,100))return '升级光流周期须为500–6000毫秒，强度为0–100%整数。';
-  if(!integer(params.campWarningPercent,0,100))return '火光危急阈值须为 0–100% 整数，0 关闭持续警示。';
+  if(!integer(params.campWarningPercent,0,100))return '净化核心危急阈值须为 0–100% 整数，0 关闭持续警示。';
   if(!Number.isFinite(params.cloudSpeedMultiplier)||params.cloudSpeedMultiplier<0||params.cloudSpeedMultiplier>3)return '云层流速倍率须为 0–3，0 静止。';
   if(!integer(params.fogS12,1,20)||!integer(params.fogS23,1,20))return 'S12/S23 雾带距离须为 1–20 格整数。';
   if(!integer(params.exteriorFogTransitionPercent,5,50))return '外围雾过渡距离须为地图短边的 5–50%，整数。';
@@ -695,25 +705,25 @@ export function validateVisualParams(params){
 export function validateParams(params, state, checkLayout = true) {
   const integer = (value,min,max)=>Number.isInteger(value)&&value>=min&&value<=max;
   const visualError=validateVisualParams(params);if(visualError)return visualError;
-  if(!integer(params.campBuildCost,1,1000)||!integer(params.campUpgradeCost,1,1000))return '净化塔新建／升级基础费须为1–1000金币整数。';
+  if(!integer(params.initialEssence,0,1000000)||!integer(params.sourceEssencePerCell,0,1000)||!['campBuildEssence','campUpgradeEssence2','campUpgradeEssence3'].every(k=>integer(params[k],1,1000)))return '初始精华须为0–1000000、敌源每格精华0–1000、净化塔精华费用1–1000，均为整数。';
   if(!Number.isInteger(params.campRadiusStep)||params.campRadiusStep<1||params.campRadiusStep>10)return '净化塔每级半径增量须为1–10格整数。';
-  if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、篝火耐久 1–10000，均为整数。';
+  if (!integer(params.budget,0,10000) || !integer(params.wallCost,1,1000) || !integer(params.controlRadius,1,30) || !integer(params.campHP,1,10000)) return '资金 0–10000、墙价 1–1000、控制半径 1–30、净化塔耐久 1–10000，均为整数。';
   if(!integer(params.wallHP,1,10000)||!integer(params.enemyPower,1,99)||!integer(params.defenseRepairPercent,1,100))return '墙耐久 1–10000、敌人每拍攻击 1–99、防线维修比例 1–100%，均为整数。';
   if(!integer(params.campS01,0,30)||!integer(params.outpostS01,0,30)||!integer(params.sourceRevealPadding,0,10))return 'S01 视野距离须为 0–30 格整数，敌源边缘揭示格数须为 0–10 整数。';
   if(!integer(params.initialPopulation,0,10000)||!integer(params.productionCellsPerWorker,1,100)||!integer(params.housingCellsPerResident,1,100)||!integer(params.housingCostPerCell,1,1000))return '初始人口 0–10000；每名工人/居民对应格数 1–100；住房每格费用 1–1000，均为整数。';
   if(!integer(params.bankRestoreCost,1,1000)||!integer(params.bankWorkers,1,100)||!integer(params.bankCapacity,1,10000)||!['bankDepositPercent','bankLoanPercent'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=100))return '银行恢复费用1–1000、用工1–100、额度1–10000为整数；利率0–100%，可用小数。';
   if(!integer(params.hospitalRestoreCost,1,1000)||!integer(params.hospitalWorkers,1,100))return '医院修复费用须为1–1000金币、用工须为1–100人整数。';
   if(!integer(params.bankUpgradeCost,1,1000)||!integer(params.bankUpgradeCapacityMultiplier,1,10)||!['bankUpgradeRatePoints','bankLoanMinPercent','bankRateMaxPercent'].every(k=>Number.isFinite(params[k])&&params[k]>=0&&params[k]<=100)||params.bankLoanMinPercent>params.bankLoanPercent||params.bankLoanPercent>params.bankRateMaxPercent||params.bankDepositPercent>params.bankRateMaxPercent)return '银行升级费用1–1000、额度倍率1–10为整数；利率边界/升级百分点0–100%，贷款下限≤基础贷息≤利率上限，基础存息≤上限。';
-  if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产、瞭望塔、地标用工或增加住房。';
+  if(checkLayout&&population({...state,params}).free<0)return '新参数会导致劳动力不足，请先调整生产、地标用工或增加住房。';
   if(!integer(params.demolitionRefundPercent,0,100))return '拆除返还比例须为 0–100 整数。';
   if(!integer(params.renovationCostPercent,1,100))return '修缮费用占新建价须为 1–100% 整数。';
   if(!integer(params.productionBaseArea,1,SIZE*SIZE)||!integer(params.productionDensityGrowthArea,1,SIZE*SIZE)||!Number.isFinite(params.productionSmallCostFloor)||params.productionSmallCostFloor<=0||params.productionSmallCostFloor>1||!Number.isFinite(params.productionMaxDensity)||params.productionMaxDensity<1||params.productionMaxDensity>10)return '经营曲线：基准/增长面积须为 1–3600，低面积成本倍率大于 0 且不超过 1，产出密度上限为 1–10。';
   if(!integer(params.stepMs,50,5000))return '移动节拍须为 50–5000 毫秒整数。';
   if(!integer(params.dayEndHoldMs,300,3000))return '结束白天长按时长须为300–3000毫秒整数。';
-  if(!integer(params.outpostCost,1,1000)||!integer(params.outpostRadius,1,30)||!integer(params.campRepairCost,1,1000))return '瞭望塔价格 1–1000、半径 1–30；火光每 HP 修复单价 1–1000。';
+  if(!integer(params.outpostCost,1,1000)||!integer(params.outpostRadius,1,30)||!integer(params.campRepairCost,1,1000))return '机械塔价格 1–1000、半径 1–30；净化核心每 HP 修复单价 1–1000。';
   if(!Number.isFinite(params.nightTowerCostMultiplier)||params.nightTowerCostMultiplier<1||params.nightTowerCostMultiplier>10)return '夜间金币加急倍率须为1–10。';
-  if(!integer(params.outpostMinDistance,1,30))return '瞭望塔最小间距须为1–30格。';
-  if(checkLayout){const ids=[...state.outposts.keys()];for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){const [x,y]=xy(ids[i]),[a,b]=xy(ids[j]);if(Math.hypot(x-a,y-b)<params.outpostMinDistance)return '现有瞭望塔不满足新间距，请先拆除或减小间距。';}}
+  if(!integer(params.outpostMinDistance,1,30))return '机械塔最小间距须为1–30格。';
+  if(checkLayout){const ids=[...state.outposts.keys()];for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){const [x,y]=xy(ids[i]),[a,b]=xy(ids[j]);if(Math.hypot(x-a,y-b)<params.outpostMinDistance)return '现有机械塔不满足新间距，请先拆除或减小间距。';}}
   for (const type of ['A','B']) {
     const w=params.weapons[type];
     if (!w || !['square','diamond'].includes(w.shape) || !integer(w.range,1,8) || !integer(w.power,1,99) || !integer(w.cost,1,1000)) return `武器 ${type}：范围 1–8、火力 1–99、价格 1–1000，均为整数。`;
@@ -725,8 +735,8 @@ export function validateParams(params, state, checkLayout = true) {
   if(state.waves){const lastSpawn=Math.max(1,...state.waves.flat().map(s=>s.first+(s.count-1)*s.interval));if(params.nightTicks<lastSpawn)return `预设最后一批在第 ${lastSpawn} 拍出场，每晚拍数不能更短；请先调整出兵节拍。`;}
   const candidate={...state,params};
   if(checkLayout&&([...state.playerWalls].some(id=>!inGroundControl(candidate,id))||[...state.towers.keys()].some(id=>!inControl(candidate,id))||[...state.outposts.keys()].some(id=>!inGroundControl(candidate,id))||[...state.production.keys(),...state.housing.keys()].some(id=>!productionControlled(candidate,id))))return '现有设施超出新的控制范围，请先拆除外围设施或增大半径。';
-  if(checkLayout&&disconnectedControlCells(candidate).size)return '新参数会使控制范围失去与篝火的连接，请调整范围或先拆除外围瞭望塔。';
-  if (checkLayout && funds({...state,params}) < -bankFinance({...state,params}).capacity-1e-9) return '按新价格计算，现有布局超出预算（含经营与瞭望塔）。请提高资金，或取消预览后拆除设施。';
+  if(checkLayout&&disconnectedControlCells(candidate).size)return '新参数会使控制范围失去与净化塔的连接，请调整范围或先拆除外围机械塔。';
+  if (checkLayout && funds({...state,params}) < -bankFinance({...state,params}).capacity-1e-9) return '按新价格计算，现有布局超出预算（含经营与机械塔）。请提高资金，或取消预览后拆除设施。';
   return '';
 }
 // 两份实验草稿只提交自己的参数；失败完全不改状态，视觉可以在战斗中应用。
@@ -754,10 +764,10 @@ export function validateSources(sources, state) {
     if(s.sourceId){const source=state.enemySources?.get(s.sourceId);if(!source||source.x!==s.x||source.y!==s.y)return prefix+'固定据点出兵口不能移动。';}
     if (!['x','y','hp','count','first','interval'].every(k=>Number.isInteger(s[k])) || !Number.isInteger(s.target??-2)) return prefix + '请填写整数。';
     if (!inside(s.x, s.y)) return prefix + `坐标应为 0–${SIZE-1}。`;
-    if (state.walls.has(id) || campAt(state,id)!==undefined || state.towers.has(id) || state.outposts.has(id)) return prefix + '与障碍、火光、瞭望塔或炮位冲突。';
-    if(![-2,-1].includes(s.target??-2))return prefix+'当前只攻击火光，瞭望塔不可受击。';
+    if (state.walls.has(id) || campAt(state,id)!==undefined || state.towers.has(id) || state.outposts.has(id)) return prefix + '与障碍、净化核心、机械塔或炮位冲突。';
+    if(![-2,-1].includes(s.target??-2))return prefix+'当前只攻击净化核心，机械塔不可受击。';
     if (seen.has(id)) return prefix + '位置不能重复。';
-    if (!state.field.distance.has(id)) return prefix + '无法到达篝火。';
+    if (!state.field.distance.has(id)) return prefix + '无法到达净化塔。';
     if (s.hp < 1 || s.hp > 999 || s.count < 1 || s.count > 30 || s.first < 1 || s.first > 200 || s.interval < 1 || s.interval > 100) return prefix + '生命 1–999，批数 1–30，首拍 1–200，间隔 1–100。';
     if(state.waves&&s.first+(s.count-1)*s.interval>state.params.nightTicks)return prefix+'最后一批须在天亮前出场，请调整批数或节拍。';
     seen.add(id);
@@ -819,7 +829,7 @@ export function stepBattle(state,actions=null,deferIdleDawn=false) {
       for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'killed');
       state.events.push({type:'kill',id:enemy.id,target:enemy.target,value:reward,members:enemy.members});
     }else if(campCells(state,enemy.target).includes(enemy.id)){
-      // 进入火光广场任意格即以剩余 HP 造成一次伤害，攻击后退场、不再走向中央。
+      // 进入目标净化塔2×2用地任意格即以剩余 HP 造成一次伤害，攻击后退场、不再走向中央。
       const body=campRecord(state,enemy.target),hit=Math.min(body?.hp??0,enemy.hp);setCampHP(state,enemy.target,Math.max(0,(body?.hp??0)-enemy.hp));state.leaked+=hit;
       for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'leaked');
       state.events.push({type:'leak',id:enemy.id,target:enemy.target,value:hit});
@@ -847,8 +857,8 @@ export function stepBattle(state,actions=null,deferIdleDawn=false) {
     state.events.push({type:'sourceHit',id:key(source.bx,source.by),sourceId,value:hit});
     if(!source.hp){
       // 本拍先出生再受炮火；只阻止更晚的批次，已出场敌人保留原路线和目标。
-      source.destroyedDay=state.day;const prevented=preventSourceSpawns(state,sourceId);
-      state.events.push({type:'sourceLost',id:key(source.bx,source.by),sourceId,value:0,prevented});
+      source.destroyedDay=state.day;const essence=source.essenceAwarded?0:sourceEssenceReward(state,source);source.essenceAwarded=true;state.essenceEarned+=essence;const prevented=preventSourceSpawns(state,sourceId);
+      state.events.push({type:'sourceLost',id:key(source.bx,source.by),sourceId,value:0,prevented,essence});
     }
   }
   for(const event of state.events.filter(e=>e.type==='campLost')){
@@ -876,7 +886,7 @@ export function finishIdleNight(state){
   state.tick=state.params.nightTicks;finishBattleNight(state);return true;
 }
 function finishBattleNight(state){
-  // 最后一拍照常结算炮火与近战；存活至天亮的敌群撤退，不伤火光、不发击杀钱。
+  // 最后一拍照常结算炮火与近战；存活至天亮的敌群撤退，不伤净化核心、不发击杀钱。
   for(const enemy of state.enemies){
     for(const origin of enemy.origins)state.enemyOutcomes.set(origin,'withdrawn');
     state.withdrawn+=enemy.members;state.events.push({type:'withdraw',id:enemy.id,value:enemy.members});
@@ -993,7 +1003,7 @@ function embeddingError(state,id){
   const p=productionSite(id,state);if(!p)return '';
   const error=plotBuildError(state,id);if(error)return error;
   const q=embeddingQuote(state,id);
-  // 只检查经营依赖，不能因改建住房让已有生产、瞭望塔或POI缺人。
+  // 只检查经营依赖，不能因改建住房让已有生产或POI缺人。
   return q.freeAfter<0?`改建后劳动力不足：住房减少 ${q.residents} 人，生产释放 ${q.released} 人；还缺 ${-q.freeAfter} 人。`:'';
 }
 function applyEmbedding(state,id,preserveBuilding=false){
@@ -1035,7 +1045,7 @@ export function housingRemovalError(state,id){
   if(state.phase!=='build')return '防守中不能拆除住房。';
   if(!state.housing.has(productionId(id,state)))return '这里没有住房。';
   const support=buildingRemovalError(state,id);if(support)return support;
-  return population(state).free<housingResidents(state,id)?'现有生产、瞭望塔或地标依赖这些居民，请先拆除用工设施或补建住房。':'';
+  return population(state).free<housingResidents(state,id)?'现有生产或地标依赖这些居民，请先拆除用工设施或补建住房。':'';
 }
 export function removeHousing(state,id){
   const error=housingRemovalError(state,id);if(error)return error;
@@ -1121,7 +1131,7 @@ export function clearPlot(state,id) {
   const clearing=clearingError(state,id);if(clearing)return clearing;
   state.plotContents.set(productionId(id,state),{status:'empty',type:null});rebuildTerrain(state);return '';
 }
-// 只在守住当晚时入账一次；火光熄灭不结算，期限失败保留已经入账的收入。
+// 只在守住当晚时入账一次；净化核心熄灭不结算，期限失败保留已经入账的收入。
 export function settleEconomy(state) {
   if(state.phase!=='won'||state.economySettled)return;
   state.survivedNights++;
@@ -1218,13 +1228,14 @@ export function revealControl(state){
 }
 
 // 测试台仅跳转到指定白天，不模拟略过的夜晚、不发奖励；独立偏移不污染收入账单。
-export function applyTestScenario(state,day,gold,people){
+export function applyTestScenario(state,day,gold,people,essence=essenceBalance(state)){
   if(!Number.isInteger(day)||day<1||day>(state.waves?.length??1))return '请选择现有波次范围内的日期。';
   if(!Number.isInteger(gold)||gold< -1000000||gold>1000000||!Number.isInteger(people)||people<0||people>1000000)return '金币须为−1000000–1000000整数，人口须为0–1000000整数。';
+  if(!Number.isInteger(essence)||essence<0||essence>1000000)return '净化精华须为0–1000000整数。';
   const workers=population(state).working;if(people<workers)return `现有设施用工需要 ${workers} 人，不能设为更低人口。`;
   const sources=structuredClone(state.waves[day-1].filter(s=>!s.sourceId||state.enemySources.get(s.sourceId)?.hp!==0)),candidate={...state,sources};
   const error=validateSources(sources,candidate);if(error)return error;
-  state.debugGold+=gold-funds(state);state.debugPopulation+=people-population(state).total;state.debtInterestCap=gold<0?Math.max(state.debtInterestCap??0,bankFinance(state).capacity):0;state.bankSettledDay=0;
+  state.debugEssence+=essence-essenceBalance(state);state.debugGold+=gold-funds(state);state.debugPopulation+=people-population(state).total;state.debtInterestCap=gold<0?Math.max(state.debtInterestCap??0,bankFinance(state).capacity):0;state.bankSettledDay=0;
   state.day=day;state.phase='build';state.hp=Math.max(1,state.hp);state.result=null;
   state.sources=sources;state.lastNight=null;clearNight(state);lockAttacks(state);revealControl(state);return '';
 }

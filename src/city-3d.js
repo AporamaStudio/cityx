@@ -89,6 +89,7 @@ export function createCity3D({onReady,onProgress,onError}){
   const upgradeEffects=createUpgradePreview(effects.group);
   const pollution=createCityPollution(scene);let pollutionGeometry=-1;
   // 固定槽位只改变强度和位置；大量中继不无限增加实时光源，也不扫动灯头。
+  let machineryBounds={left:0,right:60,top:0,bottom:60};
   const machineryLights=Array.from({length:8},(_,i)=>{const light=i<4?new THREE.PointLight('#e0f1dc',0,1,2):new THREE.SpotLight('#e0f1dc',0,1,.7,.7,2);scene.add(light);if(light.target)scene.add(light.target);return light;});
   let unknown=new THREE.Group(),unknownKey='';scene.add(unknown);
   const models=new Map(),entries=new Map(),props=new Map(),loader=new GLTFLoader();let ready=false,lastFrame='',lastProps='',pixels='',geometryVersion=0;
@@ -169,7 +170,7 @@ export function createCity3D({onReady,onProgress,onError}){
     // 重开/重试释放本局保留的峰值槽位；下一帧按真实设施重新分配。
     resetLighting(){shaderWarmup.reset();shaderWarmup.release(()=>shaderSamples.reset());effects.resetLights();for(const light of localLights){light.removeFromParent();light.dispose();}localLights.length=0;},
     beginStats(){renderer.info.autoReset=false;renderer.info.reset();},
-    renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats(),streetLights:localLights.length,...effects.lightStats(),programs:renderer.info.programs.length};renderer.info.autoReset=true;return stats;},
+    renderStats(){const stats={...renderer.info.render,...zombieCrowds.stats(),streetLights:localLights.length,machineryLights:machineryLights.length,...effects.lightStats(),programs:renderer.info.programs.length};renderer.info.autoReset=true;return stats;},
     isReady(){return ready;},
     isPrepared(){return initialPrepared;},
     observationPick(x,y,width,height,view){return ready?observation.pick(x,y,width,height,view):null;},
@@ -271,6 +272,7 @@ export function createCity3D({onReady,onProgress,onError}){
       }
       // 夜间槽位跨镜头保持稳定；白天不参与着色，布局变化后的夜景在空闲分批准备。
       const visible=lightViewport??{left:-panX/cell,right:(width-panX)/cell,top:-panY/cell,bottom:(height-panY)/cell};
+      machineryBounds=visible;
       const reach=22/cellMeters,cx=(width/2-panX)/cell,cy=(height/2-panY)/cell;
       const nearby=streetLights.filter(p=>p.x>=visible.left-reach&&p.x<=visible.right+reach&&p.y>=visible.top-reach&&p.y<=visible.bottom+reach).sort((a,b)=>Math.hypot(a.x-cx,a.y-cy)-Math.hypot(b.x-cx,b.y-cy)).slice(0,lightBudget);
       // 池规模不超过实际灯具数；平移仍保持槽位，避免没有路灯时也计算24盏零强度灯。
@@ -324,7 +326,7 @@ export function createCity3D({onReady,onProgress,onError}){
         if(['camp','watch'].includes(item.asset)){
           object.updateMatrixWorld(true);
           object.traverse(node=>{
-            if(node.userData.coreFlow){node.visible=!item.dead&&item.alpha!==.45;const a=node.geometry.attributes.position;for(let i=0;i<32;i++){const t=fx.reducedMotion?(i%8)/8:((i%8)/8+fx.time*.22)%1,arm=Math.floor(i/8)*Math.PI/2;const r=7*(1-t)/item.cellMeters;a.setXYZ(i,Math.cos(arm)*r,(5+17*t)/item.cellMeters,Math.sin(arm)*r);}a.needsUpdate=true;}
+            if(node.userData.coreFlow){node.visible=!item.dead&&item.alpha!==.45;const a=node.geometry.attributes.position;for(let i=0;i<32;i++){const t=fx.reducedMotion?(i%8)/8:((i%8)/8+fx.time*.22)%1,arm=Math.floor(i/8)*Math.PI/2;const r=(2+8*t)/item.cellMeters;a.setXYZ(i,Math.cos(arm)*r,(17+6*t)/item.cellMeters,Math.sin(arm)*r);}a.needsUpdate=true;}
             if(node.isMesh&&node.material.userData.machineryDayEmission!==undefined){const m=node.material,d=m.userData.machineryDayEmission,n=m.userData.machineryNightEmission??d,pulse=node.name.startsWith('AlienCore')&&!fx.reducedMotion?.92+.08*Math.sin(fx.time*1.8):1;m.emissiveIntensity=item.dead||item.alpha<1||item.connected===false?0:(d+(n-d)*night)*pulse;}
             for(const entry of [...(node.userData.machineryLights??[]),...(node.userData.machinerySpotLights??[])])if(!item.dead&&item.alpha!==.45&&item.connected!==false){const position=new THREE.Vector3().fromArray(entry.position).multiplyScalar(1/item.cellMeters).applyMatrix4(object.matrixWorld),target=entry.target?new THREE.Vector3().fromArray(entry.target).multiplyScalar(1/item.cellMeters).applyMatrix4(object.matrixWorld):null;machinery.push({...entry,position,target,scale:1/item.cellMeters});}
           });
@@ -333,6 +335,7 @@ export function createCity3D({onReady,onProgress,onError}){
         if(props.get(item.id).wreck)updateWreckDressing(props.get(item.id).wreck,fx.time,night,fx.reducedMotion);
       }
       const signature=JSON.stringify(items)+JSON.stringify(fx.shots)+JSON.stringify(fx.impacts)+JSON.stringify(fx.transitions)+JSON.stringify(fx.upgrades)+JSON.stringify([fx.upgradeStyle.upgradeFlowHeightMeters,fx.upgradeStyle.upgradeFlowCycleMs,fx.upgradeStyle.upgradeFlowOpacity])+`/${lastFrame}:${night}:${fx.time}:${fx.cameraKey}`;
+      const mx=(machineryBounds.left+machineryBounds.right)/2,my=(machineryBounds.top+machineryBounds.bottom)/2;machinery.sort((a,b)=>Math.hypot(a.position.x-mx,a.position.z-my)-Math.hypot(b.position.x-mx,b.position.z-my));
       for(let i=0;i<8;i++){const light=machineryLights[i],candidate=machinery.filter(p=>!!p.target===(i>=4))[i%4];light.intensity=0;if(candidate){light.position.copy(candidate.position);light.color.set(candidate.color);light.distance=candidate.range*candidate.scale;light.intensity=candidate.power*candidate.scale*candidate.scale*(candidate.day?1:night);if(candidate.target){light.target.position.copy(candidate.target);light.angle=candidate.angle;}}}
       pollution.update(fx.purified,fx.visible,fx.upgradeStyle,fx.time,fx.reducedMotion);
       if(pollutionGeometry!==geometryVersion){for(const group of [nature,buildings,streets,roads,observation.warmupRoot()])pollution.bind(group);pollutionGeometry=geometryVersion;}

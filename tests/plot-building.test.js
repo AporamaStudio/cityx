@@ -63,9 +63,9 @@ test('炮塔依附建筑，占用经营面积；清空后可铺墙但必须先�
 });
 
 test('瞭望塔只需驻扎格受控，允许道路但不占火光；参数不能丢失控制依赖',()=>{
-  const s=make();s.params.controlRadius=2;const id=key(15,23);
-  assert.ok(inControl(s,id));assert.ok(!inControl(s,key(16,23)));assert.equal(buildOutpost(s,id),'');
-  assert.ok(inControl(s,key(16,23)));assert.match(buildOutpost(s,key(14,23)),/间距/);
+  const s=make();s.params.controlRadius=3;const id=key(14,23);
+  assert.ok(inControl(s,id));assert.ok(!inControl(s,key(13,23)));assert.equal(buildOutpost(s,id),'');
+  assert.ok(inControl(s,key(13,23)));assert.match(buildOutpost(s,key(14,24)),/间距/);
   assert.equal(changeWall(s,key(15,18)),'');const params=structuredClone(s.params);params.controlRadius=1;params.outpostRadius=1;
   assert.match(validateParams(params,s),/控制范围/);
   const road=make();assert.equal(buildOutpost(road,key(14,24)),'');assert.ok(!road.blocked.has(key(14,24)));

@@ -23,7 +23,7 @@ test('揭示医院不算受控；碰一格整栋归属，修复后才完成目�
   assert.equal(campaignGoals(s).hospital,false);
   s.params.controlRadius=3;assert.equal(productionControlled(s,key(18,21)),true);assert.equal(campaignGoals(s).hospitalControlled,true);assert.equal(campaignGoals(s).hospital,false);
   assert.equal(restoreHospital(s,key(18,21)),'');assert.equal(campaignGoals(s).hospital,true);
-  s.params.controlRadius=2;s.outposts.set(key(15,23),{day:1});s.params.outpostRadius=1;
+  s.params.controlRadius=2;s.outposts.set(key(16,24),{day:1});s.params.outpostRadius=1;
   assert.equal(campaignGoals(s).hospital,true);s.outposts.clear();assert.equal(campaignGoals(s).hospital,false);
 });
 test('白天达成不结算；夜末胜利可提前，不能进入次日或重复结算，重试回滚源头与成果',()=>{
@@ -108,10 +108,10 @@ test('最后一晚目标齐全先判胜利；目标缺失为期限失败，守�
   finish(hospitalMissing);assert.equal(hospitalMissing.result.type,'deadline');assert.equal(hospitalMissing.result.hospital,false);
 });
 test('清源不能取消其他来源批次；最后一拍火光熄灭优先失败，不发经营钱',()=>{
-  const s=setup();s.sources=[{x:15,y:24,hp:1,count:1,first:3,interval:1}];lockAttacks(s);
+  const s=setup();s.sources=[{x:15,y:24,hp:1,count:1,first:3,interval:1}];lockAttacks(s);s.attacks[0].y=25;s.attacks[0].path=[s.camp];
   beginBattle(s);stepBattle(s);s.enemySources.get('source-1').hp=0;for(let i=2;i<3;i++){stepBattle(s);assert.equal(s.phase,'battle');assert.equal(s.result,null);}
   stepBattle(s);assert.equal(s.spawned,1);assert.equal(s.result.type,'victory');assert.equal(s.hp,999);
-  const dead=setup();dead.sources=[{x:15,y:24,hp:1,count:1,first:3,interval:1}];dead.day=3;dead.enemySources.get('source-1').hp=1;dead.hp=1;lockAttacks(dead);
+  const dead=setup();dead.sources=[{x:15,y:24,hp:1,count:1,first:3,interval:1}];dead.day=3;dead.enemySources.get('source-1').hp=1;dead.hp=1;lockAttacks(dead);dead.attacks[0].y=25;dead.attacks[0].path=[dead.camp];
   beginBattle(dead);stepBattle(dead);stepBattle(dead);dead.towers.set(key(20,20),'B');stepBattle(dead);
   assert.equal(dead.enemySources.get('source-1').hp,0);
   assert.equal(dead.result.type,'campLost');assert.equal(dead.phase,'lost');assert.equal(dead.economySettled,false);assert.equal(dead.survivedNights,0);

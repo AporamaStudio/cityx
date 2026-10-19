@@ -22,7 +22,7 @@ test('外围雾参数校验有限整数范围，不改变游戏视野',()=>{
 });
 test('S12/S23默认各3格，仅接受1–20格整数且不改S01逻辑视野',()=>{
  const s=createState(),before=visionField(s);
- assert.equal(s.params.campS01,6);assert.equal(s.params.outpostS01,9);
+ assert.equal(s.params.campS01,2);assert.equal(s.params.outpostS01,2);
  assert.equal(s.params.fogS12,3);assert.equal(s.params.fogS23,3);
  for(const name of ['fogS12','fogS23']){
   for(const value of [1,4,6,20]){
@@ -40,12 +40,9 @@ test('瞭望塔当天拆返全部投入、收回独占视野，保留探索及�
  assert.equal(funds(s),cash);assert.deepEqual(visionField(s),before);
  assert.ok(extra.every(cell=>s.explored.has(cell)&&!visionField(s).has(cell)));
 });
-test('夜晚缩小外围视野，不缩控制区；探索记忆保留，未见地形不预开矩形',()=>{
- const s=state(),day=visionField(s),night=visionField(s,'battle'),[cx,cy]=xy(s.camp),edge=key(cx,cy-8);
- assert.ok(night.has(key(cx,cy-7)));assert.ok(!night.has(edge));
- assert.ok(day.size>night.size);assert.ok(day.has(edge));assert.ok(!night.has(edge));
- for(let id=0;id<SIZE*SIZE;id++)if(inControl(s,id))assert.ok(night.has(id));
- s.explored=new Set();revealControl(s);s.phase='battle';revealControl(s);assert.ok(s.explored.has(edge));assert.ok(!s.explored.has(key(59,59)));
+test('昼夜实时视野相同，探索记忆保留，圆外未知地形不预揭示',()=>{
+ const s=state(),day=visionField(s),night=visionField(s,'battle');assert.deepEqual(day,night);assert.ok(day.has(key(16,21)));assert.ok(!day.has(key(16,20)));
+ for(let id=0;id<SIZE*SIZE;id++)if(inControl(s,id))assert.ok(night.has(id));s.explored=new Set();revealControl(s);s.phase='battle';revealControl(s);assert.ok(s.explored.has(key(16,21)));assert.ok(!s.explored.has(key(59,59)));
 });
 test('炮塔视野等于射程形状且不受昼夜及事件倍率影响，拆除后失去该视野',()=>{
  const s=state(),id=key(30,30);s.towers.set(id,'B');s.params.eventSightMultiplier=0;
@@ -63,8 +60,7 @@ test('敌源从完整占地边缘揭示，可调外扩且昼夜一致；前哨�
    assert.ok(!seen.has(key(40+padding+1,10)));assert.ok(!seen.has(key(40,10-padding-1)));
   }
  }
- s.outposts.set(key(30,40),{});const before=visionField(s);s.params.outpostS01=10;assert.ok(visionField(s).size>before.size);
- assert.match(validateParams({...s.params,nightSightMultiplier:-1},s,false),/视野倍率/);
+ s.outposts.set(key(17,26),{});const before=visionField(s);s.params.outpostS01=10;assert.ok(visionField(s).size>before.size);
  for(const sourceRevealPadding of [-1,1.5,11])assert.match(validateParams({...s.params,sourceRevealPadding},s,false),/敌源边缘揭示格数/);
 });
 

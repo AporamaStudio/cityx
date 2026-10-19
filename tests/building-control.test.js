@@ -7,9 +7,9 @@ import {key,createCampaign,inGroundControl,inControl,rawControlMask,controlMask,
 function make(kind='building',extra=[],ruinType='production'){
   const p={x:12,y:10,width:3,height:3,kind,ruinType},plots=[p,...extra],tiles=Array(SIZE*SIZE).fill('road');
   for(const b of plots)for(let y=b.y;y<b.y+b.height;y++)for(let x=b.x;x<b.x+b.width;x++)tiles[key(x,y)]=b.kind==='open'?'open':'block';
-  const layout={width:SIZE,height:SIZE,camp:{x:10,y:10},blocks:plots,tiles};
+  const layout={width:SIZE,height:SIZE,camp:{x:10,y:9},blocks:plots,tiles};
   const wave=[{x:10,y:4,hp:100,count:1,first:1,interval:2}];
-  const s=createCampaign({...DEFAULTS,budget:1000,initialPopulation:100,controlRadius:2},[wave,wave,wave],layout);s.day=3;return s;
+  const s=createCampaign({...DEFAULTS,budget:1000,initialPopulation:100,controlRadius:2},[wave,wave,wave],layout);s.day=3;s.explored.add(key(15,12));return s;
 }
 const origin=key(12,10),far=key(14,12),street=key(15,12);
 
@@ -37,7 +37,7 @@ test('Case D：远侧合法炮位可建塔和重试，物理建筑与路线保�
   assert.equal(inGroundControl(s,far),false);assert.equal(buildTower(s,far,'A'),'');
   assert.deepEqual(s.terrainWalls,walls);assert.deepEqual(s.attacks,paths);assert.deepEqual(s.field.distance,before);
   assert.equal(terrainTraversable(s,far),false);assert.equal(buildingCells(s,far).length,9);assert.equal(contentCells(s,far).length,8);
-  assert.match(repairFacility(s,far),/受损火光或墙/);
+  assert.match(repairFacility(s,far),/受损净化核心或墙/);
   const snapshot=beginBattle(s),retry=restoreNight(snapshot);assert.ok(inControl(retry,far));assert.deepEqual(retry.terrainWalls,walls);
   s.phase='build';assert.equal(removeTower(s,far),'');assert.deepEqual(s.terrainWalls,walls);assert.equal(contentCells(s,far).length,8);
 });
@@ -47,13 +47,13 @@ test('Case E：墙不能借整栋建筑的远侧归属获得免费地面距离',
   assert.deepEqual(s,before);
 });
 test('瞭望塔只借基础地面控制扩张，整栋归属不能用于远侧驻扎',()=>{
-  const s=make(),raw=rawControlMask(s),paths=structuredClone(s.attacks),anchor=key(10,12);
+  const s=make(),raw=rawControlMask(s),paths=structuredClone(s.attacks),anchor=key(10,11);
   assert.equal(inGroundControl(s,far),false);assert.match(outpostError(s,far),/基础地面控制/);
   assert.equal(buildOutpost(s,anchor),'');assert.ok(inGroundControl(s,street));assert.deepEqual(s.attacks,paths);assert.equal(validateParams(s.params,s),'');
-  assert.equal(changeWall(s,street),'');assert.match(removeOutpost(s,anchor),/依赖此瞭望塔/);assert.equal(changeWall(s,street,true),'');
+  assert.equal(changeWall(s,street),'');assert.match(removeOutpost(s,anchor),/依赖此机械塔/);assert.equal(changeWall(s,street,true),'');
   const retry=restoreNight(beginBattle(s));assert.ok(retry.outposts.has(anchor));assert.ok(inGroundControl(retry,street));
   s.phase='build';assert.equal(removeOutpost(s,anchor),'');assert.deepEqual(rawControlMask(s),raw);assert.equal(inControl(s,street),false);
-  const open=make('open'),before=structuredClone(open);assert.match(buildOutpost(open,far),/控制/);assert.deepEqual(open,before);
+  const open=make('open');open.explored.add(far);const before=structuredClone(open);assert.match(buildOutpost(open,far),/控制/);assert.deepEqual(open,before);
 });
 
 test('Case F：半块空地仍逐格控制，不按固定地块身份整块吸附',()=>{

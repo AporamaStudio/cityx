@@ -49,8 +49,7 @@ test('S01与实际昼夜视野一致，敌源揭示为局部S1，发现标记不
     for(let id=0;id<SIZE*SIZE;id++)assert.equal(field.levelAt(id%SIZE+.5,Math.floor(id/SIZE)+.5)<=1,sight.has(id));
     assert.equal(field.levelAt(45.5,5.5),1);assert.equal(field.enemyAlpha(45.5,5.5),1);
   }
-  const lost=[...day].find(id=>!night.has(id));assert.ok(lost!==undefined);
-  assert.equal(createVisibility(SIZE,controlled,night,3,3).enemyAlpha(lost%SIZE+.5,Math.floor(lost/SIZE)+.5),0);
+  assert.deepEqual(day,night);
   source.firstNight=5;assert.equal(createVisibility(SIZE,controlled,visionField(s),3,3).levelAt(45.5,5.5),3);
   source.firstNight=1;source.hp=0;revealControl(s);
   assert.equal(createVisibility(SIZE,controlled,visionField(s),3,3).enemyAlpha(45.5,5.5),0);

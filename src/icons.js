@@ -1,3 +1,5 @@
+// 净化精华是独立资源：碎晶与核心光点，与金币圆片和完整净化塔轮廓区分。
+export const ESSENCE_SVG='<svg class="essence-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="m16 2 9 9-3 15-6 5-6-5-3-15Z" fill="currentColor"/><path d="m16 6-5 7 5 13 5-13ZM7 11l9 3 9-3M16 2v12" fill="none" stroke="#d9f8e8" stroke-width="1.6"/><circle cx="16" cy="15" r="2.3" fill="#e8fff5"/></svg>';
 // 净化核心与人工支架共用轮廓；旧函数名仅保留调用兼容，不再画火焰。
 const CORE_PATH='M16 3 21 12 18 25h-4l-3-13ZM3 29l5-19 3 1-4 18Zm22 0-4-18 3-1 5 19Z';
 export function drawCampfire(ctx,x,y,size,alive=true){ctx.save();ctx.translate(x,y);ctx.scale(size/32,size/32);ctx.fillStyle=alive?'#91d9d5':'#6a7776';ctx.fill(new Path2D(CORE_PATH));ctx.strokeStyle=alive?'#d6eeeb':'#87908c';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(16,21,9,3,0,0,Math.PI*2);ctx.stroke();ctx.restore();}

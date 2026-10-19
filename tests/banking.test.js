@@ -42,10 +42,10 @@ test('修复费用与用工固定；第一座不可用自己的未来额度支�
   assert.equal(applyTestScenario(s,3,25,6),'');assert.equal(restoreBank(s,first),'');assert.equal(funds(s),0);assert.equal(population(s).free,5);assert.equal(bankFinance(s).capacity,60);
   assert.match(restoreBank(s,key(1,1)),/已有的银行/);assert.match(clearPlot(s,first),/保留POI/);assert.match(buildProduction(s,first),/保留POI/);assert.ok(buildTower(s,first,'A'));
 });
-test('触碰一格即整栋控制并运营，银行不会额外传播范围',()=>{
+test('触碰一格整栋受控但须完整净化才能运营，银行不会额外传播范围',()=>{
   const s=setup(0),p=s.sites[0];p.x=23;p.y=25;p.width=4;p.height=4;
   s.plotContents.set(key(23,25),{status:'ruin',type:'bank'});assert.ok(productionControlled(s,key(23,25)));
-  assert.equal(restoreBank(s,key(23,25)),'');assert.ok(bankActive(s,key(23,25)));assert.equal(bankFinance(s).capacity,60);
+  assert.equal(restoreBank(s,key(23,25)),'');assert.equal(bankActive(s,key(23,25)),false);assert.equal(bankFinance(s).capacity,0);s.params.controlRadius=20;assert.ok(bankActive(s,key(23,25)));assert.equal(bankFinance(s).capacity,60);
 });
 test('主动消费止于信用下限，失败无副作用；利息可以突破下限但不能继续消费',()=>{
   const s=setup(1,0);

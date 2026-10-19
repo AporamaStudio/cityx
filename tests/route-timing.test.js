@@ -5,7 +5,7 @@ import {MAP_DEFAULTS} from '../src/map-settings.js';
 import {generateCityMap} from '../src/city-map.js';
 import {createCampaign,routeTimingReport,key,beginBattle,stepBattle,campCells,potentialSourceRoute,rebuildTerrain} from '../src/model.js';
 
-const wave={x:15,y:20,hp:1,count:3,first:2,interval:2};
+const wave={x:15,y:21,hp:1,count:3,first:2,interval:2};
 const setup=(nightTicks=10)=>createCampaign({...DEFAULTS,nightTicks,campHP:1000},[[wave],[wave]]);
 test('休眠已知敌源的潜在路线只读，不读取未来计划或增加探索',()=>{
  const s=createCampaign(DEFAULTS,undefined,generateCityMap(MAP_DEFAULTS)),source=s.enemySources.get('source-3');
@@ -44,13 +44,13 @@ test('路线校验只读，忽略玩家墙但保留当晚锁定路线，其他�
  s.playerWalls.add(key(15,21));s.wallHealth.set(key(15,21),{hp:100,max:100});s.walls.add(key(15,21));
  assert.deepEqual(routeTimingReport(s),initial);
  // 一条更长的已锁路线；不允许工具擅自换成最短路线。
- s.attacks[0].path=[key(15,20),key(16,20),key(16,21),key(16,22),key(16,23),key(16,24)];
+ s.attacks[0].path=[key(15,21),key(16,21),key(16,22),key(16,23),key(16,24),key(16,25)];
  const before=structuredClone(s),report=routeTimingReport(s);
  assert.equal(report.nights[0].rows[0].steps,5);assert.equal(report.nights[1].rows[0].steps,4);
  assert.deepEqual(s,before);
 });
 test('出生就在广场当拍到达；不可达路线明确报告所有批次无法到达',()=>{
- const s=setup();s.attacks[0]={...s.attacks[0],x:15,y:24,path:[key(15,24)]};
+ const s=setup();s.attacks[0]={...s.attacks[0],x:15,y:25,path:[key(15,25)]};
  let row=routeTimingReport(s).nights[0].rows[0];assert.equal(row.steps,0);assert.equal(row.lastArrival,6);
  s.attacks[0].path=[key(15,20)];row=routeTimingReport(s).nights[0].rows[0];
  assert.equal(row.lastArrival,null);assert.equal(row.steps,null);assert.equal(row.lateCount,3);assert.equal(routeTimingReport(s).unreachable,3);
@@ -64,5 +64,5 @@ test('默认15晚路线、末批时间及160拍/80拍超时人数；当前晚保
  const source=s.enemySources.get(s.sources[0].sourceId);source.hp=0;
  const after=routeTimingReport(s);assert.ok(after.nights[0].rows.some(r=>r.sourceId===source.id));
  assert.ok(after.nights.slice(1).every(n=>n.rows.every(r=>r.sourceId!==source.id)));
- assert.ok(campCells(s).length===9);
+ assert.ok(campCells(s).length===4);
 });

@@ -35,7 +35,7 @@ test('生产用工已满仍可架炮，占经营面积释放用工与收入变�
  assert.deepEqual(population(s),{total:3,working:2,free:1});assert.equal(productionQuote(s,id).income,income-1);
 });
 test('建筑整体控制可架炮，瞭望塔独立占地且不减少经营面积',()=>{
- const s=setup();s.params.controlRadius=3;s.params.outpostRadius=1;const anchor=key(15,24),ground=key(15,25);
+ const s=setup();s.params.controlRadius=4;s.params.outpostRadius=1;const anchor=key(15,24),ground=key(15,25);
  assert.ok(inGroundControl(s,anchor));assert.ok(!inGroundControl(s,id));assert.ok(inControl(s,id));
  assert.equal(buildProduction(s,anchor),'');assert.equal(buildTower(s,anchor,'A'),'');removeTower(s,anchor);
  assert.match(buildOutpost(s,anchor),/可通行/);assert.equal(buildOutpost(s,ground),'');assert.ok(!s.blocked.has(ground));

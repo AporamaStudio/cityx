@@ -104,7 +104,7 @@ test('经营按钮只认真实可建目标，建满后禁用；拆除后恢复',
 
 test('区外与半受控空地不维持经营按钮，边缘建筑仍可整栋修缮',()=>{
  const building=setup(),empty=setup(2,2,'production','open');
- building.params.controlRadius=6;empty.params.controlRadius=6;
+ building.params.controlRadius=7;empty.params.controlRadius=7;
  assert.equal(economyBuildAvailability(building,'production').enabled,true);
  assert.equal(economyBuildAvailability(empty,'production').enabled,false);
  building.params.controlRadius=1;

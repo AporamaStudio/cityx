@@ -29,8 +29,8 @@ test('同时入格先合并再扣一次火力，满值相加且不回血',()=>{
   assert.deepEqual(merged.sources,[0,1]);merged.sources.pop();assert.deepEqual(s.enemies[0].sources,[0,1]);
 });
 test('火光广场边缘先受火力再漏剩余生命，到达者移除，不重复扣命',()=>{
-  const s=createState([{x:15,y:23,hp:5,count:1,first:1,interval:1}]);s.towers.set(key(14,25),'A');s.phase='battle';
-  stepBattle(s);assert.equal(s.hp,30);stepBattle(s);assert.equal(s.hp,27);assert.equal(s.leaked,3);assert.equal(s.phase,'won');stepBattle(s);assert.equal(s.hp,27);
+  const s=createState([{x:15,y:24,hp:5,count:1,first:1,interval:1}]);s.phase='battle';
+  stepBattle(s);assert.equal(s.hp,30);s.towers.set(key(14,25),'A');stepBattle(s);assert.equal(s.hp,27);assert.equal(s.leaked,3);assert.equal(s.phase,'won');stepBattle(s);assert.equal(s.hp,27);
 });
 test('出生入格受伤、击杀后不漏怪、结算后禁止补炮',()=>{
   const s=createState([{x:0,y:0,hp:2,count:1,first:1,interval:1}]);s.towers.set(key(1,0),'A');s.phase='battle';stepBattle(s);
@@ -52,7 +52,7 @@ test('墙与塔独立占地，共享资金且分别退款',()=>{
 });
 test('允许封死火光，建设与拆除不改变锁定题目',()=>{
   const s=createState(),attacks=structuredClone(s.attacks),field=s.field;
-  for(const [x,y] of [[14,25],[16,25],[15,24],[15,26]])assert.equal(changeWall(s,key(x,y)),'');
+  for(const [x,y] of [[14,25],[14,26],[17,25],[17,26],[15,24],[16,24],[15,27],[16,27]])assert.equal(changeWall(s,key(x,y)),'');
   assert.equal(s.field,field);assert.deepEqual(s.attacks,attacks);
   assert.equal(wallPreview(s,key(15,10)).error,'');assert.equal(changeWall(s,key(15,10)),'');
   assert.deepEqual(s.attacks,attacks);assert.equal(changeWall(s,key(15,10),true),'');assert.deepEqual(s.attacks,attacks);
@@ -70,10 +70,10 @@ test('两类火力与形状切换，参数拒绝非法、超预算和控制范�
 
 
 test('控制范围外不能建造，建筑炮位的火力仍可覆盖未受控道路',()=>{
-  const s=makeState();s.params.controlRadius=3;const tower=key(11,24),road=key(10,24);
+  const s=makeState();s.params.controlRadius=4;const tower=key(11,24),road=key(10,24);
   assert.ok(inControl(s,tower));assert.equal(inControl(s,road),false);assert.match(changeWall(s,road),/控制范围/);
   assert.equal(buildTower(s,tower,'B'),'');assert.equal(funds(s),80);assert.ok(fireField(s).get(road)>0);
-  assert.ok(s.field.distance.has(road));assert.equal(inControl(s,road),false);assert.match(changeWall(s,s.camp),/篝火/);
+  assert.ok(s.field.distance.has(road));assert.equal(inControl(s,road),false);assert.match(changeWall(s,s.camp),/净化塔/);
 });
 
 test('墙价参与参数预算校验，取消和重试不制造资金',()=>{
@@ -105,7 +105,7 @@ test('合并群未死无收益，完全击杀按原始成员奖励且不重复�
 });
 test('抵达火光不发击杀收入，前哨不能被配置为攻击目标',()=>{
   const s=makeState([{x:15,y:24,hp:2,count:1,first:1,interval:1}]);s.phase='battle';stepBattle(s);stepBattle(s);assert.equal(s.earned,0);
-  assert.match(validateSources([{...s.sources[0],target:key(11,24)}],s),/只攻击火光/);
+  assert.match(validateSources([{...s.sources[0],target:key(11,24)}],s),/只攻击净化核心/);
 });
 test('战斗可建筑补炮，遵守加急预算、人力和控制，禁止造墙和拆除',()=>{
   const s=makeState(),a=key(11,24);s.params.budget=19;s.phase='battle';
@@ -250,7 +250,7 @@ test('街区布局不重叠、不覆盖源头，报价按基准单价和面积�
   const params={...DEFAULTS,productionCostPerCell:9,renovationCostPercent:100,productionIncomePerCell:2};
   assert.deepEqual(productionQuote({...s,params},key(2,22)),{area:9,cost:63,income:18});
   assert.deepEqual(productionQuote({...s,params},key(11,24)),{area:4,cost:23,income:8});
-  buildProduction(s,key(11,24));assert.equal(validateParams({...DEFAULTS,controlRadius:3},s),'');assert.ok(validateParams({...DEFAULTS,controlRadius:1},s));
+  buildProduction(s,key(11,24));assert.equal(validateParams({...DEFAULTS,controlRadius:4},s),'');assert.ok(validateParams({...DEFAULTS,controlRadius:1},s));
   assert.match(validateParams({...DEFAULTS,productionCostPerCell:NaN},s),/每格/);
   assert.match(validateParams({...DEFAULTS,productionIncomePerCell:-1},s),/每格/);
 });
